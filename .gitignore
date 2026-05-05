@@ -1,6 +1,7 @@
 PRIVATE.md
 
 .venv/
+.direnv/
 __pycache__/
 *.py[cod]
 
