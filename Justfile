@@ -19,3 +19,9 @@ test:
     uv run pytest
 
 check: lint typecheck
+
+hooks-install:
+    uv run pre-commit install
+
+hooks:
+    uv run pre-commit run --all-files
