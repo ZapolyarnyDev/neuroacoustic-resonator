@@ -1,15 +1,23 @@
 {
-  description = "A very basic flake";
+  description = "Neuroacoustic Metabolic Resonator";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
   };
 
-  outputs = { self, nixpkgs }: {
-
-    packages.x86_64-linux.hello = nixpkgs.legacyPackages.x86_64-linux.hello;
-
-    packages.x86_64-linux.default = self.packages.x86_64-linux.hello;
-
-  };
+  outputs = { nixpkgs, ... }:
+    let
+      systems = [ "x86_64-linux" ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+    in
+    {
+      devShells = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        {
+          default = import ./nix/shell.nix { inherit pkgs; };
+        }
+      );
+    };
 }
