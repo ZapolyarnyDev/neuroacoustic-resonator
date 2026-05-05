@@ -1,0 +1,22 @@
+* text=auto eol=lf
+
+*.md text eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
+LICENSE text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.npy binary
+*.npz binary
