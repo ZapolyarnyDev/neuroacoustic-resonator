@@ -19,6 +19,9 @@ class FieldConfigModel(BaseModel):
     metabolite_recovery: float = Field(default=0.03, ge=0.0)
     metabolite_cost: float = Field(default=0.02, ge=0.0)
     trace_rate: float = Field(default=0.08, ge=0.0)
+    frequency_plasticity_rate: float = Field(default=0.01, ge=0.0)
+    min_frequency: float = Field(default=0.2, gt=0.0)
+    max_frequency: float = Field(default=3.0, gt=0.0)
     seed: int | None = None
 
     def to_field_config(self) -> FieldConfig:

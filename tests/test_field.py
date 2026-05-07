@@ -106,6 +106,51 @@ def test_config_rejects_invalid_trace_rate() -> None:
         FieldConfig(trace_rate=-0.1)
 
 
+def test_frequency_plasticity_updates_frequency() -> None:
+    config = FieldConfig(
+        size=4,
+        frequency_spread=0.0,
+        frequency_plasticity_rate=1.0,
+        min_frequency=0.2,
+        max_frequency=3.0,
+    )
+    shape = (config.size, config.size)
+    phase_impulse = np.zeros(shape)
+    phase_impulse[1, 1] = np.pi / 2.0
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=phase_impulse,
+            frequency=np.ones(shape),
+            metabolite=np.ones(shape),
+            coupling=np.full(shape, config.coupling_strength),
+            trace=np.full(shape, 1.0),
+        ),
+    )
+
+    before = field.state.frequency
+    after = field.step().frequency
+
+    assert not np.allclose(after, before)
+    assert np.all(np.isfinite(after))
+    assert np.all((config.min_frequency <= after) & (after <= config.max_frequency))
+
+
+def test_frequency_plasticity_can_be_disabled() -> None:
+    config = FieldConfig(size=4, frequency_plasticity_rate=0.0)
+    field = OscillatorField(config)
+
+    before = field.state.frequency
+    after = field.step().frequency
+
+    assert np.allclose(after, before)
+
+
+def test_config_rejects_invalid_frequency_bounds() -> None:
+    with pytest.raises(ValueError, match="max_frequency"):
+        FieldConfig(min_frequency=2.0, max_frequency=1.0)
+
+
 def test_metrics_snapshot_is_bounded() -> None:
     field = OscillatorField(FieldConfig(size=8, seed=1))
     field.step()

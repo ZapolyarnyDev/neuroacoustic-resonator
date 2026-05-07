@@ -20,6 +20,9 @@ class FieldConfig:
     metabolite_recovery: float = 0.03
     metabolite_cost: float = 0.02
     trace_rate: float = 0.08
+    frequency_plasticity_rate: float = 0.01
+    min_frequency: float = 0.2
+    max_frequency: float = 3.0
     seed: int | None = None
 
     def __post_init__(self) -> None:
@@ -43,6 +46,15 @@ class FieldConfig:
             raise ValueError(msg)
         if self.trace_rate < 0.0:
             msg = "trace_rate must be non-negative"
+            raise ValueError(msg)
+        if self.frequency_plasticity_rate < 0.0:
+            msg = "frequency_plasticity_rate must be non-negative"
+            raise ValueError(msg)
+        if self.min_frequency <= 0.0:
+            msg = "min_frequency must be positive"
+            raise ValueError(msg)
+        if self.max_frequency <= self.min_frequency:
+            msg = "max_frequency must be greater than min_frequency"
             raise ValueError(msg)
 
 
@@ -119,7 +131,8 @@ class OscillatorField:
         )
 
     def step(self) -> FieldState:
-        phase_drive = self._frequency + self._coupling_drive()
+        coupling_drive = self._coupling_drive()
+        phase_drive = self._frequency + coupling_drive
         activity = np.abs(phase_drive)
 
         self._phase = np.mod(self._phase + self.config.dt * phase_drive, TAU)
@@ -135,6 +148,15 @@ class OscillatorField:
         )
         self._trace += (
             self.config.dt * self.config.trace_rate * (activity - self._trace)
+        )
+        self._frequency = np.clip(
+            self._frequency
+            + self.config.dt
+            * self.config.frequency_plasticity_rate
+            * self._trace
+            * coupling_drive,
+            self.config.min_frequency,
+            self.config.max_frequency,
         )
 
         return self.state

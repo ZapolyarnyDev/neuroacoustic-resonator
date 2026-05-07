@@ -7,6 +7,9 @@ field:
   metabolite_recovery: 0.03
   metabolite_cost: 0.02
   trace_rate: 0.08
+  frequency_plasticity_rate: 0.01
+  min_frequency: 0.2
+  max_frequency: 3.0
   seed: 67
 steps: 32
 preview_path: outputs/field-preview.png
