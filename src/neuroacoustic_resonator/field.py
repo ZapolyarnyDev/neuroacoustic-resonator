@@ -55,6 +55,18 @@ class FieldState:
     trace: FloatArray
 
 
+@dataclass(frozen=True)
+class FieldMetrics:
+    step: int
+    mean_metabolite: float
+    min_metabolite: float
+    mean_trace: float
+    max_trace: float
+    global_synchrony: float
+    mean_local_synchrony: float
+    max_local_synchrony: float
+
+
 class OscillatorField:
     def __init__(self, config: FieldConfig) -> None:
         self.config = config
@@ -138,6 +150,19 @@ class OscillatorField:
 
     def global_synchrony(self) -> float:
         return float(np.abs(np.mean(np.exp(1j * self._phase))))
+
+    def metrics(self, step: int = 0) -> FieldMetrics:
+        local = self.local_synchrony()
+        return FieldMetrics(
+            step=step,
+            mean_metabolite=float(np.mean(self._metabolite)),
+            min_metabolite=float(np.min(self._metabolite)),
+            mean_trace=float(np.mean(self._trace)),
+            max_trace=float(np.max(self._trace)),
+            global_synchrony=self.global_synchrony(),
+            mean_local_synchrony=float(np.mean(local)),
+            max_local_synchrony=float(np.max(local)),
+        )
 
     def _coupling_drive(self) -> FloatArray:
         neighbors = (

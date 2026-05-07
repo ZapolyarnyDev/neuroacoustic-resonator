@@ -104,3 +104,39 @@ def test_trace_accumulates_activity() -> None:
 def test_config_rejects_invalid_trace_rate() -> None:
     with pytest.raises(ValueError, match="trace_rate"):
         FieldConfig(trace_rate=-0.1)
+
+
+def test_metrics_snapshot_is_bounded() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    field.step()
+
+    metrics = field.metrics(step=1)
+
+    assert metrics.step == 1
+    assert 0.0 <= metrics.min_metabolite <= metrics.mean_metabolite <= 1.0
+    assert metrics.mean_trace >= 0.0
+    assert metrics.max_trace >= metrics.mean_trace
+    assert 0.0 <= metrics.global_synchrony <= 1.0
+    assert 0.0 <= metrics.mean_local_synchrony <= metrics.max_local_synchrony <= 1.0
+
+
+def test_metrics_report_uniform_phase_synchrony() -> None:
+    config = FieldConfig(size=4)
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.full(shape, 1.25),
+            frequency=np.ones(shape),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=np.full(shape, 0.4),
+        ),
+    )
+
+    metrics = field.metrics()
+
+    assert metrics.global_synchrony == pytest.approx(1.0)
+    assert metrics.mean_local_synchrony == pytest.approx(1.0)
+    assert metrics.max_local_synchrony == pytest.approx(1.0)
+    assert metrics.mean_trace == pytest.approx(0.4)
