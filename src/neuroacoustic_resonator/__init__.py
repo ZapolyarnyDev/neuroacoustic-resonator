@@ -6,5 +6,13 @@ from neuroacoustic_resonator.field import (
     FieldState,
     OscillatorField,
 )
+from neuroacoustic_resonator.simulation import Simulation, SimulationFrame
 
-__all__ = ["FieldConfig", "FieldMetrics", "FieldState", "OscillatorField"]
+__all__ = [
+    "FieldConfig",
+    "FieldMetrics",
+    "FieldState",
+    "OscillatorField",
+    "Simulation",
+    "SimulationFrame",
+]

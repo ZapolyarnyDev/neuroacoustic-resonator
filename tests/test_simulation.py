@@ -1,0 +1,55 @@
+import pytest
+
+from neuroacoustic_resonator import FieldConfig, OscillatorField, Simulation
+
+
+def test_simulation_starts_at_step_zero() -> None:
+    simulation = Simulation(FieldConfig(size=4, seed=1))
+
+    frame = simulation.snapshot()
+
+    assert simulation.step_index == 0
+    assert frame.metrics.step == 0
+    assert frame.state.phase.shape == (4, 4)
+
+
+def test_simulation_step_advances_counter() -> None:
+    simulation = Simulation(FieldConfig(size=4, seed=1))
+
+    frame = simulation.step()
+
+    assert simulation.step_index == 1
+    assert frame.metrics.step == 1
+
+
+def test_simulation_run_returns_frames() -> None:
+    simulation = Simulation(FieldConfig(size=4, seed=1))
+
+    frames = simulation.run(3)
+
+    assert len(frames) == 3
+    assert simulation.step_index == 3
+    assert [frame.metrics.step for frame in frames] == [1, 2, 3]
+
+
+def test_simulation_accepts_existing_field() -> None:
+    field = OscillatorField(FieldConfig(size=5, seed=1))
+    simulation = Simulation(field=field)
+
+    frame = simulation.snapshot()
+
+    assert frame.state.phase.shape == (5, 5)
+
+
+def test_simulation_rejects_ambiguous_inputs() -> None:
+    field = OscillatorField(FieldConfig(size=4, seed=1))
+
+    with pytest.raises(ValueError, match="either config or field"):
+        Simulation(config=FieldConfig(size=4), field=field)
+
+
+def test_simulation_rejects_negative_run_length() -> None:
+    simulation = Simulation(FieldConfig(size=4, seed=1))
+
+    with pytest.raises(ValueError, match="steps"):
+        simulation.run(-1)
