@@ -6,7 +6,7 @@ from neuroacoustic_resonator.field import (
     FieldState,
     OscillatorField,
 )
-from neuroacoustic_resonator.preview import save_phase_preview
+from neuroacoustic_resonator.preview import save_field_preview, save_phase_preview
 from neuroacoustic_resonator.simulation import Simulation, SimulationFrame
 
 __all__ = [
@@ -16,5 +16,6 @@ __all__ = [
     "OscillatorField",
     "Simulation",
     "SimulationFrame",
+    "save_field_preview",
     "save_phase_preview",
 ]

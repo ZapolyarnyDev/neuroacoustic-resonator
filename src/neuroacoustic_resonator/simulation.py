@@ -6,6 +6,7 @@ from neuroacoustic_resonator.field import (
     FieldConfig,
     FieldMetrics,
     FieldState,
+    FloatArray,
     OscillatorField,
 )
 
@@ -14,6 +15,7 @@ from neuroacoustic_resonator.field import (
 class SimulationFrame:
     state: FieldState
     metrics: FieldMetrics
+    local_synchrony: FloatArray
 
 
 class Simulation:
@@ -35,6 +37,7 @@ class Simulation:
         return SimulationFrame(
             state=self.field.state,
             metrics=self.field.metrics(step=self.step_index),
+            local_synchrony=self.field.local_synchrony(),
         )
 
     def step(self) -> SimulationFrame:
@@ -43,6 +46,7 @@ class Simulation:
         return SimulationFrame(
             state=state,
             metrics=self.field.metrics(step=self.step_index),
+            local_synchrony=self.field.local_synchrony(),
         )
 
     def run(self, steps: int) -> list[SimulationFrame]:
