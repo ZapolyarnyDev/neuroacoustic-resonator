@@ -13,6 +13,7 @@ def test_field_initializes_with_expected_shape() -> None:
     assert state.frequency.shape == (8, 8)
     assert state.metabolite.shape == (8, 8)
     assert state.coupling.shape == (8, 8)
+    assert state.trace.shape == (8, 8)
 
 
 def test_step_keeps_state_finite_and_bounded() -> None:
@@ -23,8 +24,10 @@ def test_step_keeps_state_finite_and_bounded() -> None:
     assert np.all(np.isfinite(state.phase))
     assert np.all(np.isfinite(state.frequency))
     assert np.all(np.isfinite(state.metabolite))
+    assert np.all(np.isfinite(state.trace))
     assert np.all((0.0 <= state.phase) & (state.phase < 2.0 * np.pi))
     assert np.all((0.0 <= state.metabolite) & (state.metabolite <= 1.0))
+    assert np.all(state.trace >= 0.0)
 
 
 def test_state_returns_copy() -> None:
@@ -63,6 +66,7 @@ def test_synchrony_is_one_for_uniform_phase() -> None:
             frequency=np.ones(shape),
             metabolite=np.ones(shape),
             coupling=np.zeros(shape),
+            trace=np.zeros(shape),
         ),
     )
 
@@ -81,5 +85,22 @@ def test_from_state_rejects_wrong_shape() -> None:
                 frequency=np.ones((4, 4)),
                 metabolite=np.ones((4, 4)),
                 coupling=np.zeros((4, 4)),
+                trace=np.zeros((4, 4)),
             ),
         )
+
+
+def test_trace_accumulates_activity() -> None:
+    field = OscillatorField(
+        FieldConfig(size=4, base_frequency=2.0, frequency_spread=0.0)
+    )
+
+    before = field.state.trace
+    after = field.step().trace
+
+    assert np.all(after > before)
+
+
+def test_config_rejects_invalid_trace_rate() -> None:
+    with pytest.raises(ValueError, match="trace_rate"):
+        FieldConfig(trace_rate=-0.1)

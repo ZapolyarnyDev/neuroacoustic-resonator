@@ -19,6 +19,7 @@ class FieldConfig:
     coupling_strength: float = 0.16
     metabolite_recovery: float = 0.03
     metabolite_cost: float = 0.02
+    trace_rate: float = 0.08
     seed: int | None = None
 
     def __post_init__(self) -> None:
@@ -40,6 +41,9 @@ class FieldConfig:
         if self.metabolite_cost < 0.0:
             msg = "metabolite_cost must be non-negative"
             raise ValueError(msg)
+        if self.trace_rate < 0.0:
+            msg = "trace_rate must be non-negative"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,7 @@ class FieldState:
     frequency: FloatArray
     metabolite: FloatArray
     coupling: FloatArray
+    trace: FloatArray
 
 
 class OscillatorField:
@@ -64,6 +69,7 @@ class OscillatorField:
         ).astype(np.float64)
         self._metabolite = np.ones(shape, dtype=np.float64)
         self._coupling = np.full(shape, config.coupling_strength, dtype=np.float64)
+        self._trace = np.zeros(shape, dtype=np.float64)
 
     @classmethod
     def from_state(cls, config: FieldConfig, state: FieldState) -> OscillatorField:
@@ -73,6 +79,7 @@ class OscillatorField:
             ("frequency", state.frequency),
             ("metabolite", state.metabolite),
             ("coupling", state.coupling),
+            ("trace", state.trace),
         ):
             if value.shape != expected_shape:
                 msg = f"{name} shape must be {expected_shape}"
@@ -86,6 +93,7 @@ class OscillatorField:
             np.float64, copy=True
         )
         field._coupling = state.coupling.astype(np.float64, copy=True)
+        field._trace = np.clip(state.trace, 0.0, None).astype(np.float64, copy=True)
         return field
 
     @property
@@ -95,6 +103,7 @@ class OscillatorField:
             frequency=self._frequency.copy(),
             metabolite=self._metabolite.copy(),
             coupling=self._coupling.copy(),
+            trace=self._trace.copy(),
         )
 
     def step(self) -> FieldState:
@@ -111,6 +120,9 @@ class OscillatorField:
             ),
             0.0,
             1.0,
+        )
+        self._trace += (
+            self.config.dt * self.config.trace_rate * (activity - self._trace)
         )
 
         return self.state
