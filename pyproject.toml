@@ -16,6 +16,10 @@ dependencies = [
     "tqdm>=4.67.3",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [dependency-groups]
 dev = [
     "mypy>=1.20.2",
@@ -24,5 +28,5 @@ dev = [
     "ruff>=0.15.12",
 ]
 
-[tool.pytest.ini_options]
-pythonpath = ["."]
+[tool.hatch.build.targets.wheel]
+packages = ["src/neuroacoustic_resonator"]
