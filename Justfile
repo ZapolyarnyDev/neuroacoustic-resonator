@@ -18,7 +18,7 @@ typecheck:
 test:
     uv run pytest
 
-check: lint typecheck
+check: lint typecheck test
 
 hooks-install:
     uv run pre-commit install
