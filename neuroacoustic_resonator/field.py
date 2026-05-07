@@ -65,6 +65,29 @@ class OscillatorField:
         self._metabolite = np.ones(shape, dtype=np.float64)
         self._coupling = np.full(shape, config.coupling_strength, dtype=np.float64)
 
+    @classmethod
+    def from_state(cls, config: FieldConfig, state: FieldState) -> OscillatorField:
+        expected_shape = (config.size, config.size)
+        for name, value in (
+            ("phase", state.phase),
+            ("frequency", state.frequency),
+            ("metabolite", state.metabolite),
+            ("coupling", state.coupling),
+        ):
+            if value.shape != expected_shape:
+                msg = f"{name} shape must be {expected_shape}"
+                raise ValueError(msg)
+
+        field = cls.__new__(cls)
+        field.config = config
+        field._phase = np.mod(state.phase, TAU).astype(np.float64, copy=True)
+        field._frequency = state.frequency.astype(np.float64, copy=True)
+        field._metabolite = np.clip(state.metabolite, 0.0, 1.0).astype(
+            np.float64, copy=True
+        )
+        field._coupling = state.coupling.astype(np.float64, copy=True)
+        return field
+
     @property
     def state(self) -> FieldState:
         return FieldState(
@@ -91,6 +114,18 @@ class OscillatorField:
         )
 
         return self.state
+
+    def local_synchrony(self) -> FloatArray:
+        neighbor_vectors = (
+            np.exp(1j * np.roll(self._phase, 1, axis=0))
+            + np.exp(1j * np.roll(self._phase, -1, axis=0))
+            + np.exp(1j * np.roll(self._phase, 1, axis=1))
+            + np.exp(1j * np.roll(self._phase, -1, axis=1))
+        )
+        return np.abs((np.exp(1j * self._phase) + neighbor_vectors) / 5.0)
+
+    def global_synchrony(self) -> float:
+        return float(np.abs(np.mean(np.exp(1j * self._phase))))
 
     def _coupling_drive(self) -> FloatArray:
         neighbors = (
