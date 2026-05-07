@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
+from neuroacoustic_resonator.config import SimulationConfig
 from neuroacoustic_resonator.field import (
     FieldConfig,
     FieldMetrics,
@@ -32,6 +34,14 @@ class Simulation:
             field if field is not None else OscillatorField(config or FieldConfig())
         )
         self.step_index = 0
+
+    @classmethod
+    def from_config(cls, config: SimulationConfig) -> Simulation:
+        return cls(config=config.to_field_config())
+
+    @classmethod
+    def from_config_file(cls, path: str | Path) -> Simulation:
+        return cls.from_config(SimulationConfig.from_file(path))
 
     def snapshot(self) -> SimulationFrame:
         return SimulationFrame(

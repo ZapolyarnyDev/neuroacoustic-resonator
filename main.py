@@ -1,12 +1,13 @@
 from pathlib import Path
 
-from neuroacoustic_resonator import FieldConfig, Simulation, save_field_preview
+from neuroacoustic_resonator import Simulation, SimulationConfig, save_field_preview
 
 
 def main():
-    simulation = Simulation(FieldConfig(size=16, seed=67))
-    frame = simulation.run(32)[-1]
-    preview_path = save_field_preview(frame, Path("outputs") / "field-preview.png")
+    config = SimulationConfig.from_file(Path("configs") / "default.yaml")
+    simulation = Simulation.from_config(config)
+    frame = simulation.run(config.steps)[-1]
+    preview_path = save_field_preview(frame, config.preview_path)
     print(
         "Neuroacoustic resonator field initialized: "
         f"size={frame.state.phase.shape[0]}x{frame.state.phase.shape[1]}, "

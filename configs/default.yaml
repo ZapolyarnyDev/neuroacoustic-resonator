@@ -1,0 +1,12 @@
+field:
+  size: 16
+  dt: 0.02
+  base_frequency: 1.0
+  frequency_spread: 0.05
+  coupling_strength: 0.16
+  metabolite_recovery: 0.03
+  metabolite_cost: 0.02
+  trace_rate: 0.08
+  seed: 67
+steps: 32
+preview_path: outputs/field-preview.png
