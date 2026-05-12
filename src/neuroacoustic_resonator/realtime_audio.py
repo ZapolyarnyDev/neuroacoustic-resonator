@@ -95,21 +95,25 @@ class RealtimeAudioEngine:
         self,
         frame_size: int,
     ) -> ContinuousAudioRenderer | GatedAudioRenderer:
-        renderer_kwargs = {
-            "sample_rate": self.config.sample_rate,
-            "frame_size": frame_size,
-            "carrier_frequency": self.config.carrier_frequency,
-            "frequency_scale": self.config.frequency_scale,
-            "gain": self.config.gain,
-            "smoothing": self.config.smoothing,
-        }
         if self.config.audio_mode == "gated":
             return GatedAudioRenderer(
-                **renderer_kwargs,
+                sample_rate=self.config.sample_rate,
+                frame_size=frame_size,
+                carrier_frequency=self.config.carrier_frequency,
+                frequency_scale=self.config.frequency_scale,
+                gain=self.config.gain,
+                smoothing=self.config.smoothing,
                 gate_threshold=self.config.gate_threshold,
                 gate_sensitivity=self.config.gate_sensitivity,
             )
-        return ContinuousAudioRenderer(**renderer_kwargs)
+        return ContinuousAudioRenderer(
+            sample_rate=self.config.sample_rate,
+            frame_size=frame_size,
+            carrier_frequency=self.config.carrier_frequency,
+            frequency_scale=self.config.frequency_scale,
+            gain=self.config.gain,
+            smoothing=self.config.smoothing,
+        )
 
     def callback(
         self,
