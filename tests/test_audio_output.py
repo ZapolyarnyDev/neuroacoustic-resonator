@@ -4,7 +4,11 @@ import numpy as np
 import pytest
 
 from neuroacoustic_resonator import FieldConfig, OscillatorField, RegionMasks
-from neuroacoustic_resonator.audio_output import render_output_frame, write_wav
+from neuroacoustic_resonator.audio_output import (
+    ContinuousAudioRenderer,
+    render_output_frame,
+    write_wav,
+)
 
 
 def test_render_output_frame_returns_bounded_audio() -> None:
@@ -57,3 +61,49 @@ def test_write_wav_creates_pcm_file(tmp_path) -> None:
         assert stream.getnchannels() == 1
         assert stream.getsampwidth() == 2
         assert stream.getnframes() == 16
+
+
+def test_continuous_audio_renderer_returns_bounded_frames() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = ContinuousAudioRenderer(sample_rate=8_000, frame_size=64, gain=0.5)
+
+    first = renderer.render_frame(field.state, regions)
+    field.step()
+    second = renderer.render_frame(field.state, regions)
+
+    assert first.shape == (64,)
+    assert second.shape == (64,)
+    assert np.all(np.isfinite(first))
+    assert np.all(np.isfinite(second))
+    assert np.all((-1.0 <= first) & (first <= 1.0))
+    assert np.all((-1.0 <= second) & (second <= 1.0))
+
+
+def test_continuous_audio_renderer_maintains_phase_between_frames() -> None:
+    field = OscillatorField(
+        FieldConfig(
+            size=4,
+            seed=1,
+            base_frequency=1.0,
+            frequency_spread=0.0,
+        )
+    )
+    regions = RegionMasks.from_size(4)
+    renderer = ContinuousAudioRenderer(
+        sample_rate=8_000,
+        frame_size=80,
+        carrier_frequency=100.0,
+        gain=0.5,
+        smoothing=1.0,
+    )
+
+    first = renderer.render_frame(field.state, regions)
+    second = renderer.render_frame(field.state, regions)
+
+    assert abs(second[0] - first[-1]) < 0.1
+
+
+def test_continuous_audio_renderer_rejects_invalid_smoothing() -> None:
+    with pytest.raises(ValueError, match="smoothing"):
+        ContinuousAudioRenderer(smoothing=0.0)

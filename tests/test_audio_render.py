@@ -108,6 +108,8 @@ steps: 1
             "8000",
             "--frame-size",
             "8",
+            "--carrier-frequency",
+            "110",
             "--output",
             str(output_path),
         ]

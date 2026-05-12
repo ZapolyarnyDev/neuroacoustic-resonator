@@ -33,8 +33,14 @@ audio:
 audio-demo:
     uv run python scripts/render_audio_demo.py --config configs/audio_demo.yaml --duration-seconds 10 --output experiments/audio/audio-demo.wav
 
+audio-bright:
+    uv run python scripts/render_audio_demo.py --config configs/audio_demo.yaml --duration-seconds 10 --carrier-frequency 330 --frequency-scale 1.5 --output experiments/audio/audio-bright-demo.wav
+
 audio-custom config duration output:
     uv run python scripts/render_audio_demo.py --config {{config}} --duration-seconds {{duration}} --output {{output}}
+
+audio-custom-carrier config duration carrier frequency_scale output:
+    uv run python scripts/render_audio_demo.py --config {{config}} --duration-seconds {{duration}} --carrier-frequency {{carrier}} --frequency-scale {{frequency_scale}} --output {{output}}
 
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav

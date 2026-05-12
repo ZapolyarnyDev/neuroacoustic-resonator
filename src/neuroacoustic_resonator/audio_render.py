@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from neuroacoustic_resonator.audio_output import render_output_frame, write_wav
+from neuroacoustic_resonator.audio_output import ContinuousAudioRenderer, write_wav
 from neuroacoustic_resonator.config import SimulationConfig
 from neuroacoustic_resonator.regions import RegionMasks
 from neuroacoustic_resonator.simulation import Simulation
@@ -43,6 +43,8 @@ def render_audio_demo(
     sample_rate: int = 48_000,
     frame_size: int = 512,
     gain: float = 0.2,
+    carrier_frequency: float = 220.0,
+    frequency_scale: float = 1.0,
     output_path: str | Path | None = None,
 ) -> Path:
     if steps is not None and steps < 1:
@@ -65,19 +67,18 @@ def render_audio_demo(
     )
     simulation = Simulation.from_config(config)
     regions = RegionMasks.from_size(config.field.size)
+    renderer = ContinuousAudioRenderer(
+        sample_rate=sample_rate,
+        frame_size=frame_size,
+        carrier_frequency=carrier_frequency,
+        frequency_scale=frequency_scale,
+        gain=gain,
+    )
     frames = []
 
     for _ in range(total_steps):
         frame = simulation.step()
-        frames.append(
-            render_output_frame(
-                frame.state,
-                regions,
-                sample_rate=sample_rate,
-                frame_size=frame_size,
-                gain=gain,
-            )
-        )
+        frames.append(renderer.render_frame(frame.state, regions))
 
     audio = np.concatenate(frames) if frames else np.zeros(0, dtype=np.float64)
     path = (
@@ -132,6 +133,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output gain before clipping.",
     )
     parser.add_argument(
+        "--carrier-frequency",
+        type=float,
+        default=220.0,
+        help="Audible carrier frequency for field frequency 1.0.",
+    )
+    parser.add_argument(
+        "--frequency-scale",
+        type=float,
+        default=1.0,
+        help="Multiplier applied to the carrier mapping.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -167,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
         sample_rate=args.sample_rate,
         frame_size=args.frame_size,
         gain=args.gain,
+        carrier_frequency=args.carrier_frequency,
+        frequency_scale=args.frequency_scale,
         output_path=output_path,
     )
 
