@@ -78,6 +78,12 @@ live:
 live-input:
     uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2
 
+live-audio:
+    uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode gated
+
+live-audio-continuous:
+    uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode continuous
+
 live-field:
     uv run python scripts/live_field.py --config configs/field_only.yaml --interval-ms 30 --steps-per-update 2
 

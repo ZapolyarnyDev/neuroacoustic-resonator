@@ -4,6 +4,7 @@ import pytest
 from neuroacoustic_resonator import FieldConfig, RegionMasks, Simulation
 from neuroacoustic_resonator.visualization import (
     LiveVisualizationConfig,
+    _LiveAudioOutput,
     frame_to_visualization,
     region_boundary_columns,
 )
@@ -49,3 +50,31 @@ def test_live_visualization_config_validates_values() -> None:
         LiveVisualizationConfig(steps_per_update=0)
     with pytest.raises(ValueError, match="history_size"):
         LiveVisualizationConfig(history_size=1)
+    with pytest.raises(ValueError, match="audio_mode"):
+        LiveVisualizationConfig(audio_mode="unknown")
+    with pytest.raises(ValueError, match="audio_sample_rate"):
+        LiveVisualizationConfig(audio_sample_rate=0)
+
+
+def test_live_audio_output_callback_uses_latest_state() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    audio_output = _LiveAudioOutput(
+        config=LiveVisualizationConfig(
+            audio_enabled=True,
+            audio_sample_rate=8_000,
+            audio_frame_size=32,
+            audio_mode="continuous",
+        ),
+        regions=regions,
+    )
+    outdata = np.zeros((32, 1), dtype=np.float32)
+
+    audio_output.callback(outdata, 32, None, None)
+    assert np.max(np.abs(outdata)) == 0.0
+
+    audio_output.update_state(simulation.step().state)
+    audio_output.callback(outdata, 32, None, None)
+
+    assert np.all(np.isfinite(outdata))
+    assert np.max(np.abs(outdata)) > 0.0

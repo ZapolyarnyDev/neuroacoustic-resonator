@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import threading
 import traceback
 from collections import deque
 from dataclasses import dataclass
@@ -9,9 +10,14 @@ from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
+from neuroacoustic_resonator.audio_output import (
+    ContinuousAudioRenderer,
+    GatedAudioRenderer,
+)
 from neuroacoustic_resonator.config import SimulationConfig
-from neuroacoustic_resonator.field import FloatArray
+from neuroacoustic_resonator.field import FieldState, FloatArray
 from neuroacoustic_resonator.regions import RegionMasks
 from neuroacoustic_resonator.simulation import Simulation, SimulationFrame
 
@@ -22,6 +28,15 @@ class LiveVisualizationConfig:
     interval_ms: int = 30
     steps_per_update: int = 1
     history_size: int = 512
+    audio_enabled: bool = False
+    audio_mode: str = "gated"
+    audio_sample_rate: int = 48_000
+    audio_frame_size: int = 512
+    audio_gain: float = 0.2
+    audio_carrier_frequency: float = 220.0
+    audio_frequency_scale: float = 1.0
+    audio_gate_threshold: float = 0.002
+    audio_gate_sensitivity: float = 24.0
 
     def __post_init__(self) -> None:
         if self.interval_ms < 1:
@@ -32,6 +47,30 @@ class LiveVisualizationConfig:
             raise ValueError(msg)
         if self.history_size < 2:
             msg = "history_size must be at least 2"
+            raise ValueError(msg)
+        if self.audio_mode not in {"continuous", "gated"}:
+            msg = "audio_mode must be 'continuous' or 'gated'"
+            raise ValueError(msg)
+        if self.audio_sample_rate < 1:
+            msg = "audio_sample_rate must be positive"
+            raise ValueError(msg)
+        if self.audio_frame_size < 1:
+            msg = "audio_frame_size must be positive"
+            raise ValueError(msg)
+        if self.audio_gain < 0.0:
+            msg = "audio_gain must be non-negative"
+            raise ValueError(msg)
+        if self.audio_carrier_frequency <= 0.0:
+            msg = "audio_carrier_frequency must be positive"
+            raise ValueError(msg)
+        if self.audio_frequency_scale <= 0.0:
+            msg = "audio_frequency_scale must be positive"
+            raise ValueError(msg)
+        if self.audio_gate_threshold < 0.0:
+            msg = "audio_gate_threshold must be non-negative"
+            raise ValueError(msg)
+        if self.audio_gate_sensitivity <= 0.0:
+            msg = "audio_gate_sensitivity must be positive"
             raise ValueError(msg)
 
 
@@ -105,6 +144,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=512,
         help="Number of metric points retained in the live plots.",
     )
+    parser.add_argument(
+        "--audio", action="store_true", help="Enable live audio output."
+    )
+    parser.add_argument(
+        "--audio-mode",
+        choices=("continuous", "gated"),
+        default="gated",
+        help="Audio monitor mode used when --audio is enabled.",
+    )
+    parser.add_argument("--audio-sample-rate", type=int, default=48_000)
+    parser.add_argument("--audio-frame-size", type=int, default=512)
+    parser.add_argument("--audio-gain", type=float, default=0.2)
+    parser.add_argument("--audio-carrier-frequency", type=float, default=220.0)
+    parser.add_argument("--audio-frequency-scale", type=float, default=1.0)
+    parser.add_argument("--audio-gate-threshold", type=float, default=0.002)
+    parser.add_argument("--audio-gate-sensitivity", type=float, default=24.0)
     return parser
 
 
@@ -159,6 +214,11 @@ class _LiveFieldWindow:
         self._trace_item = pg.ImageItem()
         self._regions_item = pg.ImageItem()
         self._boundary_columns = region_boundary_columns(regions)
+        self._audio_output = (
+            _LiveAudioOutput(config=config, regions=regions)
+            if config.audio_enabled
+            else None
+        )
 
         for index, (title, item) in enumerate(
             (
@@ -197,6 +257,8 @@ class _LiveFieldWindow:
 
     def show(self) -> None:
         self._window.show()
+        if self._audio_output is not None:
+            self._audio_output.start()
         self._qt_core.QTimer.singleShot(0, self.update)
         self._timer.start(self._config.interval_ms)
 
@@ -227,10 +289,100 @@ class _LiveFieldWindow:
                 list(self._steps),
                 list(self._metabolite_values),
             )
+            if self._audio_output is not None:
+                self._audio_output.update_state(frame.state)
         except Exception:
             self._timer.stop()
+            if self._audio_output is not None:
+                self._audio_output.stop()
             traceback.print_exc()
             self._app.quit()
+
+
+class _LiveAudioOutput:
+    def __init__(
+        self,
+        *,
+        config: LiveVisualizationConfig,
+        regions: RegionMasks,
+        stream_factory: Any | None = None,
+    ) -> None:
+        self._config = config
+        self._regions = regions
+        self._lock = threading.Lock()
+        self._state: FieldState | None = None
+        self._stream: Any | None = None
+        self._stream_factory = stream_factory
+        self._renderer = self._build_renderer(config.audio_frame_size)
+
+    def _build_renderer(
+        self, frame_size: int
+    ) -> ContinuousAudioRenderer | GatedAudioRenderer:
+        if self._config.audio_mode == "gated":
+            return GatedAudioRenderer(
+                sample_rate=self._config.audio_sample_rate,
+                frame_size=frame_size,
+                carrier_frequency=self._config.audio_carrier_frequency,
+                frequency_scale=self._config.audio_frequency_scale,
+                gain=self._config.audio_gain,
+                gate_threshold=self._config.audio_gate_threshold,
+                gate_sensitivity=self._config.audio_gate_sensitivity,
+            )
+        return ContinuousAudioRenderer(
+            sample_rate=self._config.audio_sample_rate,
+            frame_size=frame_size,
+            carrier_frequency=self._config.audio_carrier_frequency,
+            frequency_scale=self._config.audio_frequency_scale,
+            gain=self._config.audio_gain,
+        )
+
+    def start(self) -> None:
+        if self._stream is not None:
+            return
+        factory = self._stream_factory
+        if factory is None:
+            sounddevice = cast(Any, importlib.import_module("sounddevice"))
+            factory = sounddevice.OutputStream
+        self._stream = factory(
+            samplerate=self._config.audio_sample_rate,
+            blocksize=self._config.audio_frame_size,
+            channels=1,
+            dtype="float32",
+            callback=self.callback,
+        )
+        self._stream.__enter__()
+
+    def stop(self) -> None:
+        if self._stream is None:
+            return
+        self._stream.__exit__(None, None, None)
+        self._stream = None
+
+    def update_state(self, state: FieldState) -> None:
+        with self._lock:
+            self._state = state
+
+    def callback(
+        self,
+        outdata: NDArray[np.float32],
+        frames: int,
+        time_info: Any,
+        status: Any,
+    ) -> None:
+        del time_info
+        if status:
+            print(status)
+
+        with self._lock:
+            state = self._state
+        if state is None:
+            outdata[:, 0] = 0.0
+            return
+
+        if frames != self._renderer.frame_size:
+            self._renderer = self._build_renderer(frames)
+        audio = self._renderer.render_frame(state, self._regions)
+        outdata[:, 0] = np.asarray(audio, dtype=np.float32)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -241,5 +393,14 @@ def main(argv: list[str] | None = None) -> int:
             interval_ms=args.interval_ms,
             steps_per_update=args.steps_per_update,
             history_size=args.history_size,
+            audio_enabled=args.audio,
+            audio_mode=args.audio_mode,
+            audio_sample_rate=args.audio_sample_rate,
+            audio_frame_size=args.audio_frame_size,
+            audio_gain=args.audio_gain,
+            audio_carrier_frequency=args.audio_carrier_frequency,
+            audio_frequency_scale=args.audio_frequency_scale,
+            audio_gate_threshold=args.audio_gate_threshold,
+            audio_gate_sensitivity=args.audio_gate_sensitivity,
         )
     )
