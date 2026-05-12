@@ -57,6 +57,12 @@ audio-live:
 audio-live-test:
     uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml --duration-seconds 5
 
+audio-live-gated:
+    uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml --audio-mode gated
+
+audio-live-gated-test:
+    uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml --audio-mode gated --duration-seconds 5
+
 audio-live-custom config carrier frequency_scale gain:
     uv run python scripts/play_audio_demo.py --config {{config}} --carrier-frequency {{carrier}} --frequency-scale {{frequency_scale}} --gain {{gain}}
 

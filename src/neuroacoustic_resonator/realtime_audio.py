@@ -7,16 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol, cast
 
-import numpy as np
 from numpy.typing import NDArray
 
-from neuroacoustic_resonator.audio_output import ContinuousAudioRenderer
+import numpy as np
+
+from neuroacoustic_resonator.audio_output import (
+    ContinuousAudioRenderer,
+    GatedAudioRenderer,
+)
 from neuroacoustic_resonator.config import SimulationConfig
 from neuroacoustic_resonator.regions import RegionMasks
 from neuroacoustic_resonator.simulation import Simulation
 
-FloatArray = NDArray[np.float64]
-OutputCallback = Callable[[NDArray[np.float32], int, Any, Any], None]
+AudioMode = str
 
 
 class OutputStreamLike(Protocol):
@@ -39,6 +42,9 @@ class RealtimeAudioConfig:
     smoothing: float = 0.2
     physics_steps_per_audio_frame: int = 1
     duration_seconds: float | None = None
+    audio_mode: AudioMode = "continuous"
+    gate_threshold: float = 0.002
+    gate_sensitivity: float = 24.0
 
     def __post_init__(self) -> None:
         if self.sample_rate < 1:
@@ -65,6 +71,15 @@ class RealtimeAudioConfig:
         if self.duration_seconds is not None and self.duration_seconds <= 0.0:
             msg = "duration_seconds must be positive"
             raise ValueError(msg)
+        if self.audio_mode not in {"continuous", "gated"}:
+            msg = "audio_mode must be 'continuous' or 'gated'"
+            raise ValueError(msg)
+        if self.gate_threshold < 0.0:
+            msg = "gate_threshold must be non-negative"
+            raise ValueError(msg)
+        if self.gate_sensitivity <= 0.0:
+            msg = "gate_sensitivity must be positive"
+            raise ValueError(msg)
 
 
 class RealtimeAudioEngine:
@@ -73,15 +88,28 @@ class RealtimeAudioEngine:
         simulation_config = SimulationConfig.from_file(config.config_path)
         self.simulation = Simulation.from_config(simulation_config)
         self.regions = RegionMasks.from_size(simulation_config.field.size)
-        self.renderer = ContinuousAudioRenderer(
-            sample_rate=config.sample_rate,
-            frame_size=config.frame_size,
-            carrier_frequency=config.carrier_frequency,
-            frequency_scale=config.frequency_scale,
-            gain=config.gain,
-            smoothing=config.smoothing,
-        )
+        self.renderer = self._build_renderer(config.frame_size)
         self.callback_count = 0
+
+    def _build_renderer(
+        self,
+        frame_size: int,
+    ) -> ContinuousAudioRenderer | GatedAudioRenderer:
+        renderer_kwargs = {
+            "sample_rate": self.config.sample_rate,
+            "frame_size": frame_size,
+            "carrier_frequency": self.config.carrier_frequency,
+            "frequency_scale": self.config.frequency_scale,
+            "gain": self.config.gain,
+            "smoothing": self.config.smoothing,
+        }
+        if self.config.audio_mode == "gated":
+            return GatedAudioRenderer(
+                **renderer_kwargs,
+                gate_threshold=self.config.gate_threshold,
+                gate_sensitivity=self.config.gate_sensitivity,
+            )
+        return ContinuousAudioRenderer(**renderer_kwargs)
 
     def callback(
         self,
@@ -98,14 +126,7 @@ class RealtimeAudioEngine:
             frame = self.simulation.step()
 
         if frames != self.renderer.frame_size:
-            self.renderer = ContinuousAudioRenderer(
-                sample_rate=self.config.sample_rate,
-                frame_size=frames,
-                carrier_frequency=self.config.carrier_frequency,
-                frequency_scale=self.config.frequency_scale,
-                gain=self.config.gain,
-                smoothing=self.config.smoothing,
-            )
+            self.renderer = self._build_renderer(frames)
 
         audio = self.renderer.render_frame(frame.state, self.regions)
         outdata[:, 0] = np.asarray(audio, dtype=np.float32)
@@ -158,6 +179,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smoothing", type=float, default=0.2)
     parser.add_argument("--physics-steps-per-audio-frame", type=int, default=1)
     parser.add_argument(
+        "--audio-mode",
+        choices=("continuous", "gated"),
+        default="continuous",
+        help="Continuous field monitor or gated response monitor.",
+    )
+    parser.add_argument("--gate-threshold", type=float, default=0.002)
+    parser.add_argument("--gate-sensitivity", type=float, default=24.0)
+    parser.add_argument(
         "--duration-seconds",
         type=float,
         default=None,
@@ -178,6 +207,9 @@ def main(argv: list[str] | None = None) -> int:
         smoothing=args.smoothing,
         physics_steps_per_audio_frame=args.physics_steps_per_audio_frame,
         duration_seconds=args.duration_seconds,
+        audio_mode=args.audio_mode,
+        gate_threshold=args.gate_threshold,
+        gate_sensitivity=args.gate_sensitivity,
     )
     play_realtime_audio(config)
     return 0

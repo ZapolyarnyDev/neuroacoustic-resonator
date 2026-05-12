@@ -2,6 +2,7 @@
 
 from neuroacoustic_resonator.audio_output import (
     ContinuousAudioRenderer,
+    GatedAudioRenderer,
     render_output_frame,
     write_wav,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "FieldMetrics",
     "FieldState",
     "ContinuousAudioRenderer",
+    "GatedAudioRenderer",
     "LiveVisualizationConfig",
     "MetricsHistory",
     "OscillatorField",

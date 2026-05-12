@@ -6,6 +6,7 @@ import pytest
 from neuroacoustic_resonator import FieldConfig, OscillatorField, RegionMasks
 from neuroacoustic_resonator.audio_output import (
     ContinuousAudioRenderer,
+    GatedAudioRenderer,
     render_output_frame,
     write_wav,
 )
@@ -107,3 +108,43 @@ def test_continuous_audio_renderer_maintains_phase_between_frames() -> None:
 def test_continuous_audio_renderer_rejects_invalid_smoothing() -> None:
     with pytest.raises(ValueError, match="smoothing"):
         ContinuousAudioRenderer(smoothing=0.0)
+
+
+def test_gated_audio_renderer_suppresses_steady_state() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = GatedAudioRenderer(sample_rate=8_000, frame_size=64, gain=0.5)
+
+    first = renderer.render_frame(field.state, regions)
+    second = renderer.render_frame(field.state, regions)
+
+    assert first.shape == (64,)
+    assert second.shape == (64,)
+    assert np.max(np.abs(first)) == 0.0
+    assert np.max(np.abs(second)) == 0.0
+
+
+def test_gated_audio_renderer_opens_on_output_activity_change() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = GatedAudioRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        gain=0.5,
+        gate_threshold=0.0,
+        gate_sensitivity=100.0,
+        attack=1.0,
+    )
+    renderer.render_frame(field.state, regions)
+    state = field.state
+    state.trace[regions.output] += 0.1
+
+    audio = renderer.render_frame(state, regions)
+
+    assert renderer.envelope > 0.0
+    assert np.max(np.abs(audio)) > 0.0
+
+
+def test_gated_audio_renderer_rejects_invalid_gate_threshold() -> None:
+    with pytest.raises(ValueError, match="gate_threshold"):
+        GatedAudioRenderer(gate_threshold=-0.1)

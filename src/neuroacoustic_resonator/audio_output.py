@@ -151,6 +151,92 @@ class ContinuousAudioRenderer:
         return weights / weight_sum
 
 
+class GatedAudioRenderer:
+    def __init__(
+        self,
+        *,
+        sample_rate: int = 48_000,
+        frame_size: int = 512,
+        carrier_frequency: float = 220.0,
+        frequency_scale: float = 1.0,
+        gain: float = 0.2,
+        smoothing: float = 0.2,
+        gate_threshold: float = 0.002,
+        gate_sensitivity: float = 24.0,
+        attack: float = 0.35,
+        release: float = 0.04,
+        baseline_smoothing: float = 0.01,
+    ) -> None:
+        if gate_threshold < 0.0:
+            msg = "gate_threshold must be non-negative"
+            raise ValueError(msg)
+        if gate_sensitivity <= 0.0:
+            msg = "gate_sensitivity must be positive"
+            raise ValueError(msg)
+        if not 0.0 < attack <= 1.0:
+            msg = "attack must be in (0, 1]"
+            raise ValueError(msg)
+        if not 0.0 < release <= 1.0:
+            msg = "release must be in (0, 1]"
+            raise ValueError(msg)
+        if not 0.0 < baseline_smoothing <= 1.0:
+            msg = "baseline_smoothing must be in (0, 1]"
+            raise ValueError(msg)
+
+        self.continuous = ContinuousAudioRenderer(
+            sample_rate=sample_rate,
+            frame_size=frame_size,
+            carrier_frequency=carrier_frequency,
+            frequency_scale=frequency_scale,
+            gain=gain,
+            smoothing=smoothing,
+        )
+        self.gate_threshold = gate_threshold
+        self.gate_sensitivity = gate_sensitivity
+        self.attack = attack
+        self.release = release
+        self.baseline_smoothing = baseline_smoothing
+        self._baseline: float | None = None
+        self.envelope = 0.0
+        self.last_activation = 0.0
+
+    @property
+    def frame_size(self) -> int:
+        return self.continuous.frame_size
+
+    def render_frame(self, state: FieldState, regions: RegionMasks) -> AudioArray:
+        signal = self._output_activity_signal(state, regions)
+        if self._baseline is None:
+            self._baseline = signal
+
+        assert self._baseline is not None
+        delta = abs(signal - self._baseline)
+        self._baseline += self.baseline_smoothing * (signal - self._baseline)
+        self.last_activation = float(
+            np.clip(
+                (delta - self.gate_threshold) * self.gate_sensitivity,
+                0.0,
+                1.0,
+            )
+        )
+
+        rate = self.attack if self.last_activation > self.envelope else self.release
+        self.envelope += rate * (self.last_activation - self.envelope)
+        return self.continuous.render_frame(state, regions) * self.envelope
+
+    @staticmethod
+    def _output_activity_signal(state: FieldState, regions: RegionMasks) -> float:
+        if state.phase.shape != regions.shape:
+            msg = "state and regions must have matching shapes"
+            raise ValueError(msg)
+        mask = regions.output
+        if not np.any(mask):
+            return 0.0
+        return float(
+            np.mean(state.trace[mask]) + 0.5 * np.mean(1.0 - state.metabolite[mask])
+        )
+
+
 def write_wav(path: str | Path, audio: AudioArray, *, sample_rate: int) -> Path:
     if sample_rate < 1:
         msg = "sample_rate must be positive"
