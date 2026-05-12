@@ -18,6 +18,12 @@ metrics:
 metrics-long:
     uv run python scripts/run_long_metrics.py --config configs/long_run.yaml --steps 10000 --sample-interval 10 --output outputs/metrics/long-run-10k.csv
 
+experiments:
+    uv run python scripts/run_experiments.py --config configs/synthetic_input.yaml --output-dir experiments/logs --propagation-horizon 1024
+
+experiments-custom config output_dir propagation_horizon:
+    uv run python scripts/run_experiments.py --config {{config}} --output-dir {{output_dir}} --propagation-horizon {{propagation_horizon}}
+
 metrics-custom config steps sample_interval output:
     uv run python scripts/run_long_metrics.py --config {{config}} --steps {{steps}} --sample-interval {{sample_interval}} --output {{output}}
 
