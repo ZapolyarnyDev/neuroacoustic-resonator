@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 
 import numpy as np
@@ -15,10 +16,30 @@ def default_audio_output_path(config_path: Path, steps: int) -> Path:
     return Path("experiments") / "audio" / f"{config_path.stem}-{steps}-steps.wav"
 
 
+def steps_for_duration(
+    duration_seconds: float,
+    *,
+    sample_rate: int,
+    frame_size: int,
+) -> int:
+    if duration_seconds <= 0.0:
+        msg = "duration_seconds must be positive"
+        raise ValueError(msg)
+    if sample_rate < 1:
+        msg = "sample_rate must be positive"
+        raise ValueError(msg)
+    if frame_size < 1:
+        msg = "frame_size must be positive"
+        raise ValueError(msg)
+
+    return max(1, math.ceil(duration_seconds * sample_rate / frame_size))
+
+
 def render_audio_demo(
     config_path: str | Path,
     *,
     steps: int | None = None,
+    duration_seconds: float | None = None,
     sample_rate: int = 48_000,
     frame_size: int = 512,
     gain: float = 0.2,
@@ -27,10 +48,21 @@ def render_audio_demo(
     if steps is not None and steps < 1:
         msg = "steps must be positive"
         raise ValueError(msg)
+    if steps is not None and duration_seconds is not None:
+        msg = "provide either steps or duration_seconds, not both"
+        raise ValueError(msg)
 
     config_path = Path(config_path)
     config = SimulationConfig.from_file(config_path)
-    total_steps = steps or config.steps
+    total_steps = steps or (
+        steps_for_duration(
+            duration_seconds,
+            sample_rate=sample_rate,
+            frame_size=frame_size,
+        )
+        if duration_seconds is not None
+        else config.steps
+    )
     simulation = Simulation.from_config(config)
     regions = RegionMasks.from_size(config.field.size)
     frames = []
@@ -73,7 +105,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--steps",
         type=int,
         default=None,
-        help="Number of simulation steps. Defaults to the config value.",
+        help="Number of simulation steps.",
+    )
+    parser.add_argument(
+        "--duration-seconds",
+        type=float,
+        default=None,
+        help="Target audio duration. Defaults to 5 seconds when --steps is omitted.",
     )
     parser.add_argument(
         "--sample-rate",
@@ -104,12 +142,28 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    config = SimulationConfig.from_file(args.config)
-    total_steps = args.steps or config.steps
+    if args.steps is not None and args.duration_seconds is not None:
+        msg = "provide either --steps or --duration-seconds, not both"
+        raise ValueError(msg)
+
+    duration_seconds = args.duration_seconds if args.steps is None else None
+    if args.steps is None and duration_seconds is None:
+        duration_seconds = 5.0
+
+    if args.steps is None:
+        assert duration_seconds is not None
+        total_steps = steps_for_duration(
+            float(duration_seconds),
+            sample_rate=args.sample_rate,
+            frame_size=args.frame_size,
+        )
+    else:
+        total_steps = args.steps
     output_path = args.output or default_audio_output_path(args.config, total_steps)
     written_path = render_audio_demo(
         args.config,
         steps=total_steps,
+        duration_seconds=None,
         sample_rate=args.sample_rate,
         frame_size=args.frame_size,
         gain=args.gain,
