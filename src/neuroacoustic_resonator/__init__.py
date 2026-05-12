@@ -1,5 +1,6 @@
 """Core package for the neuroacoustic resonator."""
 
+from neuroacoustic_resonator.audio_output import render_output_frame, write_wav
 from neuroacoustic_resonator.config import FieldConfigModel, SimulationConfig
 from neuroacoustic_resonator.field import (
     FieldConfig,
@@ -23,6 +24,8 @@ __all__ = [
     "Simulation",
     "SimulationConfig",
     "SimulationFrame",
+    "render_output_frame",
     "save_field_preview",
     "save_phase_preview",
+    "write_wav",
 ]
