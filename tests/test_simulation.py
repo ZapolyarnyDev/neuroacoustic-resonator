@@ -1,6 +1,8 @@
+import numpy as np
 import pytest
 
 from neuroacoustic_resonator import FieldConfig, OscillatorField, Simulation
+from neuroacoustic_resonator.input_drive import SyntheticInputConfig
 
 
 def test_simulation_starts_at_step_zero() -> None:
@@ -53,3 +55,36 @@ def test_simulation_rejects_negative_run_length() -> None:
 
     with pytest.raises(ValueError, match="steps"):
         simulation.run(-1)
+
+
+def test_simulation_applies_synthetic_input_before_step() -> None:
+    baseline = Simulation(
+        FieldConfig(
+            size=4,
+            seed=1,
+            coupling_strength=0.0,
+            frequency_plasticity_rate=0.0,
+            frequency_homeostasis_rate=0.0,
+            coupling_homeostasis_rate=0.0,
+        )
+    )
+    driven = Simulation(
+        FieldConfig(
+            size=4,
+            seed=1,
+            coupling_strength=0.0,
+            frequency_plasticity_rate=0.0,
+            frequency_homeostasis_rate=0.0,
+            coupling_homeostasis_rate=0.0,
+        ),
+        synthetic_input=SyntheticInputConfig(
+            enabled=True,
+            mode="pulse",
+            strength=0.5,
+        ),
+    )
+
+    baseline_phase = baseline.step().state.phase
+    driven_phase = driven.step().state.phase
+
+    assert not np.allclose(driven_phase, baseline_phase)

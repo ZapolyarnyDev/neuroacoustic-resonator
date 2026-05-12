@@ -7,6 +7,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from neuroacoustic_resonator.field import FieldConfig
+from neuroacoustic_resonator.input_drive import InputMode, SyntheticInputConfig
 
 
 class FieldConfigModel(BaseModel):
@@ -49,15 +50,35 @@ class FieldConfigModel(BaseModel):
         return FieldConfig(**self.model_dump())
 
 
+class SyntheticInputConfigModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    mode: InputMode = "sine"
+    strength: float = Field(default=0.15, ge=0.0)
+    period_steps: int = Field(default=64, ge=1)
+    duty_cycle: float = Field(default=0.25, gt=0.0, le=1.0)
+    seed: int | None = None
+
+    def to_input_config(self) -> SyntheticInputConfig:
+        return SyntheticInputConfig(**self.model_dump())
+
+
 class SimulationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     field: FieldConfigModel = Field(default_factory=FieldConfigModel)
+    synthetic_input: SyntheticInputConfigModel = Field(
+        default_factory=lambda: SyntheticInputConfigModel(enabled=False)
+    )
     steps: int = Field(default=32, ge=1)
     preview_path: Path = Path("outputs/field-preview.png")
 
     def to_field_config(self) -> FieldConfig:
         return self.field.to_field_config()
+
+    def to_synthetic_input_config(self) -> SyntheticInputConfig:
+        return self.synthetic_input.to_input_config()
 
     @classmethod
     def from_file(cls, path: str | Path) -> SimulationConfig:

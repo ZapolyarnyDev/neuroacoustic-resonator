@@ -22,6 +22,7 @@ preview_path: outputs/test-preview.png
     assert config.field.size == 6
     assert config.field.seed == 12
     assert config.field.metabolite_diffusion == 0.0
+    assert not config.synthetic_input.enabled
     assert config.steps == 5
     assert config.preview_path.parts == ("outputs", "test-preview.png")
 

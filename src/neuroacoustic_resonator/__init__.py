@@ -9,6 +9,10 @@ from neuroacoustic_resonator.field import (
     FieldState,
     OscillatorField,
 )
+from neuroacoustic_resonator.input_drive import (
+    SyntheticInputConfig,
+    SyntheticInputDrive,
+)
 from neuroacoustic_resonator.metrics import MetricsHistory
 from neuroacoustic_resonator.preview import save_field_preview, save_phase_preview
 from neuroacoustic_resonator.regions import RegionMasks
@@ -31,6 +35,8 @@ __all__ = [
     "Simulation",
     "SimulationConfig",
     "SimulationFrame",
+    "SyntheticInputConfig",
+    "SyntheticInputDrive",
     "VisualizationFrame",
     "frame_to_visualization",
     "render_audio_demo",

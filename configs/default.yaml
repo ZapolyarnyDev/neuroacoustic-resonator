@@ -18,5 +18,12 @@ field:
   min_frequency: 0.2
   max_frequency: 3.0
   seed: 67
+synthetic_input:
+  enabled: false
+  mode: sine
+  strength: 0.15
+  period_steps: 64
+  duty_cycle: 0.25
+  seed: 67
 steps: 32
 preview_path: outputs/field-preview.png

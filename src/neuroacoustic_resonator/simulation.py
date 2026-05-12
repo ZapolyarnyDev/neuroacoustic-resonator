@@ -11,6 +11,11 @@ from neuroacoustic_resonator.field import (
     FloatArray,
     OscillatorField,
 )
+from neuroacoustic_resonator.input_drive import (
+    SyntheticInputConfig,
+    SyntheticInputDrive,
+)
+from neuroacoustic_resonator.regions import RegionMasks
 
 
 @dataclass(frozen=True)
@@ -25,6 +30,7 @@ class Simulation:
         self,
         config: FieldConfig | None = None,
         field: OscillatorField | None = None,
+        synthetic_input: SyntheticInputConfig | None = None,
     ) -> None:
         if config is not None and field is not None:
             msg = "provide either config or field, not both"
@@ -33,11 +39,19 @@ class Simulation:
         self.field = (
             field if field is not None else OscillatorField(config or FieldConfig())
         )
+        input_config = synthetic_input or SyntheticInputConfig()
+        self.input_drive = SyntheticInputDrive(
+            input_config,
+            RegionMasks.from_size(self.field.config.size),
+        )
         self.step_index = 0
 
     @classmethod
     def from_config(cls, config: SimulationConfig) -> Simulation:
-        return cls(config=config.to_field_config())
+        return cls(
+            config=config.to_field_config(),
+            synthetic_input=config.to_synthetic_input_config(),
+        )
 
     @classmethod
     def from_config_file(cls, path: str | Path) -> Simulation:
@@ -51,6 +65,7 @@ class Simulation:
         )
 
     def step(self) -> SimulationFrame:
+        self.input_drive.apply(self.field, self.step_index)
         self.step_index += 1
         state = self.field.step()
         return SimulationFrame(

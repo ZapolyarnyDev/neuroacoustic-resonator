@@ -161,6 +161,16 @@ class OscillatorField:
             trace=self._trace.copy(),
         )
 
+    def apply_phase_impulse(self, mask: NDArray[np.bool_], amount: float) -> None:
+        if mask.shape != self._phase.shape:
+            msg = f"mask shape must be {self._phase.shape}"
+            raise ValueError(msg)
+        if mask.dtype != np.bool_:
+            msg = "mask must be boolean"
+            raise ValueError(msg)
+
+        self._phase[mask] = np.mod(self._phase[mask] + amount, TAU)
+
     def step(self) -> FieldState:
         coupling_drive = self._coupling_drive()
         phase_drive = self._frequency + coupling_drive
