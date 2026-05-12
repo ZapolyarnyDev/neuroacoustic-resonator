@@ -51,6 +51,15 @@ audio-custom-carrier config duration carrier frequency_scale output:
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav
 
+audio-live:
+    uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml
+
+audio-live-test:
+    uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml --duration-seconds 5
+
+audio-live-custom config carrier frequency_scale gain:
+    uv run python scripts/play_audio_demo.py --config {{config}} --carrier-frequency {{carrier}} --frequency-scale {{frequency_scale}} --gain {{gain}}
+
 live:
     uv run python scripts/live_field.py --config configs/default.yaml --interval-ms 30 --steps-per-update 1
 

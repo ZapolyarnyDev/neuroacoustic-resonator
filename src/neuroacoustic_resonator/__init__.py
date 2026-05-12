@@ -20,6 +20,11 @@ from neuroacoustic_resonator.input_drive import (
 from neuroacoustic_resonator.metrics import MetricsHistory
 from neuroacoustic_resonator.preview import save_field_preview, save_phase_preview
 from neuroacoustic_resonator.regions import RegionMasks
+from neuroacoustic_resonator.realtime_audio import (
+    RealtimeAudioConfig,
+    RealtimeAudioEngine,
+    play_realtime_audio,
+)
 from neuroacoustic_resonator.simulation import Simulation, SimulationFrame
 from neuroacoustic_resonator.visualization import (
     LiveVisualizationConfig,
@@ -37,6 +42,8 @@ __all__ = [
     "MetricsHistory",
     "OscillatorField",
     "RegionMasks",
+    "RealtimeAudioConfig",
+    "RealtimeAudioEngine",
     "Simulation",
     "SimulationConfig",
     "SimulationFrame",
@@ -46,6 +53,7 @@ __all__ = [
     "frame_to_visualization",
     "render_audio_demo",
     "render_output_frame",
+    "play_realtime_audio",
     "save_field_preview",
     "save_phase_preview",
     "write_wav",
