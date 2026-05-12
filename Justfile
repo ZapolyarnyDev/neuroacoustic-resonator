@@ -27,6 +27,12 @@ experiments-custom config output_dir propagation_horizon:
 metrics-custom config steps sample_interval output:
     uv run python scripts/run_long_metrics.py --config {{config}} --steps {{steps}} --sample-interval {{sample_interval}} --output {{output}}
 
+checkpoint:
+    uv run python scripts/save_checkpoint.py --config configs/default.yaml --steps 10000 --output experiments/states/default-10k.npz
+
+checkpoint-custom config steps output:
+    uv run python scripts/save_checkpoint.py --config {{config}} --steps {{steps}} --output {{output}}
+
 benchmark:
     uv run python scripts/benchmark_field.py --sizes 64,128,200 --steps 1000 --repeats 3 --output outputs/benchmarks/field-step.csv
 

@@ -19,6 +19,14 @@ from neuroacoustic_resonator.input_drive import (
     SyntheticInputDrive,
 )
 from neuroacoustic_resonator.metrics import MetricsHistory
+from neuroacoustic_resonator.persistence import (
+    CheckpointPaths,
+    checkpoint_paths,
+    load_field_state,
+    load_simulation_checkpoint,
+    save_field_state,
+    save_simulation_checkpoint,
+)
 from neuroacoustic_resonator.preview import save_field_preview, save_phase_preview
 from neuroacoustic_resonator.regions import RegionMasks
 from neuroacoustic_resonator.realtime_audio import (
@@ -39,6 +47,7 @@ __all__ = [
     "FieldMetrics",
     "FieldState",
     "ContinuousAudioRenderer",
+    "CheckpointPaths",
     "GatedAudioRenderer",
     "LiveVisualizationConfig",
     "MetricsHistory",
@@ -53,10 +62,15 @@ __all__ = [
     "SyntheticInputDrive",
     "VisualizationFrame",
     "frame_to_visualization",
+    "checkpoint_paths",
+    "load_field_state",
+    "load_simulation_checkpoint",
     "render_audio_demo",
     "render_output_frame",
     "play_realtime_audio",
+    "save_field_state",
     "save_field_preview",
     "save_phase_preview",
+    "save_simulation_checkpoint",
     "write_wav",
 ]
