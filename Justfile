@@ -69,6 +69,12 @@ audio-live-gated:
 audio-live-gated-test:
     uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml --audio-mode gated --duration-seconds 5
 
+audio-live-event:
+    uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml --audio-mode event
+
+audio-live-event-test:
+    uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml --audio-mode event --duration-seconds 10
+
 audio-live-custom config carrier frequency_scale gain:
     uv run python scripts/play_audio_demo.py --config {{config}} --carrier-frequency {{carrier}} --frequency-scale {{frequency_scale}} --gain {{gain}}
 
@@ -79,6 +85,9 @@ live-input:
     uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2
 
 live-audio:
+    uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode event
+
+live-audio-gated:
     uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode gated
 
 live-audio-continuous:

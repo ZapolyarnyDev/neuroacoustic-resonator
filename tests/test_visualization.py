@@ -78,3 +78,23 @@ def test_live_audio_output_callback_uses_latest_state() -> None:
 
     assert np.all(np.isfinite(outdata))
     assert np.max(np.abs(outdata)) > 0.0
+
+
+def test_live_audio_output_supports_event_mode() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    audio_output = _LiveAudioOutput(
+        config=LiveVisualizationConfig(
+            audio_enabled=True,
+            audio_sample_rate=8_000,
+            audio_frame_size=32,
+            audio_mode="event",
+        ),
+        regions=regions,
+    )
+    outdata = np.zeros((32, 1), dtype=np.float32)
+
+    audio_output.update_state(simulation.step().state)
+    audio_output.callback(outdata, 32, None, None)
+
+    assert np.all(np.isfinite(outdata))

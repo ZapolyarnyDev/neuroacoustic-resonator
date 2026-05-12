@@ -13,6 +13,7 @@ import numpy as np
 
 from neuroacoustic_resonator.audio_output import (
     ContinuousAudioRenderer,
+    EventDrivenAudioRenderer,
     GatedAudioRenderer,
 )
 from neuroacoustic_resonator.config import SimulationConfig
@@ -71,8 +72,8 @@ class RealtimeAudioConfig:
         if self.duration_seconds is not None and self.duration_seconds <= 0.0:
             msg = "duration_seconds must be positive"
             raise ValueError(msg)
-        if self.audio_mode not in {"continuous", "gated"}:
-            msg = "audio_mode must be 'continuous' or 'gated'"
+        if self.audio_mode not in {"continuous", "gated", "event"}:
+            msg = "audio_mode must be 'continuous', 'gated', or 'event'"
             raise ValueError(msg)
         if self.gate_threshold < 0.0:
             msg = "gate_threshold must be non-negative"
@@ -94,7 +95,7 @@ class RealtimeAudioEngine:
     def _build_renderer(
         self,
         frame_size: int,
-    ) -> ContinuousAudioRenderer | GatedAudioRenderer:
+    ) -> ContinuousAudioRenderer | GatedAudioRenderer | EventDrivenAudioRenderer:
         if self.config.audio_mode == "gated":
             return GatedAudioRenderer(
                 sample_rate=self.config.sample_rate,
@@ -105,6 +106,15 @@ class RealtimeAudioEngine:
                 smoothing=self.config.smoothing,
                 gate_threshold=self.config.gate_threshold,
                 gate_sensitivity=self.config.gate_sensitivity,
+            )
+        if self.config.audio_mode == "event":
+            return EventDrivenAudioRenderer(
+                sample_rate=self.config.sample_rate,
+                frame_size=frame_size,
+                carrier_frequency=self.config.carrier_frequency,
+                frequency_scale=self.config.frequency_scale,
+                gain=self.config.gain,
+                smoothing=self.config.smoothing,
             )
         return ContinuousAudioRenderer(
             sample_rate=self.config.sample_rate,
@@ -184,9 +194,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--physics-steps-per-audio-frame", type=int, default=1)
     parser.add_argument(
         "--audio-mode",
-        choices=("continuous", "gated"),
+        choices=("continuous", "gated", "event"),
         default="continuous",
-        help="Continuous field monitor or gated response monitor.",
+        help="Continuous field monitor, gated monitor, or event response monitor.",
     )
     parser.add_argument("--gate-threshold", type=float, default=0.002)
     parser.add_argument("--gate-sensitivity", type=float, default=24.0)

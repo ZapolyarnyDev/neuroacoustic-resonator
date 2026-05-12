@@ -6,6 +6,7 @@ import pytest
 from neuroacoustic_resonator import FieldConfig, OscillatorField, RegionMasks
 from neuroacoustic_resonator.audio_output import (
     ContinuousAudioRenderer,
+    EventDrivenAudioRenderer,
     GatedAudioRenderer,
     render_output_frame,
     write_wav,
@@ -148,3 +149,67 @@ def test_gated_audio_renderer_opens_on_output_activity_change() -> None:
 def test_gated_audio_renderer_rejects_invalid_gate_threshold() -> None:
     with pytest.raises(ValueError, match="gate_threshold"):
         GatedAudioRenderer(gate_threshold=-0.1)
+
+
+def test_event_driven_audio_renderer_starts_silent() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = EventDrivenAudioRenderer(sample_rate=8_000, frame_size=64, gain=0.5)
+
+    audio = renderer.render_frame(field.state, regions)
+
+    assert audio.shape == (64,)
+    assert renderer.envelope == 0.0
+    assert np.max(np.abs(audio)) == 0.0
+
+
+def test_event_driven_audio_renderer_opens_on_feature_change() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = EventDrivenAudioRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        gain=0.5,
+        event_threshold=0.0,
+        event_sensitivity=100.0,
+        attack=1.0,
+    )
+    renderer.render_frame(field.state, regions)
+    state = field.state
+    state.trace[regions.output] += 0.1
+
+    audio = renderer.render_frame(state, regions)
+
+    assert renderer.last_activation > 0.0
+    assert renderer.envelope > 0.0
+    assert np.max(np.abs(audio)) > 0.0
+
+
+def test_event_driven_audio_renderer_holds_after_event() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = EventDrivenAudioRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        gain=0.5,
+        event_threshold=0.0,
+        event_sensitivity=100.0,
+        attack=1.0,
+        hold_frames=2,
+        hold_level=0.25,
+    )
+    renderer.render_frame(field.state, regions)
+    state = field.state
+    state.trace[regions.output] += 0.1
+    renderer.render_frame(state, regions)
+
+    held = renderer.render_frame(state, regions)
+
+    assert renderer.last_activation == 0.0
+    assert renderer.envelope >= 0.25
+    assert np.max(np.abs(held)) > 0.0
+
+
+def test_event_driven_audio_renderer_rejects_invalid_hold_frames() -> None:
+    with pytest.raises(ValueError, match="hold_frames"):
+        EventDrivenAudioRenderer(hold_frames=-1)

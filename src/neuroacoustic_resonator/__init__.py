@@ -2,6 +2,7 @@
 
 from neuroacoustic_resonator.audio_output import (
     ContinuousAudioRenderer,
+    EventDrivenAudioRenderer,
     GatedAudioRenderer,
     render_output_frame,
     write_wav,
@@ -48,6 +49,7 @@ __all__ = [
     "FieldState",
     "ContinuousAudioRenderer",
     "CheckpointPaths",
+    "EventDrivenAudioRenderer",
     "GatedAudioRenderer",
     "LiveVisualizationConfig",
     "MetricsHistory",

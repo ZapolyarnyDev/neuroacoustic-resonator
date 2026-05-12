@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 
 from neuroacoustic_resonator.audio_output import (
     ContinuousAudioRenderer,
+    EventDrivenAudioRenderer,
     GatedAudioRenderer,
 )
 from neuroacoustic_resonator.config import SimulationConfig
@@ -48,8 +49,8 @@ class LiveVisualizationConfig:
         if self.history_size < 2:
             msg = "history_size must be at least 2"
             raise ValueError(msg)
-        if self.audio_mode not in {"continuous", "gated"}:
-            msg = "audio_mode must be 'continuous' or 'gated'"
+        if self.audio_mode not in {"continuous", "gated", "event"}:
+            msg = "audio_mode must be 'continuous', 'gated', or 'event'"
             raise ValueError(msg)
         if self.audio_sample_rate < 1:
             msg = "audio_sample_rate must be positive"
@@ -149,7 +150,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--audio-mode",
-        choices=("continuous", "gated"),
+        choices=("continuous", "gated", "event"),
         default="gated",
         help="Audio monitor mode used when --audio is enabled.",
     )
@@ -317,7 +318,7 @@ class _LiveAudioOutput:
 
     def _build_renderer(
         self, frame_size: int
-    ) -> ContinuousAudioRenderer | GatedAudioRenderer:
+    ) -> ContinuousAudioRenderer | GatedAudioRenderer | EventDrivenAudioRenderer:
         if self._config.audio_mode == "gated":
             return GatedAudioRenderer(
                 sample_rate=self._config.audio_sample_rate,
@@ -327,6 +328,14 @@ class _LiveAudioOutput:
                 gain=self._config.audio_gain,
                 gate_threshold=self._config.audio_gate_threshold,
                 gate_sensitivity=self._config.audio_gate_sensitivity,
+            )
+        if self._config.audio_mode == "event":
+            return EventDrivenAudioRenderer(
+                sample_rate=self._config.audio_sample_rate,
+                frame_size=frame_size,
+                carrier_frequency=self._config.audio_carrier_frequency,
+                frequency_scale=self._config.audio_frequency_scale,
+                gain=self._config.audio_gain,
             )
         return ContinuousAudioRenderer(
             sample_rate=self._config.audio_sample_rate,

@@ -76,6 +76,23 @@ def test_realtime_audio_engine_supports_gated_mode() -> None:
     assert np.all(np.isfinite(outdata))
 
 
+def test_realtime_audio_engine_supports_event_mode() -> None:
+    engine = RealtimeAudioEngine(
+        RealtimeAudioConfig(
+            config_path=Path("configs") / "audio_demo.yaml",
+            sample_rate=8_000,
+            frame_size=32,
+            audio_mode="event",
+        )
+    )
+    outdata = np.zeros((32, 1), dtype=np.float32)
+
+    engine.callback(outdata, 32, None, None)
+
+    assert engine.callback_count == 1
+    assert np.all(np.isfinite(outdata))
+
+
 def test_play_realtime_audio_uses_stream_factory() -> None:
     streams: list[FakeStream] = []
 
