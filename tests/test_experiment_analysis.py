@@ -1,9 +1,13 @@
 import json
 
+import numpy as np
+
 from neuroacoustic_resonator.experiment_analysis import (
     ExperimentAnalysisConfig,
     export_experiment_plots,
+    propagation_metrics,
     run_experiment_suite,
+    tail_metrics,
 )
 
 
@@ -70,3 +74,16 @@ def test_export_experiment_plots_returns_png_paths(tmp_path) -> None:
 
     assert len(plot_paths) == 3
     assert all(path.exists() for path in plot_paths)
+
+
+def test_tail_metrics_detects_unsaturated_window() -> None:
+    metrics = tail_metrics(np.array([0.1, 0.2, 0.3, 0.4]))
+
+    assert metrics["peak_at_window_end"]
+    assert metrics["tail_slope"] > 0.0
+
+
+def test_propagation_metrics_recommends_longer_horizon_for_rising_tail() -> None:
+    metrics = propagation_metrics(np.array([0.1, 0.2, 0.3, 0.4]))
+
+    assert metrics["increase_horizon_recommended"]

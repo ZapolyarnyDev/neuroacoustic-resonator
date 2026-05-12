@@ -179,9 +179,9 @@ def run_propagation_distance(
     left_delta = column(rows, "left_delta_abs")
     assoc_delta = column(rows, "assoc_delta_abs")
     right_delta = column(rows, "right_delta_abs")
-    left_peak = peak_metrics(left_delta)
-    assoc_peak = peak_metrics(assoc_delta)
-    right_peak = peak_metrics(right_delta)
+    left_peak = propagation_metrics(left_delta)
+    assoc_peak = propagation_metrics(assoc_delta)
+    right_peak = propagation_metrics(right_delta)
     summary = {
         "baseline_left_synchrony": baseline["left_synchrony"],
         "baseline_right_synchrony": baseline["right_synchrony"],
@@ -199,6 +199,10 @@ def run_propagation_distance(
         "right_left_peak_delay_steps": right_peak["peak_step"] - left_peak["peak_step"],
         "right_left_half_delay_steps": right_peak["half_peak_step"]
         - left_peak["half_peak_step"],
+        "increase_horizon_recommended": any(
+            region["increase_horizon_recommended"]
+            for region in (left_peak, assoc_peak, right_peak)
+        ),
     }
     return rows, summary
 
@@ -325,6 +329,39 @@ def peak_metrics(values: np.ndarray) -> dict[str, float | int]:
         "peak_step": peak_step,
         "half_peak_step": half_peak_step,
         "area": area,
+    }
+
+
+def propagation_metrics(values: np.ndarray) -> dict[str, float | int | bool]:
+    metrics = peak_metrics(values)
+    tail = tail_metrics(values)
+    metrics.update(tail)
+    metrics["increase_horizon_recommended"] = bool(
+        metrics["peak_at_window_end"] or tail["tail_slope"] > 0.0
+    )
+    return metrics
+
+
+def tail_metrics(
+    values: np.ndarray, *, tail_fraction: float = 0.1
+) -> dict[str, float | bool]:
+    if values.size == 0:
+        return {
+            "peak_at_window_end": False,
+            "tail_slope": 0.0,
+            "tail_mean_delta": 0.0,
+            "tail_last_delta": 0.0,
+        }
+
+    tail_length = max(2, round(values.size * tail_fraction))
+    tail = values[-tail_length:]
+    x = np.arange(tail.size, dtype=np.float64)
+    slope = float(np.polyfit(x, tail, deg=1)[0]) if tail.size > 1 else 0.0
+    return {
+        "peak_at_window_end": int(np.argmax(values)) == values.size - 1,
+        "tail_slope": slope,
+        "tail_mean_delta": float(np.mean(tail)),
+        "tail_last_delta": float(tail[-1]),
     }
 
 
