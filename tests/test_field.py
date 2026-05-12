@@ -106,6 +106,42 @@ def test_config_rejects_invalid_trace_rate() -> None:
         FieldConfig(trace_rate=-0.1)
 
 
+def test_config_rejects_invalid_metabolite_diffusion() -> None:
+    with pytest.raises(ValueError, match="metabolite_diffusion"):
+        FieldConfig(metabolite_diffusion=-0.1)
+
+
+def test_metabolite_diffusion_spreads_local_depletion() -> None:
+    config = FieldConfig(
+        size=3,
+        dt=1.0,
+        metabolite_recovery=0.0,
+        metabolite_cost=0.0,
+        metabolite_diffusion=0.1,
+        frequency_spread=0.0,
+        coupling_strength=0.0,
+    )
+    shape = (config.size, config.size)
+    metabolite = np.ones(shape)
+    metabolite[1, 1] = 0.0
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.zeros(shape),
+            frequency=np.ones(shape),
+            metabolite=metabolite,
+            coupling=np.zeros(shape),
+            trace=np.zeros(shape),
+        ),
+    )
+
+    after = field.step().metabolite
+
+    assert after[1, 1] == pytest.approx(0.4)
+    assert after[0, 1] == pytest.approx(0.9)
+    assert after[0, 0] == pytest.approx(1.0)
+
+
 def test_frequency_plasticity_updates_frequency() -> None:
     config = FieldConfig(
         size=4,

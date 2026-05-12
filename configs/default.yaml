@@ -6,6 +6,7 @@ field:
   coupling_strength: 0.16
   metabolite_recovery: 0.03
   metabolite_cost: 0.02
+  metabolite_diffusion: 0.0
   trace_rate: 0.08
   frequency_plasticity_rate: 0.01
   min_frequency: 0.2

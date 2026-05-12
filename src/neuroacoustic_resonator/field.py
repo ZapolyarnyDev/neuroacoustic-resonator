@@ -19,6 +19,7 @@ class FieldConfig:
     coupling_strength: float = 0.16
     metabolite_recovery: float = 0.03
     metabolite_cost: float = 0.02
+    metabolite_diffusion: float = 0.0
     trace_rate: float = 0.08
     frequency_plasticity_rate: float = 0.01
     min_frequency: float = 0.2
@@ -43,6 +44,9 @@ class FieldConfig:
             raise ValueError(msg)
         if self.metabolite_cost < 0.0:
             msg = "metabolite_cost must be non-negative"
+            raise ValueError(msg)
+        if self.metabolite_diffusion < 0.0:
+            msg = "metabolite_diffusion must be non-negative"
             raise ValueError(msg)
         if self.trace_rate < 0.0:
             msg = "trace_rate must be non-negative"
@@ -134,6 +138,7 @@ class OscillatorField:
         coupling_drive = self._coupling_drive()
         phase_drive = self._frequency + coupling_drive
         activity = np.abs(phase_drive)
+        metabolite_laplacian = self._metabolite_laplacian()
 
         self._phase = np.mod(self._phase + self.config.dt * phase_drive, TAU)
         self._metabolite = np.clip(
@@ -142,6 +147,7 @@ class OscillatorField:
             * (
                 self.config.metabolite_recovery * (1.0 - self._metabolite)
                 - self.config.metabolite_cost * activity
+                + self.config.metabolite_diffusion * metabolite_laplacian
             ),
             0.0,
             1.0,
@@ -194,3 +200,12 @@ class OscillatorField:
             + np.sin(np.roll(self._phase, -1, axis=1) - self._phase)
         )
         return self._metabolite * self._coupling * neighbors / 4.0
+
+    def _metabolite_laplacian(self) -> FloatArray:
+        return (
+            np.roll(self._metabolite, 1, axis=0)
+            + np.roll(self._metabolite, -1, axis=0)
+            + np.roll(self._metabolite, 1, axis=1)
+            + np.roll(self._metabolite, -1, axis=1)
+            - 4.0 * self._metabolite
+        )

@@ -18,6 +18,7 @@ class FieldConfigModel(BaseModel):
     coupling_strength: float = Field(default=0.16, ge=0.0)
     metabolite_recovery: float = Field(default=0.03, ge=0.0)
     metabolite_cost: float = Field(default=0.02, ge=0.0)
+    metabolite_diffusion: float = Field(default=0.0, ge=0.0)
     trace_rate: float = Field(default=0.08, ge=0.0)
     frequency_plasticity_rate: float = Field(default=0.01, ge=0.0)
     min_frequency: float = Field(default=0.2, gt=0.0)
