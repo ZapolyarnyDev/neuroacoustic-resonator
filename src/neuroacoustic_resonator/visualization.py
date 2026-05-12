@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import traceback
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -107,60 +108,111 @@ def run_live_visualizer(config: LiveVisualizationConfig) -> int:
     regions = RegionMasks.from_size(simulation_config.field.size)
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    window = pg.GraphicsLayoutWidget(title="Neuroacoustic Resonator")
-    window.resize(1200, 800)
-
-    phase_item = pg.ImageItem()
-    synchrony_item = pg.ImageItem()
-    metabolite_item = pg.ImageItem()
-    trace_item = pg.ImageItem()
-    regions_item = pg.ImageItem()
-
-    panels = (
-        ("phase", phase_item),
-        ("local synchrony", synchrony_item),
-        ("metabolite", metabolite_item),
-        ("trace", trace_item),
-        ("regions", regions_item),
+    visualizer = _LiveFieldWindow(
+        app=app,
+        qt_core=QtCore,
+        pg=pg,
+        simulation=simulation,
+        regions=regions,
+        config=config,
     )
-    for index, (title, item) in enumerate(panels):
-        plot = window.addPlot(row=index // 3, col=index % 3, title=title)
+    visualizer.show()
+    return int(app.exec())
+
+
+class _LiveFieldWindow:
+    def __init__(
+        self,
+        *,
+        app: Any,
+        qt_core: Any,
+        pg: Any,
+        simulation: Simulation,
+        regions: RegionMasks,
+        config: LiveVisualizationConfig,
+    ) -> None:
+        self._app = app
+        self._qt_core = qt_core
+        self._pg = pg
+        self._simulation = simulation
+        self._regions = regions
+        self._config = config
+        self._steps: deque[int] = deque(maxlen=config.history_size)
+        self._synchrony_values: deque[float] = deque(maxlen=config.history_size)
+        self._metabolite_values: deque[float] = deque(maxlen=config.history_size)
+
+        self._window = pg.GraphicsLayoutWidget(title="Neuroacoustic Resonator")
+        self._window.resize(1200, 800)
+        self._phase_item = pg.ImageItem()
+        self._synchrony_item = pg.ImageItem()
+        self._metabolite_item = pg.ImageItem()
+        self._trace_item = pg.ImageItem()
+        self._regions_item = pg.ImageItem()
+
+        for index, (title, item) in enumerate(
+            (
+                ("phase", self._phase_item),
+                ("local synchrony", self._synchrony_item),
+                ("metabolite", self._metabolite_item),
+                ("trace", self._trace_item),
+                ("regions", self._regions_item),
+            )
+        ):
+            self._add_image_panel(title, item, row=index // 3, col=index % 3)
+
+        self._metrics_plot = self._window.addPlot(
+            row=1,
+            col=2,
+            title="global synchrony / mean M",
+        )
+        self._synchrony_curve = self._metrics_plot.plot(pen="y")
+        self._metabolite_curve = self._metrics_plot.plot(pen="c")
+        self._timer = qt_core.QTimer(self._window)
+        self._timer.timeout.connect(self.update)
+
+    def _add_image_panel(self, title: str, item: Any, *, row: int, col: int) -> None:
+        plot = self._window.addPlot(row=row, col=col, title=title)
         plot.setAspectLocked(True)
         plot.hideAxis("left")
         plot.hideAxis("bottom")
         plot.addItem(item)
 
-    metrics_plot = window.addPlot(row=1, col=2, title="global synchrony / mean M")
-    synchrony_curve = metrics_plot.plot(pen="y")
-    metabolite_curve = metrics_plot.plot(pen="c")
-    steps: deque[int] = deque(maxlen=config.history_size)
-    synchrony_values: deque[float] = deque(maxlen=config.history_size)
-    metabolite_values: deque[float] = deque(maxlen=config.history_size)
+    def show(self) -> None:
+        self._window.show()
+        self._qt_core.QTimer.singleShot(0, self.update)
+        self._timer.start(self._config.interval_ms)
 
-    def update() -> None:
-        frame = simulation.snapshot()
-        for _ in range(config.steps_per_update):
-            frame = simulation.step()
-        view_frame = frame_to_visualization(frame, regions)
+    def update(self) -> None:
+        try:
+            frame = self._simulation.snapshot()
+            for _ in range(self._config.steps_per_update):
+                frame = self._simulation.step()
+            view_frame = frame_to_visualization(frame, self._regions)
 
-        phase_item.setImage(view_frame.phase.T, autoLevels=False)
-        synchrony_item.setImage(view_frame.local_synchrony.T, levels=(0.0, 1.0))
-        metabolite_item.setImage(view_frame.metabolite.T, levels=(0.0, 1.0))
-        trace_item.setImage(view_frame.trace.T)
-        regions_item.setImage(view_frame.region_labels.T, autoLevels=False)
+            self._phase_item.setImage(view_frame.phase.T, autoLevels=True)
+            self._synchrony_item.setImage(
+                view_frame.local_synchrony.T,
+                levels=(0.0, 1.0),
+            )
+            self._metabolite_item.setImage(view_frame.metabolite.T, levels=(0.0, 1.0))
+            self._trace_item.setImage(view_frame.trace.T, autoLevels=True)
+            self._regions_item.setImage(view_frame.region_labels.T, levels=(1, 3))
 
-        steps.append(view_frame.step)
-        synchrony_values.append(view_frame.global_synchrony)
-        metabolite_values.append(view_frame.mean_metabolite)
-        synchrony_curve.setData(list(steps), list(synchrony_values))
-        metabolite_curve.setData(list(steps), list(metabolite_values))
-
-    timer = QtCore.QTimer()
-    timer.timeout.connect(update)
-    timer.start(config.interval_ms)
-    update()
-    window.show()
-    return int(app.exec())
+            self._steps.append(view_frame.step)
+            self._synchrony_values.append(view_frame.global_synchrony)
+            self._metabolite_values.append(view_frame.mean_metabolite)
+            self._synchrony_curve.setData(
+                list(self._steps),
+                list(self._synchrony_values),
+            )
+            self._metabolite_curve.setData(
+                list(self._steps),
+                list(self._metabolite_values),
+            )
+        except Exception:
+            self._timer.stop()
+            traceback.print_exc()
+            self._app.quit()
 
 
 def main(argv: list[str] | None = None) -> int:
