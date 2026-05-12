@@ -51,3 +51,20 @@ steps: 2
 
     assert frame.metrics.step == 2
     assert frame.state.phase.shape == (5, 5)
+
+
+@pytest.mark.parametrize(
+    "config_name",
+    [
+        "default.yaml",
+        "field_only.yaml",
+        "synthetic_input.yaml",
+        "audio_demo.yaml",
+        "long_run.yaml",
+    ],
+)
+def test_project_configs_load(config_name) -> None:
+    config = SimulationConfig.from_file(f"configs/{config_name}")
+
+    assert config.field.size > 1
+    assert config.steps >= 1
