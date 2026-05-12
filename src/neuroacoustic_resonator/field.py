@@ -22,6 +22,12 @@ class FieldConfig:
     metabolite_diffusion: float = 0.0
     trace_rate: float = 0.08
     frequency_plasticity_rate: float = 0.01
+    frequency_homeostasis_rate: float = 0.01
+    synchrony_target_low: float = 0.05
+    synchrony_target_high: float = 0.8
+    coupling_homeostasis_rate: float = 0.05
+    min_coupling: float = 0.0
+    max_coupling: float = 1.0
     min_frequency: float = 0.2
     max_frequency: float = 3.0
     seed: int | None = None
@@ -53,6 +59,27 @@ class FieldConfig:
             raise ValueError(msg)
         if self.frequency_plasticity_rate < 0.0:
             msg = "frequency_plasticity_rate must be non-negative"
+            raise ValueError(msg)
+        if self.frequency_homeostasis_rate < 0.0:
+            msg = "frequency_homeostasis_rate must be non-negative"
+            raise ValueError(msg)
+        if not 0.0 <= self.synchrony_target_low <= 1.0:
+            msg = "synchrony_target_low must be between 0 and 1"
+            raise ValueError(msg)
+        if not 0.0 <= self.synchrony_target_high <= 1.0:
+            msg = "synchrony_target_high must be between 0 and 1"
+            raise ValueError(msg)
+        if self.synchrony_target_high <= self.synchrony_target_low:
+            msg = "synchrony_target_high must be greater than synchrony_target_low"
+            raise ValueError(msg)
+        if self.coupling_homeostasis_rate < 0.0:
+            msg = "coupling_homeostasis_rate must be non-negative"
+            raise ValueError(msg)
+        if self.min_coupling < 0.0:
+            msg = "min_coupling must be non-negative"
+            raise ValueError(msg)
+        if self.max_coupling <= self.min_coupling:
+            msg = "max_coupling must be greater than min_coupling"
             raise ValueError(msg)
         if self.min_frequency <= 0.0:
             msg = "min_frequency must be positive"
@@ -158,12 +185,15 @@ class OscillatorField:
         self._frequency = np.clip(
             self._frequency
             + self.config.dt
-            * self.config.frequency_plasticity_rate
-            * self._trace
-            * coupling_drive,
+            * (
+                self.config.frequency_plasticity_rate * self._trace * coupling_drive
+                - self.config.frequency_homeostasis_rate
+                * (self._frequency - self.config.base_frequency)
+            ),
             self.config.min_frequency,
             self.config.max_frequency,
         )
+        self._apply_synchrony_homeostasis()
 
         return self.state
 
@@ -208,4 +238,23 @@ class OscillatorField:
             + np.roll(self._metabolite, 1, axis=1)
             + np.roll(self._metabolite, -1, axis=1)
             - 4.0 * self._metabolite
+        )
+
+    def _apply_synchrony_homeostasis(self) -> None:
+        rate = self.config.coupling_homeostasis_rate
+        if rate == 0.0:
+            return
+
+        synchrony = self.global_synchrony()
+        if synchrony < self.config.synchrony_target_low:
+            correction = self.config.synchrony_target_low - synchrony
+        elif synchrony > self.config.synchrony_target_high:
+            correction = self.config.synchrony_target_high - synchrony
+        else:
+            return
+
+        self._coupling = np.clip(
+            self._coupling + self.config.dt * rate * correction,
+            self.config.min_coupling,
+            self.config.max_coupling,
         )

@@ -111,6 +111,16 @@ def test_config_rejects_invalid_metabolite_diffusion() -> None:
         FieldConfig(metabolite_diffusion=-0.1)
 
 
+def test_config_rejects_invalid_synchrony_target_window() -> None:
+    with pytest.raises(ValueError, match="synchrony_target_high"):
+        FieldConfig(synchrony_target_low=0.8, synchrony_target_high=0.4)
+
+
+def test_config_rejects_invalid_coupling_bounds() -> None:
+    with pytest.raises(ValueError, match="max_coupling"):
+        FieldConfig(min_coupling=0.5, max_coupling=0.4)
+
+
 def test_metabolite_diffusion_spreads_local_depletion() -> None:
     config = FieldConfig(
         size=3,
@@ -173,7 +183,11 @@ def test_frequency_plasticity_updates_frequency() -> None:
 
 
 def test_frequency_plasticity_can_be_disabled() -> None:
-    config = FieldConfig(size=4, frequency_plasticity_rate=0.0)
+    config = FieldConfig(
+        size=4,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.0,
+    )
     field = OscillatorField(config)
 
     before = field.state.frequency
@@ -185,6 +199,99 @@ def test_frequency_plasticity_can_be_disabled() -> None:
 def test_config_rejects_invalid_frequency_bounds() -> None:
     with pytest.raises(ValueError, match="max_frequency"):
         FieldConfig(min_frequency=2.0, max_frequency=1.0)
+
+
+def test_frequency_homeostasis_pulls_frequency_toward_base() -> None:
+    config = FieldConfig(
+        size=4,
+        dt=1.0,
+        base_frequency=1.0,
+        frequency_spread=0.0,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.25,
+        coupling_homeostasis_rate=0.0,
+        min_frequency=0.2,
+        max_frequency=3.0,
+    )
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.zeros(shape),
+            frequency=np.full(shape, 2.0),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=np.zeros(shape),
+        ),
+    )
+
+    after = field.step().frequency
+
+    assert np.all(after < 2.0)
+    assert np.all(after > config.base_frequency)
+
+
+def test_synchrony_homeostasis_reduces_coupling_when_synchrony_is_high() -> None:
+    config = FieldConfig(
+        size=4,
+        dt=1.0,
+        coupling_strength=0.5,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.0,
+        coupling_homeostasis_rate=0.1,
+        synchrony_target_low=0.1,
+        synchrony_target_high=0.5,
+        min_coupling=0.0,
+        max_coupling=1.0,
+    )
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.zeros(shape),
+            frequency=np.ones(shape),
+            metabolite=np.ones(shape),
+            coupling=np.full(shape, config.coupling_strength),
+            trace=np.zeros(shape),
+        ),
+    )
+
+    after = field.step().coupling
+
+    assert np.all(after < config.coupling_strength)
+
+
+def test_synchrony_homeostasis_increases_coupling_when_synchrony_is_low() -> None:
+    config = FieldConfig(
+        size=4,
+        dt=1.0,
+        coupling_strength=0.5,
+        base_frequency=0.0,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.0,
+        coupling_homeostasis_rate=0.1,
+        synchrony_target_low=0.2,
+        synchrony_target_high=0.8,
+        min_coupling=0.0,
+        max_coupling=1.0,
+    )
+    shape = (config.size, config.size)
+    phase = np.zeros(shape)
+    phase[:, 1::2] = np.pi
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=phase,
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.full(shape, config.coupling_strength),
+            trace=np.zeros(shape),
+        ),
+    )
+
+    after = field.step().coupling
+
+    assert np.all(after > config.coupling_strength)
 
 
 def test_metrics_snapshot_is_bounded() -> None:

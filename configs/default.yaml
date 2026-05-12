@@ -9,6 +9,12 @@ field:
   metabolite_diffusion: 0.0
   trace_rate: 0.08
   frequency_plasticity_rate: 0.01
+  frequency_homeostasis_rate: 0.01
+  synchrony_target_low: 0.05
+  synchrony_target_high: 0.8
+  coupling_homeostasis_rate: 0.05
+  min_coupling: 0.0
+  max_coupling: 1.0
   min_frequency: 0.2
   max_frequency: 3.0
   seed: 67
