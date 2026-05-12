@@ -5,6 +5,7 @@ from neuroacoustic_resonator import FieldConfig, RegionMasks, Simulation
 from neuroacoustic_resonator.visualization import (
     LiveVisualizationConfig,
     frame_to_visualization,
+    region_boundary_columns,
 )
 
 
@@ -33,6 +34,12 @@ def test_frame_to_visualization_rejects_shape_mismatch() -> None:
 
     with pytest.raises(ValueError, match="matching shapes"):
         frame_to_visualization(frame, regions)
+
+
+def test_region_boundary_columns_report_assoc_and_output_starts() -> None:
+    regions = RegionMasks.from_size(10, edge_fraction=0.2)
+
+    assert region_boundary_columns(regions) == (2, 8)
 
 
 def test_live_visualization_config_validates_values() -> None:

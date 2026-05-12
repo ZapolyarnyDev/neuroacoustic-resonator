@@ -47,6 +47,16 @@ class VisualizationFrame:
     mean_metabolite: float
 
 
+def region_boundary_columns(regions: RegionMasks) -> tuple[int, int]:
+    labels = regions.labels()
+    first_output_column = int(np.min(np.flatnonzero(np.any(regions.output, axis=0))))
+    first_assoc_column = int(np.min(np.flatnonzero(np.any(regions.assoc, axis=0))))
+    if not np.any(labels):
+        msg = "regions must not be empty"
+        raise ValueError(msg)
+    return first_assoc_column, first_output_column
+
+
 def frame_to_visualization(
     frame: SimulationFrame,
     regions: RegionMasks,
@@ -148,6 +158,7 @@ class _LiveFieldWindow:
         self._metabolite_item = pg.ImageItem()
         self._trace_item = pg.ImageItem()
         self._regions_item = pg.ImageItem()
+        self._boundary_columns = region_boundary_columns(regions)
 
         for index, (title, item) in enumerate(
             (
@@ -176,6 +187,13 @@ class _LiveFieldWindow:
         plot.hideAxis("left")
         plot.hideAxis("bottom")
         plot.addItem(item)
+        for boundary in self._boundary_columns:
+            line = self._pg.InfiniteLine(
+                pos=boundary - 0.5,
+                angle=90,
+                pen=self._pg.mkPen((255, 80, 80), width=1),
+            )
+            plot.addItem(line)
 
     def show(self) -> None:
         self._window.show()
