@@ -2,12 +2,12 @@ import csv
 
 import pytest
 
-from scripts.benchmark_field import (
+from neuroacoustic_resonator.benchmark import (
     benchmark_field_step,
     benchmark_sizes,
     main,
     parse_sizes,
-    write_results,
+    write_benchmark_results,
 )
 
 
@@ -42,7 +42,7 @@ def test_write_results_rejects_unknown_suffix(tmp_path) -> None:
     result = benchmark_field_step(size=4, steps=1, warmup_steps=0)
 
     with pytest.raises(ValueError, match="csv or .jsonl"):
-        write_results([result], tmp_path / "benchmark.txt")
+        write_benchmark_results([result], tmp_path / "benchmark.txt")
 
 
 def test_main_writes_benchmark_csv(tmp_path) -> None:

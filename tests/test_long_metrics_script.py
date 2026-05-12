@@ -2,7 +2,11 @@ import csv
 
 import pytest
 
-from scripts.run_long_metrics import collect_metrics, main, write_history
+from neuroacoustic_resonator.long_metrics import (
+    collect_metrics,
+    main,
+    write_metrics_history,
+)
 
 
 def test_collect_metrics_samples_initial_interval_and_final(tmp_path) -> None:
@@ -45,7 +49,7 @@ def test_write_history_rejects_unknown_suffix(tmp_path) -> None:
     history = collect_metrics(config_path)
 
     with pytest.raises(ValueError, match="csv or .jsonl"):
-        write_history(history, tmp_path / "metrics.txt")
+        write_metrics_history(history, tmp_path / "metrics.txt")
 
 
 def test_main_writes_metrics_csv(tmp_path) -> None:
