@@ -24,6 +24,12 @@ experiments:
 experiments-custom config output_dir propagation_horizon:
     uv run python scripts/run_experiments.py --config {{config}} --output-dir {{output_dir}} --propagation-horizon {{propagation_horizon}}
 
+propagation-probe:
+    uv run python scripts/probe_propagation.py --config configs/synthetic_input.yaml --warmup-steps 200 --horizon 512 --output-csv experiments/logs/propagation_probe.csv --output-summary experiments/logs/propagation_probe_summary.json
+
+propagation-probe-custom config warmup horizon output_csv output_summary:
+    uv run python scripts/probe_propagation.py --config {{config}} --warmup-steps {{warmup}} --horizon {{horizon}} --output-csv {{output_csv}} --output-summary {{output_summary}}
+
 metrics-custom config steps sample_interval output:
     uv run python scripts/run_long_metrics.py --config {{config}} --steps {{steps}} --sample-interval {{sample_interval}} --output {{output}}
 

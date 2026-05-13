@@ -17,6 +17,10 @@ from neuroacoustic_resonator.analysis.metrics import (
     compute_regional_activity_metrics,
     region_activity,
 )
+from neuroacoustic_resonator.analysis.propagation_probe import (
+    PropagationProbeConfig,
+    run_propagation_probe,
+)
 
 __all__ = [
     "BenchmarkResult",
@@ -24,12 +28,14 @@ __all__ = [
     "ExperimentRows",
     "ExperimentSummary",
     "MetricsHistory",
+    "PropagationProbeConfig",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
     "benchmark_field_step",
     "benchmark_sizes",
     "compute_regional_activity_metrics",
     "region_activity",
+    "run_propagation_probe",
     "run_experiment_suite",
     "write_benchmark_results",
 ]
