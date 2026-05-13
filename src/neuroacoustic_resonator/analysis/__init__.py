@@ -10,7 +10,13 @@ from neuroacoustic_resonator.analysis.experiments import (
     ExperimentSummary,
     run_experiment_suite,
 )
-from neuroacoustic_resonator.analysis.metrics import MetricsHistory
+from neuroacoustic_resonator.analysis.metrics import (
+    MetricsHistory,
+    RegionalActivityMetrics,
+    RegionalActivityTracker,
+    compute_regional_activity_metrics,
+    region_activity,
+)
 
 __all__ = [
     "BenchmarkResult",
@@ -18,8 +24,12 @@ __all__ = [
     "ExperimentRows",
     "ExperimentSummary",
     "MetricsHistory",
+    "RegionalActivityMetrics",
+    "RegionalActivityTracker",
     "benchmark_field_step",
     "benchmark_sizes",
+    "compute_regional_activity_metrics",
+    "region_activity",
     "run_experiment_suite",
     "write_benchmark_results",
 ]

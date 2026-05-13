@@ -19,7 +19,13 @@ from neuroacoustic_resonator.core.input_drive import (
     SyntheticInputConfig,
     SyntheticInputDrive,
 )
-from neuroacoustic_resonator.analysis.metrics import MetricsHistory
+from neuroacoustic_resonator.analysis.metrics import (
+    MetricsHistory,
+    RegionalActivityMetrics,
+    RegionalActivityTracker,
+    compute_regional_activity_metrics,
+    region_activity,
+)
 from neuroacoustic_resonator.io.persistence import (
     CheckpointPaths,
     checkpoint_paths,
@@ -57,16 +63,20 @@ __all__ = [
     "RegionMasks",
     "RealtimeAudioConfig",
     "RealtimeAudioEngine",
+    "RegionalActivityMetrics",
+    "RegionalActivityTracker",
     "Simulation",
     "SimulationConfig",
     "SimulationFrame",
     "SyntheticInputConfig",
     "SyntheticInputDrive",
     "VisualizationFrame",
+    "compute_regional_activity_metrics",
     "frame_to_visualization",
     "checkpoint_paths",
     "load_field_state",
     "load_simulation_checkpoint",
+    "region_activity",
     "render_audio_demo",
     "render_output_frame",
     "play_realtime_audio",

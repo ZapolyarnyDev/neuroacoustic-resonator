@@ -25,6 +25,8 @@ def test_frame_to_visualization_collects_maps_and_metrics() -> None:
     assert view_frame.step == 1
     assert 0.0 <= view_frame.global_synchrony <= 1.0
     assert 0.0 <= view_frame.mean_metabolite <= 1.0
+    assert view_frame.regional_metrics.output_activity >= 0.0
+    assert view_frame.regional_metrics.output_event_score == 0.0
     assert set(np.unique(view_frame.region_labels)) == {1, 2, 3}
 
 
@@ -78,6 +80,7 @@ def test_live_audio_output_callback_uses_latest_state() -> None:
 
     assert np.all(np.isfinite(outdata))
     assert np.max(np.abs(outdata)) > 0.0
+    assert audio_output.envelope == 0.0
 
 
 def test_live_audio_output_supports_event_mode() -> None:
@@ -98,3 +101,4 @@ def test_live_audio_output_supports_event_mode() -> None:
     audio_output.callback(outdata, 32, None, None)
 
     assert np.all(np.isfinite(outdata))
+    assert audio_output.envelope >= 0.0

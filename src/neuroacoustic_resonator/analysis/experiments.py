@@ -13,6 +13,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from neuroacoustic_resonator.analysis.metrics import compute_regional_activity_metrics
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation
@@ -283,6 +284,11 @@ def collect_response_rows(
 def snapshot_metrics(simulation: Simulation, regions: RegionMasks) -> dict[str, Any]:
     frame = simulation.snapshot()
     local = frame.local_synchrony
+    regional = compute_regional_activity_metrics(
+        frame,
+        regions,
+        input_value=simulation.last_input_value,
+    )
     return {
         "step": float(simulation.step_index),
         "global_synchrony": frame.metrics.global_synchrony,
@@ -294,6 +300,14 @@ def snapshot_metrics(simulation: Simulation, regions: RegionMasks) -> dict[str, 
         "left_trace": region_mean(frame.state.trace, regions.input),
         "assoc_trace": region_mean(frame.state.trace, regions.assoc),
         "right_trace": region_mean(frame.state.trace, regions.output),
+        "input_value": regional.input_value,
+        "input_activity": regional.input_activity,
+        "assoc_activity": regional.assoc_activity,
+        "output_activity": regional.output_activity,
+        "left_to_right_ratio": regional.left_to_right_ratio,
+        "output_event_score": regional.output_event_score,
+        "output_trace_delta": regional.output_trace_delta,
+        "output_synchrony_delta": regional.output_synchrony_delta,
     }
 
 

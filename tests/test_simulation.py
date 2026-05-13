@@ -88,3 +88,18 @@ def test_simulation_applies_synthetic_input_before_step() -> None:
     driven_phase = driven.step().state.phase
 
     assert not np.allclose(driven_phase, baseline_phase)
+
+
+def test_simulation_records_last_input_value() -> None:
+    simulation = Simulation(
+        FieldConfig(size=4, seed=1),
+        synthetic_input=SyntheticInputConfig(
+            enabled=True,
+            mode="pulse",
+            strength=0.5,
+        ),
+    )
+
+    simulation.step()
+
+    assert simulation.last_input_value == 0.5

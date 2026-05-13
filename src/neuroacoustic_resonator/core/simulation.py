@@ -45,6 +45,7 @@ class Simulation:
             RegionMasks.from_size(self.field.config.size),
         )
         self.step_index = 0
+        self.last_input_value = 0.0
 
     @classmethod
     def from_config(cls, config: SimulationConfig) -> Simulation:
@@ -65,7 +66,7 @@ class Simulation:
         )
 
     def step(self) -> SimulationFrame:
-        self.input_drive.apply(self.field, self.step_index)
+        self.last_input_value = self.input_drive.apply(self.field, self.step_index)
         self.step_index += 1
         state = self.field.step()
         return SimulationFrame(

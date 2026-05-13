@@ -12,6 +12,11 @@ from typing import Any, cast
 import numpy as np
 from numpy.typing import NDArray
 
+from neuroacoustic_resonator.analysis.metrics import (
+    RegionalActivityMetrics,
+    RegionalActivityTracker,
+    compute_regional_activity_metrics,
+)
 from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
@@ -85,6 +90,7 @@ class VisualizationFrame:
     step: int
     global_synchrony: float
     mean_metabolite: float
+    regional_metrics: RegionalActivityMetrics
 
 
 def region_boundary_columns(regions: RegionMasks) -> tuple[int, int]:
@@ -100,6 +106,9 @@ def region_boundary_columns(regions: RegionMasks) -> tuple[int, int]:
 def frame_to_visualization(
     frame: SimulationFrame,
     regions: RegionMasks,
+    *,
+    input_value: float = 0.0,
+    regional_metrics: RegionalActivityMetrics | None = None,
 ) -> VisualizationFrame:
     if frame.state.phase.shape != regions.shape:
         msg = "frame and regions must have matching shapes"
@@ -114,6 +123,12 @@ def frame_to_visualization(
         step=frame.metrics.step,
         global_synchrony=frame.metrics.global_synchrony,
         mean_metabolite=frame.metrics.mean_metabolite,
+        regional_metrics=regional_metrics
+        or compute_regional_activity_metrics(
+            frame,
+            regions,
+            input_value=input_value,
+        ),
     )
 
 
@@ -206,6 +221,11 @@ class _LiveFieldWindow:
         self._steps: deque[int] = deque(maxlen=config.history_size)
         self._synchrony_values: deque[float] = deque(maxlen=config.history_size)
         self._metabolite_values: deque[float] = deque(maxlen=config.history_size)
+        self._output_activity_values: deque[float] = deque(maxlen=config.history_size)
+        self._event_score_values: deque[float] = deque(maxlen=config.history_size)
+        self._input_values: deque[float] = deque(maxlen=config.history_size)
+        self._audio_envelope_values: deque[float] = deque(maxlen=config.history_size)
+        self._regional_tracker = RegionalActivityTracker()
 
         self._window = pg.GraphicsLayoutWidget(title="Neuroacoustic Resonator")
         self._window.resize(1200, 800)
@@ -239,6 +259,18 @@ class _LiveFieldWindow:
         )
         self._synchrony_curve = self._metrics_plot.plot(pen="y")
         self._metabolite_curve = self._metrics_plot.plot(pen="c")
+        self._output_activity_curve = self._metrics_plot.plot(
+            pen=self._pg.mkPen((255, 120, 60), width=1),
+        )
+        self._event_score_curve = self._metrics_plot.plot(
+            pen=self._pg.mkPen((180, 120, 255), width=1),
+        )
+        self._input_curve = self._metrics_plot.plot(
+            pen=self._pg.mkPen((80, 220, 120), width=1),
+        )
+        self._audio_envelope_curve = self._metrics_plot.plot(
+            pen=self._pg.mkPen((255, 255, 255), width=1),
+        )
         self._timer = qt_core.QTimer(self._window)
         self._timer.timeout.connect(self.update)
 
@@ -268,7 +300,16 @@ class _LiveFieldWindow:
             frame = self._simulation.snapshot()
             for _ in range(self._config.steps_per_update):
                 frame = self._simulation.step()
-            view_frame = frame_to_visualization(frame, self._regions)
+            regional_metrics = self._regional_tracker.update(
+                frame,
+                self._regions,
+                input_value=self._simulation.last_input_value,
+            )
+            view_frame = frame_to_visualization(
+                frame,
+                self._regions,
+                regional_metrics=regional_metrics,
+            )
 
             self._phase_item.setImage(view_frame.phase.T, autoLevels=True)
             self._synchrony_item.setImage(
@@ -282,6 +323,13 @@ class _LiveFieldWindow:
             self._steps.append(view_frame.step)
             self._synchrony_values.append(view_frame.global_synchrony)
             self._metabolite_values.append(view_frame.mean_metabolite)
+            self._output_activity_values.append(
+                view_frame.regional_metrics.output_activity
+            )
+            self._event_score_values.append(
+                view_frame.regional_metrics.output_event_score
+            )
+            self._input_values.append(abs(view_frame.regional_metrics.input_value))
             self._synchrony_curve.setData(
                 list(self._steps),
                 list(self._synchrony_values),
@@ -292,6 +340,26 @@ class _LiveFieldWindow:
             )
             if self._audio_output is not None:
                 self._audio_output.update_state(frame.state)
+            audio_envelope = (
+                self._audio_output.envelope if self._audio_output is not None else 0.0
+            )
+            self._audio_envelope_values.append(audio_envelope)
+            self._output_activity_curve.setData(
+                list(self._steps),
+                list(self._output_activity_values),
+            )
+            self._event_score_curve.setData(
+                list(self._steps),
+                list(self._event_score_values),
+            )
+            self._input_curve.setData(
+                list(self._steps),
+                list(self._input_values),
+            )
+            self._audio_envelope_curve.setData(
+                list(self._steps),
+                list(self._audio_envelope_values),
+            )
         except Exception:
             self._timer.stop()
             if self._audio_output is not None:
@@ -370,6 +438,10 @@ class _LiveAudioOutput:
     def update_state(self, state: FieldState) -> None:
         with self._lock:
             self._state = state
+
+    @property
+    def envelope(self) -> float:
+        return float(getattr(self._renderer, "envelope", 0.0))
 
     def callback(
         self,

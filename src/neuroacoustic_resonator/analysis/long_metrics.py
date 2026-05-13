@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.analysis.metrics import MetricsHistory
+from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.simulation import Simulation
 
 

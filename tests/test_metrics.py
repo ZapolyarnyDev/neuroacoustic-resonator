@@ -1,7 +1,16 @@
 import csv
 import json
 
-from neuroacoustic_resonator import FieldConfig, MetricsHistory, Simulation
+import pytest
+
+from neuroacoustic_resonator import (
+    FieldConfig,
+    MetricsHistory,
+    RegionMasks,
+    RegionalActivityTracker,
+    Simulation,
+    compute_regional_activity_metrics,
+)
 
 
 def test_metrics_history_records_metrics() -> None:
@@ -63,3 +72,43 @@ def test_metrics_history_writes_jsonl(tmp_path) -> None:
     ]
     assert [row["step"] for row in rows] == [1, 2]
     assert "mean_metabolite" in rows[0]
+
+
+def test_compute_regional_activity_metrics_reports_output_activity() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    frame = simulation.step()
+
+    metrics = compute_regional_activity_metrics(
+        frame,
+        regions,
+        input_value=simulation.last_input_value,
+    )
+
+    assert metrics.step == 1
+    assert metrics.input_activity >= 0.0
+    assert metrics.assoc_activity >= 0.0
+    assert metrics.output_activity >= 0.0
+    assert metrics.left_to_right_ratio >= 0.0
+    assert metrics.output_event_score == 0.0
+
+
+def test_regional_activity_tracker_reports_output_event_score() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    tracker = RegionalActivityTracker()
+
+    tracker.update(simulation.snapshot(), regions)
+    simulation.field.apply_phase_impulse(regions.output, 0.5)
+    changed = tracker.update(simulation.snapshot(), regions)
+
+    assert changed.output_synchrony_delta != 0.0
+    assert changed.output_event_score > 0.0
+
+
+def test_compute_regional_activity_metrics_rejects_shape_mismatch() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(5)
+
+    with pytest.raises(ValueError, match="matching shapes"):
+        compute_regional_activity_metrics(simulation.snapshot(), regions)
