@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from neuroacoustic_resonator import FieldConfig, Simulation
-from neuroacoustic_resonator.input_drive import SyntheticInputConfig
-from neuroacoustic_resonator.persistence import (
+from neuroacoustic_resonator.core.input_drive import SyntheticInputConfig
+from neuroacoustic_resonator.io.persistence import (
     checkpoint_paths,
     load_checkpoint_metadata,
     load_field_state,

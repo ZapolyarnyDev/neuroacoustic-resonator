@@ -7,7 +7,7 @@ from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Any
 
-from neuroacoustic_resonator.field import FieldMetrics
+from neuroacoustic_resonator.core.field import FieldMetrics
 
 MetricsRow = dict[str, Any]
 

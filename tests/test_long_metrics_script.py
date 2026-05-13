@@ -2,7 +2,7 @@ import csv
 
 import pytest
 
-from neuroacoustic_resonator.long_metrics import (
+from neuroacoustic_resonator.analysis.long_metrics import (
     collect_metrics,
     main,
     write_metrics_history,

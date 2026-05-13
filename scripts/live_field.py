@@ -25,7 +25,7 @@ def _bootstrap() -> None:
 
 def _main() -> int:
     _bootstrap()
-    from neuroacoustic_resonator.visualization import main
+    from neuroacoustic_resonator.viz.live import main
 
     return main()
 

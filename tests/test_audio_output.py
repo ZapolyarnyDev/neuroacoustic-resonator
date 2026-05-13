@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from neuroacoustic_resonator import FieldConfig, OscillatorField, RegionMasks
-from neuroacoustic_resonator.audio_output import (
+from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
     GatedAudioRenderer,

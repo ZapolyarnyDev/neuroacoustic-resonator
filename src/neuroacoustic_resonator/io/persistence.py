@@ -7,9 +7,9 @@ from typing import Any
 import numpy as np
 import yaml
 
-from neuroacoustic_resonator.field import FieldConfig, FieldState, OscillatorField
-from neuroacoustic_resonator.input_drive import SyntheticInputConfig
-from neuroacoustic_resonator.simulation import Simulation
+from neuroacoustic_resonator.core.field import FieldConfig, FieldState, OscillatorField
+from neuroacoustic_resonator.core.input_drive import SyntheticInputConfig
+from neuroacoustic_resonator.core.simulation import Simulation
 
 CHECKPOINT_VERSION = 1
 

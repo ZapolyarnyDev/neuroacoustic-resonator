@@ -13,9 +13,9 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from neuroacoustic_resonator.config import SimulationConfig
-from neuroacoustic_resonator.regions import RegionMasks
-from neuroacoustic_resonator.simulation import Simulation
+from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.core.simulation import Simulation
 
 
 ExperimentRows = list[dict[str, Any]]

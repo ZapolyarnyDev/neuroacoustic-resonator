@@ -2,7 +2,7 @@ import wave
 
 import pytest
 
-from neuroacoustic_resonator.audio_render import (
+from neuroacoustic_resonator.audio.render import (
     main,
     render_audio_demo,
     steps_for_duration,

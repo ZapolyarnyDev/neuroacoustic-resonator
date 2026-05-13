@@ -8,7 +8,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 
-from neuroacoustic_resonator.simulation import SimulationFrame
+from neuroacoustic_resonator.core.simulation import SimulationFrame
 
 
 def save_field_preview(frame: SimulationFrame, path: str | Path) -> Path:

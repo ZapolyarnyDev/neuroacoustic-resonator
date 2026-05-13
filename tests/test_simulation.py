@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from neuroacoustic_resonator import FieldConfig, OscillatorField, Simulation
-from neuroacoustic_resonator.input_drive import SyntheticInputConfig
+from neuroacoustic_resonator.core.input_drive import SyntheticInputConfig
 
 
 def test_simulation_starts_at_step_zero() -> None:

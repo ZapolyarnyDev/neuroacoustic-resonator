@@ -2,7 +2,7 @@ import csv
 
 import pytest
 
-from neuroacoustic_resonator.benchmark import (
+from neuroacoustic_resonator.analysis.benchmark import (
     benchmark_field_step,
     benchmark_sizes,
     main,

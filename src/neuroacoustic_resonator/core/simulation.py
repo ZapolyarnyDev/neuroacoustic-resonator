@@ -3,19 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from neuroacoustic_resonator.config import SimulationConfig
-from neuroacoustic_resonator.field import (
+from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.core.field import (
     FieldConfig,
     FieldMetrics,
     FieldState,
     FloatArray,
     OscillatorField,
 )
-from neuroacoustic_resonator.input_drive import (
+from neuroacoustic_resonator.core.input_drive import (
     SyntheticInputConfig,
     SyntheticInputDrive,
 )
-from neuroacoustic_resonator.regions import RegionMasks
+from neuroacoustic_resonator.core.regions import RegionMasks
 
 
 @dataclass(frozen=True)

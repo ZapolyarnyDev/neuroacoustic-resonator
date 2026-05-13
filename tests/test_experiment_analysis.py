@@ -2,7 +2,7 @@ import json
 
 import numpy as np
 
-from neuroacoustic_resonator.experiment_analysis import (
+from neuroacoustic_resonator.analysis.experiments import (
     ExperimentAnalysisConfig,
     export_experiment_plots,
     propagation_metrics,

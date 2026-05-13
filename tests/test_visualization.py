@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from neuroacoustic_resonator import FieldConfig, RegionMasks, Simulation
-from neuroacoustic_resonator.visualization import (
+from neuroacoustic_resonator.viz.live import (
     LiveVisualizationConfig,
     _LiveAudioOutput,
     frame_to_visualization,

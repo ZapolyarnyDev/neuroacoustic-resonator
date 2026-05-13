@@ -6,8 +6,8 @@ import wave
 import numpy as np
 from numpy.typing import NDArray
 
-from neuroacoustic_resonator.field import FieldState
-from neuroacoustic_resonator.regions import RegionMasks
+from neuroacoustic_resonator.core.field import FieldState
+from neuroacoustic_resonator.core.regions import RegionMasks
 
 AudioArray = NDArray[np.float64]
 

@@ -6,8 +6,8 @@ from typing import Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from neuroacoustic_resonator.field import FieldConfig
-from neuroacoustic_resonator.input_drive import InputMode, SyntheticInputConfig
+from neuroacoustic_resonator.core.field import FieldConfig
+from neuroacoustic_resonator.core.input_drive import InputMode, SyntheticInputConfig
 
 
 class FieldConfigModel(BaseModel):

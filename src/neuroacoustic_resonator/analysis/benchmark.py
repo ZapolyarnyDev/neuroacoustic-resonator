@@ -8,7 +8,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Literal, cast
 
-from neuroacoustic_resonator.field import FieldConfig, OscillatorField
+from neuroacoustic_resonator.core.field import FieldConfig, OscillatorField
 
 OutputFormat = Literal["csv", "jsonl"]
 

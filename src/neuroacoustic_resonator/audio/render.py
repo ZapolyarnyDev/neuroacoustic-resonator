@@ -6,10 +6,10 @@ from pathlib import Path
 
 import numpy as np
 
-from neuroacoustic_resonator.audio_output import ContinuousAudioRenderer, write_wav
-from neuroacoustic_resonator.config import SimulationConfig
-from neuroacoustic_resonator.regions import RegionMasks
-from neuroacoustic_resonator.simulation import Simulation
+from neuroacoustic_resonator.audio.output import ContinuousAudioRenderer, write_wav
+from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.core.simulation import Simulation
 
 
 def default_audio_output_path(config_path: Path, steps: int) -> Path:

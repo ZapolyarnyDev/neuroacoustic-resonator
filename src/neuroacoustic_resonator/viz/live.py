@@ -12,15 +12,15 @@ from typing import Any, cast
 import numpy as np
 from numpy.typing import NDArray
 
-from neuroacoustic_resonator.audio_output import (
+from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
     GatedAudioRenderer,
 )
-from neuroacoustic_resonator.config import SimulationConfig
-from neuroacoustic_resonator.field import FieldState, FloatArray
-from neuroacoustic_resonator.regions import RegionMasks
-from neuroacoustic_resonator.simulation import Simulation, SimulationFrame
+from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.core.field import FieldState, FloatArray
+from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
 
 
 @dataclass(frozen=True)

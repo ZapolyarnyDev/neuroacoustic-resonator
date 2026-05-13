@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from neuroacoustic_resonator.realtime_audio import (
+from neuroacoustic_resonator.audio.realtime import (
     RealtimeAudioConfig,
     RealtimeAudioEngine,
     play_realtime_audio,

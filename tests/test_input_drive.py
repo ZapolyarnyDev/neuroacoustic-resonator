@@ -8,7 +8,7 @@ from neuroacoustic_resonator import (
     SyntheticInputConfig,
     SyntheticInputDrive,
 )
-from neuroacoustic_resonator.field import TAU
+from neuroacoustic_resonator.core.field import TAU
 
 
 def test_disabled_synthetic_input_returns_zero() -> None:

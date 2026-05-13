@@ -5,8 +5,8 @@ from typing import Literal
 
 import numpy as np
 
-from neuroacoustic_resonator.field import TAU, OscillatorField
-from neuroacoustic_resonator.regions import RegionMasks
+from neuroacoustic_resonator.core.field import TAU, OscillatorField
+from neuroacoustic_resonator.core.regions import RegionMasks
 
 InputMode = Literal["sine", "pulse", "noise"]
 

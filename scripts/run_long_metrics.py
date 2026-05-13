@@ -25,7 +25,7 @@ def _bootstrap() -> None:
 
 def _main() -> int:
     _bootstrap()
-    from neuroacoustic_resonator.long_metrics import main
+    from neuroacoustic_resonator.analysis.long_metrics import main
 
     return main()
 
