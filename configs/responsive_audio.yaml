@@ -1,0 +1,29 @@
+field:
+  size: 32
+  dt: 0.02
+  base_frequency: 1.0
+  frequency_spread: 0.08
+  coupling_strength: 0.24
+  metabolite_recovery: 0.06
+  metabolite_cost: 0.01
+  metabolite_diffusion: 0.015
+  trace_rate: 0.08
+  frequency_plasticity_rate: 0.008
+  frequency_homeostasis_rate: 0.015
+  synchrony_target_low: 0.08
+  synchrony_target_high: 0.72
+  coupling_homeostasis_rate: 0.05
+  min_coupling: 0.0
+  max_coupling: 1.0
+  min_frequency: 0.2
+  max_frequency: 3.0
+  seed: 67
+synthetic_input:
+  enabled: true
+  mode: pulse
+  strength: 0.9
+  period_steps: 48
+  duty_cycle: 0.08
+  seed: 67
+steps: 768
+preview_path: outputs/responsive-audio-preview.png

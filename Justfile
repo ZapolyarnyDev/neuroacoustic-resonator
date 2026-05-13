@@ -27,6 +27,9 @@ experiments-custom config output_dir propagation_horizon:
 propagation-probe:
     uv run python scripts/probe_propagation.py --config configs/synthetic_input.yaml --warmup-steps 200 --horizon 512 --output-csv experiments/logs/propagation_probe.csv --output-summary experiments/logs/propagation_probe_summary.json
 
+propagation-probe-responsive:
+    uv run python scripts/probe_propagation.py --config configs/responsive_audio.yaml --warmup-steps 200 --horizon 512 --output-csv experiments/logs/responsive_propagation_probe.csv --output-summary experiments/logs/responsive_propagation_probe_summary.json
+
 propagation-probe-custom config warmup horizon output_csv output_summary:
     uv run python scripts/probe_propagation.py --config {{config}} --warmup-steps {{warmup}} --horizon {{horizon}} --output-csv {{output_csv}} --output-summary {{output_summary}}
 
@@ -81,6 +84,12 @@ audio-live-event:
 audio-live-event-test:
     uv run python scripts/play_audio_demo.py --config configs/audio_demo.yaml --audio-mode event --duration-seconds 10
 
+audio-live-responsive:
+    uv run python scripts/play_audio_demo.py --config configs/responsive_audio.yaml --audio-mode event
+
+audio-live-responsive-test:
+    uv run python scripts/play_audio_demo.py --config configs/responsive_audio.yaml --audio-mode event --duration-seconds 10
+
 audio-live-custom config carrier frequency_scale gain:
     uv run python scripts/play_audio_demo.py --config {{config}} --carrier-frequency {{carrier}} --frequency-scale {{frequency_scale}} --gain {{gain}}
 
@@ -91,13 +100,16 @@ live-input:
     uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2
 
 live-audio:
-    uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode event
+    uv run python scripts/live_field.py --config configs/responsive_audio.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode event
 
 live-audio-gated:
     uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode gated
 
+live-audio-synthetic:
+    uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode event
+
 live-audio-continuous:
-    uv run python scripts/live_field.py --config configs/synthetic_input.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode continuous
+    uv run python scripts/live_field.py --config configs/responsive_audio.yaml --interval-ms 30 --steps-per-update 2 --audio --audio-mode continuous
 
 live-field:
     uv run python scripts/live_field.py --config configs/field_only.yaml --interval-ms 30 --steps-per-update 2

@@ -60,6 +60,7 @@ steps: 2
         "field_only.yaml",
         "synthetic_input.yaml",
         "audio_demo.yaml",
+        "responsive_audio.yaml",
         "long_run.yaml",
     ],
 )
