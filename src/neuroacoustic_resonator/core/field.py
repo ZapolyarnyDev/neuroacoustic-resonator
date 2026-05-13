@@ -20,7 +20,9 @@ class FieldConfig:
     metabolite_recovery: float = 0.03
     metabolite_cost: float = 0.02
     metabolite_diffusion: float = 0.0
+    metabolite_adaptive_recovery: float = 0.0
     trace_rate: float = 0.08
+    trace_decay: float = 0.0
     frequency_plasticity_rate: float = 0.01
     frequency_homeostasis_rate: float = 0.01
     synchrony_target_low: float = 0.05
@@ -54,8 +56,14 @@ class FieldConfig:
         if self.metabolite_diffusion < 0.0:
             msg = "metabolite_diffusion must be non-negative"
             raise ValueError(msg)
+        if self.metabolite_adaptive_recovery < 0.0:
+            msg = "metabolite_adaptive_recovery must be non-negative"
+            raise ValueError(msg)
         if self.trace_rate < 0.0:
             msg = "trace_rate must be non-negative"
+            raise ValueError(msg)
+        if self.trace_decay < 0.0:
+            msg = "trace_decay must be non-negative"
             raise ValueError(msg)
         if self.frequency_plasticity_rate < 0.0:
             msg = "frequency_plasticity_rate must be non-negative"
@@ -176,21 +184,25 @@ class OscillatorField:
         phase_drive = self._frequency + coupling_drive
         activity = np.abs(phase_drive)
         metabolite_laplacian = self._metabolite_laplacian()
+        metabolite_depletion = 1.0 - self._metabolite
 
         self._phase = np.mod(self._phase + self.config.dt * phase_drive, TAU)
         self._metabolite = np.clip(
             self._metabolite
             + self.config.dt
             * (
-                self.config.metabolite_recovery * (1.0 - self._metabolite)
+                self.config.metabolite_recovery * metabolite_depletion
+                + self.config.metabolite_adaptive_recovery
+                * np.square(metabolite_depletion)
                 - self.config.metabolite_cost * activity
                 + self.config.metabolite_diffusion * metabolite_laplacian
             ),
             0.0,
             1.0,
         )
-        self._trace += (
-            self.config.dt * self.config.trace_rate * (activity - self._trace)
+        self._trace += self.config.dt * (
+            self.config.trace_rate * (activity - self._trace)
+            - self.config.trace_decay * self._trace
         )
         self._frequency = np.clip(
             self._frequency

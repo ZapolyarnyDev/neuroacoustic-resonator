@@ -101,14 +101,53 @@ def test_trace_accumulates_activity() -> None:
     assert np.all(after > before)
 
 
+def test_trace_decay_reduces_sustained_activity_memory() -> None:
+    base = FieldConfig(
+        size=4,
+        dt=1.0,
+        base_frequency=1.0,
+        frequency_spread=0.0,
+        coupling_strength=0.0,
+        trace_rate=0.5,
+        trace_decay=0.0,
+    )
+    decaying = FieldConfig(
+        size=4,
+        dt=1.0,
+        base_frequency=1.0,
+        frequency_spread=0.0,
+        coupling_strength=0.0,
+        trace_rate=0.5,
+        trace_decay=0.25,
+    )
+
+    base_field = OscillatorField(base)
+    decaying_field = OscillatorField(decaying)
+    for _ in range(3):
+        base_trace = base_field.step().trace
+        decaying_trace = decaying_field.step().trace
+
+    assert np.all(decaying_trace < base_trace)
+
+
 def test_config_rejects_invalid_trace_rate() -> None:
     with pytest.raises(ValueError, match="trace_rate"):
         FieldConfig(trace_rate=-0.1)
 
 
+def test_config_rejects_invalid_trace_decay() -> None:
+    with pytest.raises(ValueError, match="trace_decay"):
+        FieldConfig(trace_decay=-0.1)
+
+
 def test_config_rejects_invalid_metabolite_diffusion() -> None:
     with pytest.raises(ValueError, match="metabolite_diffusion"):
         FieldConfig(metabolite_diffusion=-0.1)
+
+
+def test_config_rejects_invalid_adaptive_metabolite_recovery() -> None:
+    with pytest.raises(ValueError, match="metabolite_adaptive_recovery"):
+        FieldConfig(metabolite_adaptive_recovery=-0.1)
 
 
 def test_config_rejects_invalid_synchrony_target_window() -> None:
@@ -150,6 +189,53 @@ def test_metabolite_diffusion_spreads_local_depletion() -> None:
     assert after[1, 1] == pytest.approx(0.4)
     assert after[0, 1] == pytest.approx(0.9)
     assert after[0, 0] == pytest.approx(1.0)
+
+
+def test_adaptive_recovery_accelerates_depleted_metabolite_recovery() -> None:
+    config = FieldConfig(
+        size=4,
+        dt=1.0,
+        base_frequency=0.0,
+        frequency_spread=0.0,
+        coupling_strength=0.0,
+        metabolite_recovery=0.1,
+        metabolite_adaptive_recovery=0.2,
+        metabolite_cost=0.0,
+    )
+    no_adaptive_config = FieldConfig(
+        size=4,
+        dt=1.0,
+        base_frequency=0.0,
+        frequency_spread=0.0,
+        coupling_strength=0.0,
+        metabolite_recovery=0.1,
+        metabolite_adaptive_recovery=0.0,
+        metabolite_cost=0.0,
+    )
+    shape = (config.size, config.size)
+    depleted = np.full(shape, 0.5)
+    adaptive = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.zeros(shape),
+            frequency=np.zeros(shape),
+            metabolite=depleted,
+            coupling=np.zeros(shape),
+            trace=np.zeros(shape),
+        ),
+    )
+    baseline = OscillatorField.from_state(
+        no_adaptive_config,
+        FieldState(
+            phase=np.zeros(shape),
+            frequency=np.zeros(shape),
+            metabolite=depleted,
+            coupling=np.zeros(shape),
+            trace=np.zeros(shape),
+        ),
+    )
+
+    assert np.mean(adaptive.step().metabolite) > np.mean(baseline.step().metabolite)
 
 
 def test_frequency_plasticity_updates_frequency() -> None:

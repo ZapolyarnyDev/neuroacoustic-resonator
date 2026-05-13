@@ -7,7 +7,9 @@ field:
   metabolite_recovery: 0.03
   metabolite_cost: 0.02
   metabolite_diffusion: 0.005
+  metabolite_adaptive_recovery: 0.1
   trace_rate: 0.08
+  trace_decay: 0.05
   frequency_plasticity_rate: 0.01
   frequency_homeostasis_rate: 0.01
   synchrony_target_low: 0.05
