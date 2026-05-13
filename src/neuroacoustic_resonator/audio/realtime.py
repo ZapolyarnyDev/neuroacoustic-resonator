@@ -91,6 +91,7 @@ class RealtimeAudioEngine:
         self.regions = RegionMasks.from_size(simulation_config.field.size)
         self.renderer = self._build_renderer(config.frame_size)
         self.callback_count = 0
+        self._last_status_text: str | None = None
 
     def _build_renderer(
         self,
@@ -134,7 +135,7 @@ class RealtimeAudioEngine:
     ) -> None:
         del time_info
         if status:
-            print(status)
+            self._report_status(status)
 
         for _ in range(self.config.physics_steps_per_audio_frame):
             frame = self.simulation.step()
@@ -145,6 +146,13 @@ class RealtimeAudioEngine:
         audio = self.renderer.render_frame(frame.state, self.regions)
         outdata[:, 0] = np.asarray(audio, dtype=np.float32)
         self.callback_count += 1
+
+    def _report_status(self, status: Any) -> None:
+        status_text = str(status)
+        if status_text == self._last_status_text:
+            return
+        self._last_status_text = status_text
+        print(f"audio status: {status_text}")
 
 
 def make_sounddevice_stream_factory() -> StreamFactory:

@@ -115,3 +115,21 @@ def test_play_realtime_audio_uses_stream_factory() -> None:
     assert len(streams) == 1
     assert streams[0].kwargs["samplerate"] == 8_000
     assert streams[0].kwargs["blocksize"] == 32
+
+
+def test_realtime_audio_engine_status_reporting_is_throttled(capsys) -> None:
+    engine = RealtimeAudioEngine(
+        RealtimeAudioConfig(
+            config_path=Path("configs") / "audio_demo.yaml",
+            sample_rate=8_000,
+            frame_size=32,
+        )
+    )
+
+    engine._report_status("output underflow")
+    engine._report_status("output underflow")
+    engine._report_status("different status")
+
+    captured = capsys.readouterr()
+    assert captured.out.count("output underflow") == 1
+    assert captured.out.count("different status") == 1

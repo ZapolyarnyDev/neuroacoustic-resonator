@@ -5,6 +5,8 @@ from neuroacoustic_resonator import FieldConfig, RegionMasks, Simulation
 from neuroacoustic_resonator.viz.live import (
     LiveVisualizationConfig,
     _LiveAudioOutput,
+    diagnostic_curve_specs,
+    diagnostic_legend_html,
     frame_to_visualization,
     region_boundary_columns,
 )
@@ -58,6 +60,29 @@ def test_live_visualization_config_validates_values() -> None:
         LiveVisualizationConfig(audio_sample_rate=0)
 
 
+def test_diagnostic_curve_specs_have_stable_labels() -> None:
+    specs = diagnostic_curve_specs()
+
+    assert [spec.key for spec in specs] == [
+        "global_synchrony",
+        "mean_metabolite",
+        "output_activity",
+        "output_event_score",
+        "input_value",
+        "audio_envelope",
+    ]
+    assert all(spec.label for spec in specs)
+    assert all(len(spec.color) == 3 for spec in specs)
+
+
+def test_diagnostic_legend_html_contains_labels_and_colors() -> None:
+    html = diagnostic_legend_html(diagnostic_curve_specs())
+
+    assert "global synchrony" in html
+    assert "audio envelope" in html
+    assert "rgb(" in html
+
+
 def test_live_audio_output_callback_uses_latest_state() -> None:
     simulation = Simulation(FieldConfig(size=6, seed=1))
     regions = RegionMasks.from_size(6)
@@ -102,3 +127,23 @@ def test_live_audio_output_supports_event_mode() -> None:
 
     assert np.all(np.isfinite(outdata))
     assert audio_output.envelope >= 0.0
+
+
+def test_live_audio_output_status_reporting_is_throttled(capsys) -> None:
+    regions = RegionMasks.from_size(6)
+    audio_output = _LiveAudioOutput(
+        config=LiveVisualizationConfig(
+            audio_enabled=True,
+            audio_sample_rate=8_000,
+            audio_frame_size=32,
+        ),
+        regions=regions,
+    )
+
+    audio_output._report_status("output underflow")
+    audio_output._report_status("output underflow")
+    audio_output._report_status("different status")
+
+    captured = capsys.readouterr()
+    assert captured.out.count("output underflow") == 1
+    assert captured.out.count("different status") == 1

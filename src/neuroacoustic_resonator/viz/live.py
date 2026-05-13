@@ -93,6 +93,65 @@ class VisualizationFrame:
     regional_metrics: RegionalActivityMetrics
 
 
+@dataclass(frozen=True)
+class DiagnosticCurveSpec:
+    key: str
+    label: str
+    color: tuple[int, int, int]
+    width: float = 1.5
+
+
+def diagnostic_curve_specs() -> tuple[DiagnosticCurveSpec, ...]:
+    return (
+        DiagnosticCurveSpec(
+            key="global_synchrony",
+            label="global synchrony",
+            color=(250, 220, 70),
+        ),
+        DiagnosticCurveSpec(
+            key="mean_metabolite",
+            label="mean metabolite",
+            color=(70, 210, 230),
+        ),
+        DiagnosticCurveSpec(
+            key="output_activity",
+            label="output activity",
+            color=(255, 135, 70),
+            width=2.0,
+        ),
+        DiagnosticCurveSpec(
+            key="output_event_score",
+            label="output event score",
+            color=(185, 135, 255),
+        ),
+        DiagnosticCurveSpec(
+            key="input_value",
+            label="input pulse |value|",
+            color=(80, 235, 130),
+        ),
+        DiagnosticCurveSpec(
+            key="audio_envelope",
+            label="audio envelope",
+            color=(245, 245, 245),
+        ),
+    )
+
+
+def diagnostic_legend_html(specs: tuple[DiagnosticCurveSpec, ...]) -> str:
+    rows = [
+        "<div style='font-size: 11pt; font-weight: 600; color: #dddddd;'>diagnostics</div>"
+    ]
+    for spec in specs:
+        red, green, blue = spec.color
+        rows.append(
+            "<div style='font-size: 10pt; margin-top: 10px;'>"
+            f"<span style='color: rgb({red}, {green}, {blue});'>--</span> "
+            f"<span style='color: #d8d8d8;'>{spec.label}</span>"
+            "</div>"
+        )
+    return "".join(rows)
+
+
 def region_boundary_columns(regions: RegionMasks) -> tuple[int, int]:
     labels = regions.labels()
     first_output_column = int(np.min(np.flatnonzero(np.any(regions.output, axis=0))))
@@ -219,16 +278,20 @@ class _LiveFieldWindow:
         self._regions = regions
         self._config = config
         self._steps: deque[int] = deque(maxlen=config.history_size)
-        self._synchrony_values: deque[float] = deque(maxlen=config.history_size)
-        self._metabolite_values: deque[float] = deque(maxlen=config.history_size)
-        self._output_activity_values: deque[float] = deque(maxlen=config.history_size)
-        self._event_score_values: deque[float] = deque(maxlen=config.history_size)
-        self._input_values: deque[float] = deque(maxlen=config.history_size)
-        self._audio_envelope_values: deque[float] = deque(maxlen=config.history_size)
+        self._diagnostic_specs = diagnostic_curve_specs()
+        self._diagnostic_values: dict[str, deque[float]] = {
+            spec.key: deque(maxlen=config.history_size)
+            for spec in self._diagnostic_specs
+        }
+        self._diagnostic_curves: dict[str, Any] = {}
+        self._diagnostics_legend_label: Any | None = None
         self._regional_tracker = RegionalActivityTracker()
 
         self._window = pg.GraphicsLayoutWidget(title="Neuroacoustic Resonator")
-        self._window.resize(1200, 800)
+        self._window.setWindowTitle("Neuroacoustic Resonator - live field diagnostics")
+        self._window.setBackground((5, 5, 5))
+        self._window.resize(1680, 900)
+        self._configure_layout_columns()
         self._phase_item = pg.ImageItem()
         self._synchrony_item = pg.ImageItem()
         self._metabolite_item = pg.ImageItem()
@@ -253,30 +316,30 @@ class _LiveFieldWindow:
             self._add_image_panel(title, item, row=index // 3, col=index % 3)
 
         self._metrics_plot = self._window.addPlot(
-            row=1,
-            col=2,
-            title="global synchrony / mean M",
+            row=0,
+            col=3,
+            rowspan=2,
+            title="diagnostics",
         )
-        self._synchrony_curve = self._metrics_plot.plot(pen="y")
-        self._metabolite_curve = self._metrics_plot.plot(pen="c")
-        self._output_activity_curve = self._metrics_plot.plot(
-            pen=self._pg.mkPen((255, 120, 60), width=1),
-        )
-        self._event_score_curve = self._metrics_plot.plot(
-            pen=self._pg.mkPen((180, 120, 255), width=1),
-        )
-        self._input_curve = self._metrics_plot.plot(
-            pen=self._pg.mkPen((80, 220, 120), width=1),
-        )
-        self._audio_envelope_curve = self._metrics_plot.plot(
-            pen=self._pg.mkPen((255, 255, 255), width=1),
-        )
+        self._configure_diagnostics_plot()
         self._timer = qt_core.QTimer(self._window)
         self._timer.timeout.connect(self.update)
+
+    def _configure_layout_columns(self) -> None:
+        layout = self._window.ci.layout
+        for column in range(3):
+            layout.setColumnMinimumWidth(column, 360)
+            layout.setColumnStretchFactor(column, 1)
+        layout.setColumnMinimumWidth(3, 520)
+        layout.setColumnStretchFactor(3, 2)
+        layout.setColumnMinimumWidth(4, 190)
+        layout.setColumnStretchFactor(4, 0)
 
     def _add_image_panel(self, title: str, item: Any, *, row: int, col: int) -> None:
         plot = self._window.addPlot(row=row, col=col, title=title)
         plot.setAspectLocked(True)
+        plot.setMenuEnabled(False)
+        plot.setMouseEnabled(x=False, y=False)
         plot.hideAxis("left")
         plot.hideAxis("bottom")
         plot.addItem(item)
@@ -287,6 +350,28 @@ class _LiveFieldWindow:
                 pen=self._pg.mkPen((255, 80, 80), width=1),
             )
             plot.addItem(line)
+
+    def _configure_diagnostics_plot(self) -> None:
+        self._metrics_plot.setMenuEnabled(False)
+        self._metrics_plot.showGrid(x=True, y=True, alpha=0.25)
+        self._metrics_plot.setLabel("bottom", "step")
+        self._metrics_plot.setLabel("left", "value")
+        self._metrics_plot.getViewBox().setDefaultPadding(0.02)
+        self._diagnostics_legend_label = self._pg.LabelItem(justify="left")
+        self._diagnostics_legend_label.setText(
+            diagnostic_legend_html(self._diagnostic_specs),
+        )
+        self._window.addItem(
+            self._diagnostics_legend_label,
+            row=0,
+            col=4,
+            rowspan=2,
+        )
+        for spec in self._diagnostic_specs:
+            curve = self._metrics_plot.plot(
+                pen=self._pg.mkPen(spec.color, width=spec.width),
+            )
+            self._diagnostic_curves[spec.key] = curve
 
     def show(self) -> None:
         self._window.show()
@@ -321,51 +406,43 @@ class _LiveFieldWindow:
             self._regions_item.setImage(view_frame.region_labels.T, levels=(1, 3))
 
             self._steps.append(view_frame.step)
-            self._synchrony_values.append(view_frame.global_synchrony)
-            self._metabolite_values.append(view_frame.mean_metabolite)
-            self._output_activity_values.append(
-                view_frame.regional_metrics.output_activity
-            )
-            self._event_score_values.append(
-                view_frame.regional_metrics.output_event_score
-            )
-            self._input_values.append(abs(view_frame.regional_metrics.input_value))
-            self._synchrony_curve.setData(
-                list(self._steps),
-                list(self._synchrony_values),
-            )
-            self._metabolite_curve.setData(
-                list(self._steps),
-                list(self._metabolite_values),
-            )
             if self._audio_output is not None:
                 self._audio_output.update_state(frame.state)
             audio_envelope = (
                 self._audio_output.envelope if self._audio_output is not None else 0.0
             )
-            self._audio_envelope_values.append(audio_envelope)
-            self._output_activity_curve.setData(
-                list(self._steps),
-                list(self._output_activity_values),
-            )
-            self._event_score_curve.setData(
-                list(self._steps),
-                list(self._event_score_values),
-            )
-            self._input_curve.setData(
-                list(self._steps),
-                list(self._input_values),
-            )
-            self._audio_envelope_curve.setData(
-                list(self._steps),
-                list(self._audio_envelope_values),
-            )
+            self._append_diagnostics(view_frame, audio_envelope)
+        except KeyboardInterrupt:
+            self._timer.stop()
+            if self._audio_output is not None:
+                self._audio_output.stop()
+            self._app.quit()
         except Exception:
             self._timer.stop()
             if self._audio_output is not None:
                 self._audio_output.stop()
             traceback.print_exc()
             self._app.quit()
+
+    def _append_diagnostics(
+        self,
+        view_frame: VisualizationFrame,
+        audio_envelope: float,
+    ) -> None:
+        values = {
+            "global_synchrony": view_frame.global_synchrony,
+            "mean_metabolite": view_frame.mean_metabolite,
+            "output_activity": view_frame.regional_metrics.output_activity,
+            "output_event_score": view_frame.regional_metrics.output_event_score,
+            "input_value": abs(view_frame.regional_metrics.input_value),
+            "audio_envelope": audio_envelope,
+        }
+        for key, value in values.items():
+            self._diagnostic_values[key].append(value)
+            self._diagnostic_curves[key].setData(
+                list(self._steps),
+                list(self._diagnostic_values[key]),
+            )
 
 
 class _LiveAudioOutput:
@@ -383,6 +460,7 @@ class _LiveAudioOutput:
         self._stream: Any | None = None
         self._stream_factory = stream_factory
         self._renderer = self._build_renderer(config.audio_frame_size)
+        self._last_status_text: str | None = None
 
     def _build_renderer(
         self, frame_size: int
@@ -452,7 +530,7 @@ class _LiveAudioOutput:
     ) -> None:
         del time_info
         if status:
-            print(status)
+            self._report_status(status)
 
         with self._lock:
             state = self._state
@@ -464,6 +542,13 @@ class _LiveAudioOutput:
             self._renderer = self._build_renderer(frames)
         audio = self._renderer.render_frame(state, self._regions)
         outdata[:, 0] = np.asarray(audio, dtype=np.float32)
+
+    def _report_status(self, status: Any) -> None:
+        status_text = str(status)
+        if status_text == self._last_status_text:
+            return
+        self._last_status_text = status_text
+        print(f"audio status: {status_text}")
 
 
 def main(argv: list[str] | None = None) -> int:
