@@ -72,6 +72,12 @@ audio-input input output:
 audio-input-custom input output frame_size hop_size drive_strength:
     uv run python scripts/extract_audio_input.py --input {{input}} --output {{output}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}}
 
+audio-input-run input:
+    uv run python scripts/run_audio_input.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/audio_input_run.csv --output-summary experiments/logs/audio_input_run_summary.json
+
+audio-input-run-custom config input output_csv output_summary frame_size hop_size drive_strength:
+    uv run python scripts/run_audio_input.py --config {{config}} --input {{input}} --output-csv {{output_csv}} --output-summary {{output_summary}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}}
+
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav
 

@@ -26,6 +26,10 @@ from neuroacoustic_resonator.core.input_drive import (
     SyntheticInputConfig,
     SyntheticInputDrive,
 )
+from neuroacoustic_resonator.analysis.audio_input_run import (
+    AudioInputRunConfig,
+    run_audio_input_simulation,
+)
 from neuroacoustic_resonator.analysis.metrics import (
     MetricsHistory,
     RegionalActivityMetrics,
@@ -62,6 +66,7 @@ from neuroacoustic_resonator.viz.live import (
 
 __all__ = [
     "AudioInputFeatures",
+    "AudioInputRunConfig",
     "FieldConfig",
     "FieldConfigModel",
     "FieldMetrics",
@@ -99,6 +104,7 @@ __all__ = [
     "render_audio_demo",
     "render_output_frame",
     "play_realtime_audio",
+    "run_audio_input_simulation",
     "save_field_state",
     "save_field_preview",
     "save_phase_preview",

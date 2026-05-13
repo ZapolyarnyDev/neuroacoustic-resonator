@@ -4,6 +4,10 @@ from neuroacoustic_resonator.analysis.benchmark import (
     benchmark_sizes,
     write_benchmark_results,
 )
+from neuroacoustic_resonator.analysis.audio_input_run import (
+    AudioInputRunConfig,
+    run_audio_input_simulation,
+)
 from neuroacoustic_resonator.analysis.diagnostics_export import (
     export_diagnostics_artifacts,
 )
@@ -28,6 +32,7 @@ from neuroacoustic_resonator.analysis.propagation_probe import (
 )
 
 __all__ = [
+    "AudioInputRunConfig",
     "BenchmarkResult",
     "ExperimentAnalysisConfig",
     "ExperimentRows",
@@ -43,6 +48,7 @@ __all__ = [
     "region_activity",
     "region_fast_activity",
     "region_slow_activity",
+    "run_audio_input_simulation",
     "run_propagation_probe",
     "run_experiment_suite",
     "write_benchmark_results",
