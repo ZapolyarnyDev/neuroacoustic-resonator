@@ -42,6 +42,9 @@ checkpoint:
 checkpoint-custom config steps output:
     uv run python scripts/save_checkpoint.py --config {{config}} --steps {{steps}} --output {{output}}
 
+resume-checkpoint checkpoint steps output:
+    uv run python scripts/resume_checkpoint.py --checkpoint {{checkpoint}} --steps {{steps}} --output {{output}}
+
 benchmark:
     uv run python scripts/benchmark_field.py --sizes 64,128,200 --steps 1000 --repeats 3 --output outputs/benchmarks/field-step.csv
 

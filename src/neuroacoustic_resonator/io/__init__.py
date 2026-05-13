@@ -7,6 +7,7 @@ from neuroacoustic_resonator.io.persistence import (
     save_field_state,
     save_simulation_checkpoint,
 )
+from neuroacoustic_resonator.io.resume import resume_simulation_checkpoint
 
 __all__ = [
     "CheckpointPaths",
@@ -16,4 +17,5 @@ __all__ = [
     "load_simulation_checkpoint",
     "save_field_state",
     "save_simulation_checkpoint",
+    "resume_simulation_checkpoint",
 ]
