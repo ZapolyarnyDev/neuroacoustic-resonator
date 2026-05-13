@@ -138,6 +138,15 @@ live-custom config interval_ms steps_per_update:
 live-record config output:
     uv run python scripts/live_field.py --config {{config}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode slope --diagnostics-output {{output}}
 
+live-wav input:
+    uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2
+
+live-wav-audio input:
+    uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode slope
+
+live-wav-record input output:
+    uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode slope --diagnostics-output {{output}}
+
 diagnostics-export input:
     uv run python scripts/export_diagnostics.py --input {{input}}
 

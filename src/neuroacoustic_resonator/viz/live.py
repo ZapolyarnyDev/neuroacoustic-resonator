@@ -21,6 +21,10 @@ from neuroacoustic_resonator.analysis.metrics import (
 from neuroacoustic_resonator.analysis.diagnostics_export import (
     export_diagnostics_artifacts,
 )
+from neuroacoustic_resonator.audio.input import (
+    WavInputDrive,
+    extract_audio_input_features,
+)
 from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
@@ -50,6 +54,11 @@ class LiveVisualizationConfig:
     audio_gate_sensitivity: float = 24.0
     diagnostics_output_path: Path | None = None
     diagnostics_sample_interval: int = 1
+    input_wav_path: Path | None = None
+    input_frame_size: int = 1024
+    input_hop_size: int = 512
+    input_drive_strength: float = 0.45
+    input_loop: bool = False
 
     def __post_init__(self) -> None:
         if self.interval_ms < 1:
@@ -87,6 +96,15 @@ class LiveVisualizationConfig:
             raise ValueError(msg)
         if self.diagnostics_sample_interval < 1:
             msg = "diagnostics_sample_interval must be positive"
+            raise ValueError(msg)
+        if self.input_frame_size < 1:
+            msg = "input_frame_size must be positive"
+            raise ValueError(msg)
+        if self.input_hop_size < 1:
+            msg = "input_hop_size must be positive"
+            raise ValueError(msg)
+        if self.input_drive_strength < 0.0:
+            msg = "input_drive_strength must be non-negative"
             raise ValueError(msg)
 
 
@@ -282,6 +300,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Write every Nth diagnostics row when --diagnostics-output is set.",
     )
+    parser.add_argument(
+        "--input-wav",
+        type=Path,
+        default=None,
+        help="Optional offline WAV input routed into R_in instead of synthetic input.",
+    )
+    parser.add_argument("--input-frame-size", type=int, default=1024)
+    parser.add_argument("--input-hop-size", type=int, default=512)
+    parser.add_argument("--input-drive-strength", type=float, default=0.45)
+    parser.add_argument(
+        "--input-loop",
+        action="store_true",
+        help="Loop the extracted WAV drive after it reaches the end.",
+    )
     return parser
 
 
@@ -293,6 +325,7 @@ def run_live_visualizer(config: LiveVisualizationConfig) -> int:
     simulation_config = SimulationConfig.from_file(config.config_path)
     simulation = Simulation.from_config(simulation_config)
     regions = RegionMasks.from_size(simulation_config.field.size)
+    input_drive = build_live_input_drive(config, regions)
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     visualizer = _LiveFieldWindow(
@@ -301,6 +334,7 @@ def run_live_visualizer(config: LiveVisualizationConfig) -> int:
         pg=pg,
         simulation=simulation,
         regions=regions,
+        input_drive=input_drive,
         config=config,
     )
     visualizer.show()
@@ -313,6 +347,38 @@ def run_live_visualizer(config: LiveVisualizationConfig) -> int:
     return exit_code
 
 
+def build_live_input_drive(
+    config: LiveVisualizationConfig,
+    regions: RegionMasks,
+) -> WavInputDrive | None:
+    if config.input_wav_path is None:
+        return None
+    features = extract_audio_input_features(
+        config.input_wav_path,
+        frame_size=config.input_frame_size,
+        hop_size=config.input_hop_size,
+        drive_strength=config.input_drive_strength,
+    )
+    return WavInputDrive(features, regions)
+
+
+def step_simulation_with_wav_input(
+    simulation: Simulation,
+    input_drive: WavInputDrive,
+    *,
+    input_step: int,
+) -> SimulationFrame:
+    input_value = input_drive.apply(simulation.field, input_step)
+    simulation.step_index += 1
+    state = simulation.field.step()
+    simulation.last_input_value = input_value
+    return SimulationFrame(
+        state=state,
+        metrics=simulation.field.metrics(step=simulation.step_index),
+        local_synchrony=simulation.field.local_synchrony(),
+    )
+
+
 class _LiveFieldWindow:
     def __init__(
         self,
@@ -322,6 +388,7 @@ class _LiveFieldWindow:
         pg: Any,
         simulation: Simulation,
         regions: RegionMasks,
+        input_drive: WavInputDrive | None,
         config: LiveVisualizationConfig,
     ) -> None:
         self._app = app
@@ -329,6 +396,7 @@ class _LiveFieldWindow:
         self._pg = pg
         self._simulation = simulation
         self._regions = regions
+        self._input_drive = input_drive
         self._config = config
         self._steps: deque[int] = deque(maxlen=config.history_size)
         self._diagnostic_specs = diagnostic_curve_specs()
@@ -441,7 +509,7 @@ class _LiveFieldWindow:
         try:
             frame = self._simulation.snapshot()
             for _ in range(self._config.steps_per_update):
-                frame = self._simulation.step()
+                frame = self._step_simulation()
             regional_metrics = self._regional_tracker.update(
                 frame,
                 self._regions,
@@ -480,6 +548,18 @@ class _LiveFieldWindow:
                 self._audio_output.stop()
             traceback.print_exc()
             self._app.quit()
+
+    def _step_simulation(self) -> SimulationFrame:
+        if self._input_drive is None:
+            return self._simulation.step()
+        input_step = self._simulation.step_index
+        if self._config.input_loop:
+            input_step %= self._input_drive.features.frame_count
+        return step_simulation_with_wav_input(
+            self._simulation,
+            self._input_drive,
+            input_step=input_step,
+        )
 
     def _append_diagnostics(
         self,
@@ -685,5 +765,10 @@ def main(argv: list[str] | None = None) -> int:
             audio_gate_sensitivity=args.audio_gate_sensitivity,
             diagnostics_output_path=args.diagnostics_output,
             diagnostics_sample_interval=args.diagnostics_sample_interval,
+            input_wav_path=args.input_wav,
+            input_frame_size=args.input_frame_size,
+            input_hop_size=args.input_hop_size,
+            input_drive_strength=args.input_drive_strength,
+            input_loop=args.input_loop,
         )
     )

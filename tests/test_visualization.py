@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from neuroacoustic_resonator import FieldConfig, RegionMasks, Simulation
+from neuroacoustic_resonator.audio.input import AudioInputFeatures, WavInputDrive
 from neuroacoustic_resonator.viz.live import (
     DiagnosticsSnapshotRecorder,
     LiveVisualizationConfig,
@@ -11,6 +12,7 @@ from neuroacoustic_resonator.viz.live import (
     diagnostics_row,
     frame_to_visualization,
     region_boundary_columns,
+    step_simulation_with_wav_input,
 )
 
 
@@ -62,6 +64,10 @@ def test_live_visualization_config_validates_values() -> None:
         LiveVisualizationConfig(audio_sample_rate=0)
     with pytest.raises(ValueError, match="diagnostics_sample_interval"):
         LiveVisualizationConfig(diagnostics_sample_interval=0)
+    with pytest.raises(ValueError, match="input_frame_size"):
+        LiveVisualizationConfig(input_frame_size=0)
+    with pytest.raises(ValueError, match="input_drive_strength"):
+        LiveVisualizationConfig(input_drive_strength=-0.1)
 
 
 def test_diagnostic_curve_specs_have_stable_labels() -> None:
@@ -169,6 +175,31 @@ def test_live_audio_output_callback_uses_latest_state() -> None:
     assert np.all(np.isfinite(outdata))
     assert np.max(np.abs(outdata)) > 0.0
     assert audio_output.envelope == 0.0
+
+
+def test_step_simulation_with_wav_input_routes_drive_to_input_region() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    features = AudioInputFeatures(
+        sample_rate=8_000,
+        frame_size=64,
+        hop_size=64,
+        rms=np.asarray([0.0, 1.0]),
+        onset=np.asarray([0.0, 1.0]),
+        spectral_centroid=np.asarray([0.0, 0.5]),
+        drive=np.asarray([0.0, 0.25]),
+    )
+    drive = WavInputDrive(features, regions)
+    before = simulation.field.state.phase.copy()
+
+    frame = step_simulation_with_wav_input(simulation, drive, input_step=1)
+
+    assert simulation.step_index == 1
+    assert simulation.last_input_value == 0.25
+    assert frame.metrics.step == 1
+    assert not np.allclose(
+        simulation.field.state.phase[regions.input], before[regions.input]
+    )
 
 
 def test_live_audio_output_supports_event_mode() -> None:
