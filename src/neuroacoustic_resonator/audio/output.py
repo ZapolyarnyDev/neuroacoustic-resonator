@@ -451,6 +451,151 @@ class SlopeTriggeredAudioRenderer:
         )
 
 
+class StimulusCoupledAudioRenderer:
+    def __init__(
+        self,
+        *,
+        sample_rate: int = 48_000,
+        frame_size: int = 512,
+        carrier_frequency: float = 220.0,
+        frequency_scale: float = 1.0,
+        gain: float = 0.2,
+        smoothing: float = 0.2,
+        input_threshold: float = 0.08,
+        input_onset_threshold: float = 0.025,
+        retrigger_frames: int = 8,
+        response_threshold: float = 0.0004,
+        response_sensitivity: float = 260.0,
+        response_window_frames: int = 14,
+        attack: float = 0.8,
+        release: float = 0.07,
+        hold_frames: int = 10,
+        hold_level: float = 0.2,
+    ) -> None:
+        if input_threshold < 0.0:
+            msg = "input_threshold must be non-negative"
+            raise ValueError(msg)
+        if input_onset_threshold < 0.0:
+            msg = "input_onset_threshold must be non-negative"
+            raise ValueError(msg)
+        if retrigger_frames < 0:
+            msg = "retrigger_frames must be non-negative"
+            raise ValueError(msg)
+        if response_threshold < 0.0:
+            msg = "response_threshold must be non-negative"
+            raise ValueError(msg)
+        if response_sensitivity <= 0.0:
+            msg = "response_sensitivity must be positive"
+            raise ValueError(msg)
+        if response_window_frames < 1:
+            msg = "response_window_frames must be positive"
+            raise ValueError(msg)
+        if not 0.0 < attack <= 1.0:
+            msg = "attack must be in (0, 1]"
+            raise ValueError(msg)
+        if not 0.0 < release <= 1.0:
+            msg = "release must be in (0, 1]"
+            raise ValueError(msg)
+        if hold_frames < 0:
+            msg = "hold_frames must be non-negative"
+            raise ValueError(msg)
+        if not 0.0 <= hold_level <= 1.0:
+            msg = "hold_level must be between 0 and 1"
+            raise ValueError(msg)
+
+        self.continuous = ContinuousAudioRenderer(
+            sample_rate=sample_rate,
+            frame_size=frame_size,
+            carrier_frequency=carrier_frequency,
+            frequency_scale=frequency_scale,
+            gain=gain,
+            smoothing=smoothing,
+        )
+        self.input_threshold = input_threshold
+        self.input_onset_threshold = input_onset_threshold
+        self.retrigger_frames = retrigger_frames
+        self.response_threshold = response_threshold
+        self.response_sensitivity = response_sensitivity
+        self.response_window_frames = response_window_frames
+        self.attack = attack
+        self.release = release
+        self.hold_frames = hold_frames
+        self.hold_level = hold_level
+        self.envelope = 0.0
+        self.last_activation = 0.0
+        self.stimulus_window = 0.0
+        self._window_remaining = 0
+        self._retrigger_remaining = 0
+        self._hold_remaining = 0
+        self._previous_activity: float | None = None
+        self._previous_input = 0.0
+
+    @property
+    def frame_size(self) -> int:
+        return self.continuous.frame_size
+
+    def render_frame(
+        self,
+        state: FieldState,
+        regions: RegionMasks,
+        *,
+        input_value: float = 0.0,
+    ) -> AudioArray:
+        input_level = abs(input_value)
+        input_rise = max(0.0, input_level - self._previous_input)
+        input_started = (
+            input_level >= self.input_threshold
+            and self._previous_input < self.input_threshold
+        )
+        input_onset = (
+            input_level >= self.input_threshold
+            and input_rise >= self.input_onset_threshold
+        )
+        if self._retrigger_remaining == 0 and (input_started or input_onset):
+            self._window_remaining = self.response_window_frames
+            self._retrigger_remaining = self.retrigger_frames
+        self._previous_input = input_level
+
+        activity = SlopeTriggeredAudioRenderer._output_activity_signal(state, regions)
+        if self._previous_activity is None:
+            slope = 0.0
+        else:
+            slope = max(0.0, activity - self._previous_activity)
+        self._previous_activity = activity
+
+        self.stimulus_window = (
+            self._window_remaining / self.response_window_frames
+            if self._window_remaining > 0
+            else 0.0
+        )
+        if self._window_remaining > 0:
+            self._window_remaining -= 1
+            self.last_activation = float(
+                np.clip(
+                    (slope - self.response_threshold) * self.response_sensitivity,
+                    0.0,
+                    1.0,
+                )
+            )
+        else:
+            self.last_activation = 0.0
+        if self._retrigger_remaining > 0:
+            self._retrigger_remaining -= 1
+
+        if self.last_activation > 0.0:
+            self._hold_remaining = self.hold_frames
+        elif self._hold_remaining > 0:
+            self._hold_remaining -= 1
+
+        target = self.last_activation
+        if self._hold_remaining > 0:
+            target = max(target, self.hold_level)
+
+        rate = self.attack if target > self.envelope else self.release
+        self.envelope += rate * (target - self.envelope)
+        return self.continuous.render_frame(state, regions) * self.envelope
+
+
 def write_wav(path: str | Path, audio: AudioArray, *, sample_rate: int) -> Path:
     if sample_rate < 1:
         msg = "sample_rate must be positive"

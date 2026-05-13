@@ -11,6 +11,7 @@ from neuroacoustic_resonator.audio.output import (
     EventDrivenAudioRenderer,
     GatedAudioRenderer,
     SlopeTriggeredAudioRenderer,
+    StimulusCoupledAudioRenderer,
     render_output_frame,
     write_wav,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "SimulationConfig",
     "SimulationFrame",
     "SlopeTriggeredAudioRenderer",
+    "StimulusCoupledAudioRenderer",
     "SyntheticInputConfig",
     "SyntheticInputDrive",
     "VisualizationFrame",

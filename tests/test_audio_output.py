@@ -9,6 +9,7 @@ from neuroacoustic_resonator.audio.output import (
     EventDrivenAudioRenderer,
     GatedAudioRenderer,
     SlopeTriggeredAudioRenderer,
+    StimulusCoupledAudioRenderer,
     render_output_frame,
     write_wav,
 )
@@ -241,3 +242,58 @@ def test_slope_triggered_audio_renderer_opens_on_rising_output_activity() -> Non
 def test_slope_triggered_audio_renderer_rejects_invalid_threshold() -> None:
     with pytest.raises(ValueError, match="slope_threshold"):
         SlopeTriggeredAudioRenderer(slope_threshold=-0.1)
+
+
+def test_stimulus_coupled_audio_renderer_requires_input_before_response() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = StimulusCoupledAudioRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        gain=0.5,
+        input_threshold=0.1,
+        input_onset_threshold=0.0,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+    )
+    renderer.render_frame(field.state, regions)
+    state = field.state
+    state.trace[regions.output] += 0.1
+
+    silent = renderer.render_frame(state, regions, input_value=0.0)
+    state.trace[regions.output] += 0.1
+    opened = renderer.render_frame(state, regions, input_value=0.2)
+
+    assert renderer.stimulus_window > 0.0
+    assert np.max(np.abs(silent)) == 0.0
+    assert np.max(np.abs(opened)) > 0.0
+
+
+def test_stimulus_coupled_audio_renderer_rejects_invalid_window() -> None:
+    with pytest.raises(ValueError, match="response_window_frames"):
+        StimulusCoupledAudioRenderer(response_window_frames=0)
+
+
+def test_stimulus_coupled_audio_renderer_uses_onset_not_sustained_input() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = StimulusCoupledAudioRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        input_threshold=0.1,
+        input_onset_threshold=0.05,
+        retrigger_frames=0,
+        response_window_frames=3,
+    )
+
+    renderer.render_frame(field.state, regions, input_value=0.2)
+    first_window = renderer.stimulus_window
+    renderer.render_frame(field.state, regions, input_value=0.2)
+    second_window = renderer.stimulus_window
+    renderer.render_frame(field.state, regions, input_value=0.2)
+    third_window = renderer.stimulus_window
+
+    assert first_window == pytest.approx(1.0)
+    assert second_window < first_window
+    assert third_window < second_window

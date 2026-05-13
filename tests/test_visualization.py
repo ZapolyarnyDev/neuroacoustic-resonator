@@ -64,6 +64,10 @@ def test_live_visualization_config_validates_values() -> None:
         LiveVisualizationConfig(audio_sample_rate=0)
     with pytest.raises(ValueError, match="diagnostics_sample_interval"):
         LiveVisualizationConfig(diagnostics_sample_interval=0)
+    with pytest.raises(ValueError, match="audio_coupled_response_window_frames"):
+        LiveVisualizationConfig(audio_coupled_response_window_frames=0)
+    with pytest.raises(ValueError, match="audio_coupled_response_sensitivity"):
+        LiveVisualizationConfig(audio_coupled_response_sensitivity=0.0)
     with pytest.raises(ValueError, match="input_frame_size"):
         LiveVisualizationConfig(input_frame_size=0)
     with pytest.raises(ValueError, match="input_drive_strength"):
@@ -82,6 +86,8 @@ def test_diagnostic_curve_specs_have_stable_labels() -> None:
         "output_slow_drift_score",
         "input_value",
         "audio_envelope",
+        "stimulus_window",
+        "coupled_audio_trigger",
     ]
     assert all(spec.label for spec in specs)
     assert all(len(spec.color) == 3 for spec in specs)
@@ -100,10 +106,17 @@ def test_diagnostics_row_contains_plotted_values() -> None:
     regions = RegionMasks.from_size(5)
     view_frame = frame_to_visualization(simulation.step(), regions)
 
-    row = diagnostics_row(view_frame, audio_envelope=0.25)
+    row = diagnostics_row(
+        view_frame,
+        audio_envelope=0.25,
+        stimulus_window=0.5,
+        coupled_audio_trigger=0.75,
+    )
 
     assert row["step"] == 1
     assert row["audio_envelope"] == 0.25
+    assert row["stimulus_window"] == 0.5
+    assert row["coupled_audio_trigger"] == 0.75
     assert row["output_activity"] >= 0.0
     assert row["output_fast_activity"] >= 0.0
     assert row["output_slow_activity"] >= 0.0
@@ -126,6 +139,8 @@ def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
             "output_slow_drift_score": 0.42,
             "input_value": 0.5,
             "audio_envelope": 0.6,
+            "stimulus_window": 0.7,
+            "coupled_audio_trigger": 0.8,
         },
         step=1,
     )
@@ -142,12 +157,14 @@ def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
             "output_slow_drift_score": 0.52,
             "input_value": 0.6,
             "audio_envelope": 0.7,
+            "stimulus_window": 0.8,
+            "coupled_audio_trigger": 0.9,
         },
         step=2,
     )
 
     assert "step,global_synchrony" in output.read_text(encoding="utf-8")
-    assert "2,0.2,0.3,0.4,0.41,0.42,0.5,0.51,0.52,0.6,0.7" in output.read_text(
+    assert "2,0.2,0.3,0.4,0.41,0.42,0.5,0.51,0.52,0.6,0.7,0.8,0.9" in output.read_text(
         encoding="utf-8"
     )
 
@@ -242,6 +259,28 @@ def test_live_audio_output_supports_slope_mode() -> None:
 
     assert np.all(np.isfinite(outdata))
     assert audio_output.envelope >= 0.0
+
+
+def test_live_audio_output_supports_coupled_mode() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    audio_output = _LiveAudioOutput(
+        config=LiveVisualizationConfig(
+            audio_enabled=True,
+            audio_sample_rate=8_000,
+            audio_frame_size=32,
+            audio_mode="coupled",
+        ),
+        regions=regions,
+    )
+    outdata = np.zeros((32, 1), dtype=np.float32)
+
+    audio_output.update_state(simulation.step().state, input_value=0.5)
+    audio_output.callback(outdata, 32, None, None)
+
+    assert np.all(np.isfinite(outdata))
+    assert audio_output.stimulus_window >= 0.0
+    assert audio_output.coupled_audio_trigger >= 0.0
 
 
 def test_live_audio_output_status_reporting_is_throttled(capsys) -> None:

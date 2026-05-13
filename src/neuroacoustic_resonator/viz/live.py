@@ -30,6 +30,7 @@ from neuroacoustic_resonator.audio.output import (
     EventDrivenAudioRenderer,
     GatedAudioRenderer,
     SlopeTriggeredAudioRenderer,
+    StimulusCoupledAudioRenderer,
 )
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.field import FieldState, FloatArray
@@ -52,6 +53,12 @@ class LiveVisualizationConfig:
     audio_frequency_scale: float = 1.0
     audio_gate_threshold: float = 0.002
     audio_gate_sensitivity: float = 24.0
+    audio_coupled_input_threshold: float = 0.08
+    audio_coupled_input_onset_threshold: float = 0.025
+    audio_coupled_retrigger_frames: int = 8
+    audio_coupled_response_threshold: float = 0.0004
+    audio_coupled_response_sensitivity: float = 260.0
+    audio_coupled_response_window_frames: int = 14
     diagnostics_output_path: Path | None = None
     diagnostics_sample_interval: int = 1
     input_wav_path: Path | None = None
@@ -70,8 +77,11 @@ class LiveVisualizationConfig:
         if self.history_size < 2:
             msg = "history_size must be at least 2"
             raise ValueError(msg)
-        if self.audio_mode not in {"continuous", "gated", "event", "slope"}:
-            msg = "audio_mode must be 'continuous', 'gated', 'event', or 'slope'"
+        if self.audio_mode not in {"continuous", "gated", "event", "slope", "coupled"}:
+            msg = (
+                "audio_mode must be 'continuous', 'gated', 'event', "
+                "'slope', or 'coupled'"
+            )
             raise ValueError(msg)
         if self.audio_sample_rate < 1:
             msg = "audio_sample_rate must be positive"
@@ -93,6 +103,24 @@ class LiveVisualizationConfig:
             raise ValueError(msg)
         if self.audio_gate_sensitivity <= 0.0:
             msg = "audio_gate_sensitivity must be positive"
+            raise ValueError(msg)
+        if self.audio_coupled_input_threshold < 0.0:
+            msg = "audio_coupled_input_threshold must be non-negative"
+            raise ValueError(msg)
+        if self.audio_coupled_input_onset_threshold < 0.0:
+            msg = "audio_coupled_input_onset_threshold must be non-negative"
+            raise ValueError(msg)
+        if self.audio_coupled_retrigger_frames < 0:
+            msg = "audio_coupled_retrigger_frames must be non-negative"
+            raise ValueError(msg)
+        if self.audio_coupled_response_threshold < 0.0:
+            msg = "audio_coupled_response_threshold must be non-negative"
+            raise ValueError(msg)
+        if self.audio_coupled_response_sensitivity <= 0.0:
+            msg = "audio_coupled_response_sensitivity must be positive"
+            raise ValueError(msg)
+        if self.audio_coupled_response_window_frames < 1:
+            msg = "audio_coupled_response_window_frames must be positive"
             raise ValueError(msg)
         if self.diagnostics_sample_interval < 1:
             msg = "diagnostics_sample_interval must be positive"
@@ -141,6 +169,8 @@ DIAGNOSTIC_CSV_FIELDS = (
     "output_slow_drift_score",
     "input_value",
     "audio_envelope",
+    "stimulus_window",
+    "coupled_audio_trigger",
 )
 
 
@@ -186,6 +216,16 @@ def diagnostic_curve_specs() -> tuple[DiagnosticCurveSpec, ...]:
             key="audio_envelope",
             label="audio envelope",
             color=(245, 245, 245),
+        ),
+        DiagnosticCurveSpec(
+            key="stimulus_window",
+            label="stimulus window",
+            color=(120, 255, 210),
+        ),
+        DiagnosticCurveSpec(
+            key="coupled_audio_trigger",
+            label="coupled trigger",
+            color=(255, 120, 170),
         ),
     )
 
@@ -277,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--audio-mode",
-        choices=("continuous", "gated", "event", "slope"),
+        choices=("continuous", "gated", "event", "slope", "coupled"),
         default="gated",
         help="Audio monitor mode used when --audio is enabled.",
     )
@@ -288,6 +328,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--audio-frequency-scale", type=float, default=1.0)
     parser.add_argument("--audio-gate-threshold", type=float, default=0.002)
     parser.add_argument("--audio-gate-sensitivity", type=float, default=24.0)
+    parser.add_argument("--audio-coupled-input-threshold", type=float, default=0.08)
+    parser.add_argument(
+        "--audio-coupled-input-onset-threshold",
+        type=float,
+        default=0.025,
+    )
+    parser.add_argument("--audio-coupled-retrigger-frames", type=int, default=8)
+    parser.add_argument(
+        "--audio-coupled-response-threshold", type=float, default=0.0004
+    )
+    parser.add_argument(
+        "--audio-coupled-response-sensitivity",
+        type=float,
+        default=260.0,
+    )
+    parser.add_argument("--audio-coupled-response-window-frames", type=int, default=14)
     parser.add_argument(
         "--diagnostics-output",
         type=Path,
@@ -532,11 +588,27 @@ class _LiveFieldWindow:
 
             self._steps.append(view_frame.step)
             if self._audio_output is not None:
-                self._audio_output.update_state(frame.state)
+                self._audio_output.update_state(
+                    frame.state,
+                    input_value=regional_metrics.input_value,
+                )
             audio_envelope = (
                 self._audio_output.envelope if self._audio_output is not None else 0.0
             )
-            self._append_diagnostics(view_frame, audio_envelope)
+            self._append_diagnostics(
+                view_frame,
+                audio_envelope,
+                stimulus_window=(
+                    self._audio_output.stimulus_window
+                    if self._audio_output is not None
+                    else 0.0
+                ),
+                coupled_audio_trigger=(
+                    self._audio_output.coupled_audio_trigger
+                    if self._audio_output is not None
+                    else 0.0
+                ),
+            )
         except KeyboardInterrupt:
             self._timer.stop()
             if self._audio_output is not None:
@@ -565,8 +637,15 @@ class _LiveFieldWindow:
         self,
         view_frame: VisualizationFrame,
         audio_envelope: float,
+        stimulus_window: float = 0.0,
+        coupled_audio_trigger: float = 0.0,
     ) -> None:
-        values = diagnostics_row(view_frame, audio_envelope)
+        values = diagnostics_row(
+            view_frame,
+            audio_envelope,
+            stimulus_window=stimulus_window,
+            coupled_audio_trigger=coupled_audio_trigger,
+        )
         step = int(values["step"])
         for key, value in values.items():
             if key == "step" or key not in self._diagnostic_curves:
@@ -582,6 +661,9 @@ class _LiveFieldWindow:
 def diagnostics_row(
     view_frame: VisualizationFrame,
     audio_envelope: float,
+    *,
+    stimulus_window: float = 0.0,
+    coupled_audio_trigger: float = 0.0,
 ) -> dict[str, float | int]:
     return {
         "step": view_frame.step,
@@ -597,6 +679,8 @@ def diagnostics_row(
         "output_slow_drift_score": view_frame.regional_metrics.output_slow_drift_score,
         "input_value": abs(view_frame.regional_metrics.input_value),
         "audio_envelope": audio_envelope,
+        "stimulus_window": stimulus_window,
+        "coupled_audio_trigger": coupled_audio_trigger,
     }
 
 
@@ -639,6 +723,7 @@ class _LiveAudioOutput:
         self._regions = regions
         self._lock = threading.Lock()
         self._state: FieldState | None = None
+        self._input_value = 0.0
         self._stream: Any | None = None
         self._stream_factory = stream_factory
         self._renderer = self._build_renderer(config.audio_frame_size)
@@ -651,6 +736,7 @@ class _LiveAudioOutput:
         | GatedAudioRenderer
         | EventDrivenAudioRenderer
         | SlopeTriggeredAudioRenderer
+        | StimulusCoupledAudioRenderer
     ):
         if self._config.audio_mode == "gated":
             return GatedAudioRenderer(
@@ -677,6 +763,24 @@ class _LiveAudioOutput:
                 carrier_frequency=self._config.audio_carrier_frequency,
                 frequency_scale=self._config.audio_frequency_scale,
                 gain=self._config.audio_gain,
+            )
+        if self._config.audio_mode == "coupled":
+            return StimulusCoupledAudioRenderer(
+                sample_rate=self._config.audio_sample_rate,
+                frame_size=frame_size,
+                carrier_frequency=self._config.audio_carrier_frequency,
+                frequency_scale=self._config.audio_frequency_scale,
+                gain=self._config.audio_gain,
+                input_threshold=self._config.audio_coupled_input_threshold,
+                input_onset_threshold=(
+                    self._config.audio_coupled_input_onset_threshold
+                ),
+                retrigger_frames=self._config.audio_coupled_retrigger_frames,
+                response_threshold=self._config.audio_coupled_response_threshold,
+                response_sensitivity=self._config.audio_coupled_response_sensitivity,
+                response_window_frames=(
+                    self._config.audio_coupled_response_window_frames
+                ),
             )
         return ContinuousAudioRenderer(
             sample_rate=self._config.audio_sample_rate,
@@ -708,13 +812,22 @@ class _LiveAudioOutput:
         self._stream.__exit__(None, None, None)
         self._stream = None
 
-    def update_state(self, state: FieldState) -> None:
+    def update_state(self, state: FieldState, *, input_value: float = 0.0) -> None:
         with self._lock:
             self._state = state
+            self._input_value = input_value
 
     @property
     def envelope(self) -> float:
         return float(getattr(self._renderer, "envelope", 0.0))
+
+    @property
+    def stimulus_window(self) -> float:
+        return float(getattr(self._renderer, "stimulus_window", 0.0))
+
+    @property
+    def coupled_audio_trigger(self) -> float:
+        return float(getattr(self._renderer, "last_activation", 0.0))
 
     def callback(
         self,
@@ -729,13 +842,21 @@ class _LiveAudioOutput:
 
         with self._lock:
             state = self._state
+            input_value = getattr(self, "_input_value", 0.0)
         if state is None:
             outdata[:, 0] = 0.0
             return
 
         if frames != self._renderer.frame_size:
             self._renderer = self._build_renderer(frames)
-        audio = self._renderer.render_frame(state, self._regions)
+        if isinstance(self._renderer, StimulusCoupledAudioRenderer):
+            audio = self._renderer.render_frame(
+                state,
+                self._regions,
+                input_value=input_value,
+            )
+        else:
+            audio = self._renderer.render_frame(state, self._regions)
         outdata[:, 0] = np.asarray(audio, dtype=np.float32)
 
     def _report_status(self, status: Any) -> None:
@@ -763,6 +884,16 @@ def main(argv: list[str] | None = None) -> int:
             audio_frequency_scale=args.audio_frequency_scale,
             audio_gate_threshold=args.audio_gate_threshold,
             audio_gate_sensitivity=args.audio_gate_sensitivity,
+            audio_coupled_input_threshold=args.audio_coupled_input_threshold,
+            audio_coupled_input_onset_threshold=(
+                args.audio_coupled_input_onset_threshold
+            ),
+            audio_coupled_retrigger_frames=args.audio_coupled_retrigger_frames,
+            audio_coupled_response_threshold=args.audio_coupled_response_threshold,
+            audio_coupled_response_sensitivity=args.audio_coupled_response_sensitivity,
+            audio_coupled_response_window_frames=(
+                args.audio_coupled_response_window_frames
+            ),
             diagnostics_output_path=args.diagnostics_output,
             diagnostics_sample_interval=args.diagnostics_sample_interval,
             input_wav_path=args.input_wav,
