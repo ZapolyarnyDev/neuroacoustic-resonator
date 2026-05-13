@@ -66,6 +66,12 @@ audio-custom config duration output:
 audio-custom-carrier config duration carrier frequency_scale output:
     uv run python scripts/render_audio_demo.py --config {{config}} --duration-seconds {{duration}} --carrier-frequency {{carrier}} --frequency-scale {{frequency_scale}} --output {{output}}
 
+audio-input input output:
+    uv run python scripts/extract_audio_input.py --input {{input}} --output {{output}}
+
+audio-input-custom input output frame_size hop_size drive_strength:
+    uv run python scripts/extract_audio_input.py --input {{input}} --output {{output}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}}
+
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav
 

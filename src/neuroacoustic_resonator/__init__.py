@@ -1,5 +1,11 @@
 """Core package for the neuroacoustic resonator."""
 
+from neuroacoustic_resonator.audio.input import (
+    AudioInputFeatures,
+    WavInputDrive,
+    extract_audio_input_features,
+    write_audio_input_features_csv,
+)
 from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
@@ -55,6 +61,7 @@ from neuroacoustic_resonator.viz.live import (
 )
 
 __all__ = [
+    "AudioInputFeatures",
     "FieldConfig",
     "FieldConfigModel",
     "FieldMetrics",
@@ -78,8 +85,10 @@ __all__ = [
     "SyntheticInputConfig",
     "SyntheticInputDrive",
     "VisualizationFrame",
+    "WavInputDrive",
     "compute_regional_activity_metrics",
     "export_diagnostics_artifacts",
+    "extract_audio_input_features",
     "frame_to_visualization",
     "checkpoint_paths",
     "load_field_state",
@@ -95,4 +104,5 @@ __all__ = [
     "save_phase_preview",
     "save_simulation_checkpoint",
     "write_wav",
+    "write_audio_input_features_csv",
 ]
