@@ -8,6 +8,7 @@ from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
     GatedAudioRenderer,
+    SlopeTriggeredAudioRenderer,
     render_output_frame,
     write_wav,
 )
@@ -213,3 +214,30 @@ def test_event_driven_audio_renderer_holds_after_event() -> None:
 def test_event_driven_audio_renderer_rejects_invalid_hold_frames() -> None:
     with pytest.raises(ValueError, match="hold_frames"):
         EventDrivenAudioRenderer(hold_frames=-1)
+
+
+def test_slope_triggered_audio_renderer_opens_on_rising_output_activity() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = SlopeTriggeredAudioRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        gain=0.5,
+        slope_threshold=0.0,
+        slope_sensitivity=100.0,
+        attack=1.0,
+    )
+    renderer.render_frame(field.state, regions)
+    state = field.state
+    state.trace[regions.output] += 0.1
+
+    audio = renderer.render_frame(state, regions)
+
+    assert renderer.last_activation > 0.0
+    assert renderer.envelope > 0.0
+    assert np.max(np.abs(audio)) > 0.0
+
+
+def test_slope_triggered_audio_renderer_rejects_invalid_threshold() -> None:
+    with pytest.raises(ValueError, match="slope_threshold"):
+        SlopeTriggeredAudioRenderer(slope_threshold=-0.1)

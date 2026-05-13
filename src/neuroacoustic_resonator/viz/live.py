@@ -21,6 +21,7 @@ from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
     GatedAudioRenderer,
+    SlopeTriggeredAudioRenderer,
 )
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.field import FieldState, FloatArray
@@ -54,8 +55,8 @@ class LiveVisualizationConfig:
         if self.history_size < 2:
             msg = "history_size must be at least 2"
             raise ValueError(msg)
-        if self.audio_mode not in {"continuous", "gated", "event"}:
-            msg = "audio_mode must be 'continuous', 'gated', or 'event'"
+        if self.audio_mode not in {"continuous", "gated", "event", "slope"}:
+            msg = "audio_mode must be 'continuous', 'gated', 'event', or 'slope'"
             raise ValueError(msg)
         if self.audio_sample_rate < 1:
             msg = "audio_sample_rate must be positive"
@@ -224,7 +225,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--audio-mode",
-        choices=("continuous", "gated", "event"),
+        choices=("continuous", "gated", "event", "slope"),
         default="gated",
         help="Audio monitor mode used when --audio is enabled.",
     )
@@ -464,7 +465,12 @@ class _LiveAudioOutput:
 
     def _build_renderer(
         self, frame_size: int
-    ) -> ContinuousAudioRenderer | GatedAudioRenderer | EventDrivenAudioRenderer:
+    ) -> (
+        ContinuousAudioRenderer
+        | GatedAudioRenderer
+        | EventDrivenAudioRenderer
+        | SlopeTriggeredAudioRenderer
+    ):
         if self._config.audio_mode == "gated":
             return GatedAudioRenderer(
                 sample_rate=self._config.audio_sample_rate,
@@ -477,6 +483,14 @@ class _LiveAudioOutput:
             )
         if self._config.audio_mode == "event":
             return EventDrivenAudioRenderer(
+                sample_rate=self._config.audio_sample_rate,
+                frame_size=frame_size,
+                carrier_frequency=self._config.audio_carrier_frequency,
+                frequency_scale=self._config.audio_frequency_scale,
+                gain=self._config.audio_gain,
+            )
+        if self._config.audio_mode == "slope":
+            return SlopeTriggeredAudioRenderer(
                 sample_rate=self._config.audio_sample_rate,
                 frame_size=frame_size,
                 carrier_frequency=self._config.audio_carrier_frequency,

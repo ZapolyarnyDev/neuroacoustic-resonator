@@ -347,6 +347,110 @@ class EventDrivenAudioRenderer:
         )
 
 
+class SlopeTriggeredAudioRenderer:
+    def __init__(
+        self,
+        *,
+        sample_rate: int = 48_000,
+        frame_size: int = 512,
+        carrier_frequency: float = 220.0,
+        frequency_scale: float = 1.0,
+        gain: float = 0.2,
+        smoothing: float = 0.2,
+        slope_threshold: float = 0.0005,
+        slope_sensitivity: float = 220.0,
+        attack: float = 0.75,
+        release: float = 0.06,
+        hold_frames: int = 12,
+        hold_level: float = 0.22,
+    ) -> None:
+        if slope_threshold < 0.0:
+            msg = "slope_threshold must be non-negative"
+            raise ValueError(msg)
+        if slope_sensitivity <= 0.0:
+            msg = "slope_sensitivity must be positive"
+            raise ValueError(msg)
+        if not 0.0 < attack <= 1.0:
+            msg = "attack must be in (0, 1]"
+            raise ValueError(msg)
+        if not 0.0 < release <= 1.0:
+            msg = "release must be in (0, 1]"
+            raise ValueError(msg)
+        if hold_frames < 0:
+            msg = "hold_frames must be non-negative"
+            raise ValueError(msg)
+        if not 0.0 <= hold_level <= 1.0:
+            msg = "hold_level must be between 0 and 1"
+            raise ValueError(msg)
+
+        self.continuous = ContinuousAudioRenderer(
+            sample_rate=sample_rate,
+            frame_size=frame_size,
+            carrier_frequency=carrier_frequency,
+            frequency_scale=frequency_scale,
+            gain=gain,
+            smoothing=smoothing,
+        )
+        self.slope_threshold = slope_threshold
+        self.slope_sensitivity = slope_sensitivity
+        self.attack = attack
+        self.release = release
+        self.hold_frames = hold_frames
+        self.hold_level = hold_level
+        self.envelope = 0.0
+        self.last_activation = 0.0
+        self._hold_remaining = 0
+        self._previous_activity: float | None = None
+
+    @property
+    def frame_size(self) -> int:
+        return self.continuous.frame_size
+
+    def render_frame(self, state: FieldState, regions: RegionMasks) -> AudioArray:
+        activity = self._output_activity_signal(state, regions)
+        if self._previous_activity is None:
+            slope = 0.0
+        else:
+            slope = max(0.0, activity - self._previous_activity)
+        self._previous_activity = activity
+
+        self.last_activation = float(
+            np.clip(
+                (slope - self.slope_threshold) * self.slope_sensitivity,
+                0.0,
+                1.0,
+            )
+        )
+        if self.last_activation > 0.0:
+            self._hold_remaining = self.hold_frames
+        elif self._hold_remaining > 0:
+            self._hold_remaining -= 1
+
+        target = self.last_activation
+        if self._hold_remaining > 0:
+            target = max(target, self.hold_level)
+
+        rate = self.attack if target > self.envelope else self.release
+        self.envelope += rate * (target - self.envelope)
+        return self.continuous.render_frame(state, regions) * self.envelope
+
+    @staticmethod
+    def _output_activity_signal(state: FieldState, regions: RegionMasks) -> float:
+        if state.phase.shape != regions.shape:
+            msg = "state and regions must have matching shapes"
+            raise ValueError(msg)
+        mask = regions.output
+        if not np.any(mask):
+            return 0.0
+        phase = state.phase[mask]
+        synchrony = float(np.abs(np.mean(np.exp(1j * phase))))
+        return float(
+            np.mean(state.trace[mask])
+            + np.mean(1.0 - state.metabolite[mask])
+            + 0.25 * synchrony
+        )
+
+
 def write_wav(path: str | Path, audio: AudioArray, *, sample_rate: int) -> Path:
     if sample_rate < 1:
         msg = "sample_rate must be positive"

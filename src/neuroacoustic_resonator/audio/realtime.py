@@ -15,6 +15,7 @@ from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
     GatedAudioRenderer,
+    SlopeTriggeredAudioRenderer,
 )
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
@@ -72,8 +73,8 @@ class RealtimeAudioConfig:
         if self.duration_seconds is not None and self.duration_seconds <= 0.0:
             msg = "duration_seconds must be positive"
             raise ValueError(msg)
-        if self.audio_mode not in {"continuous", "gated", "event"}:
-            msg = "audio_mode must be 'continuous', 'gated', or 'event'"
+        if self.audio_mode not in {"continuous", "gated", "event", "slope"}:
+            msg = "audio_mode must be 'continuous', 'gated', 'event', or 'slope'"
             raise ValueError(msg)
         if self.gate_threshold < 0.0:
             msg = "gate_threshold must be non-negative"
@@ -96,7 +97,12 @@ class RealtimeAudioEngine:
     def _build_renderer(
         self,
         frame_size: int,
-    ) -> ContinuousAudioRenderer | GatedAudioRenderer | EventDrivenAudioRenderer:
+    ) -> (
+        ContinuousAudioRenderer
+        | GatedAudioRenderer
+        | EventDrivenAudioRenderer
+        | SlopeTriggeredAudioRenderer
+    ):
         if self.config.audio_mode == "gated":
             return GatedAudioRenderer(
                 sample_rate=self.config.sample_rate,
@@ -110,6 +116,15 @@ class RealtimeAudioEngine:
             )
         if self.config.audio_mode == "event":
             return EventDrivenAudioRenderer(
+                sample_rate=self.config.sample_rate,
+                frame_size=frame_size,
+                carrier_frequency=self.config.carrier_frequency,
+                frequency_scale=self.config.frequency_scale,
+                gain=self.config.gain,
+                smoothing=self.config.smoothing,
+            )
+        if self.config.audio_mode == "slope":
+            return SlopeTriggeredAudioRenderer(
                 sample_rate=self.config.sample_rate,
                 frame_size=frame_size,
                 carrier_frequency=self.config.carrier_frequency,
@@ -202,9 +217,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--physics-steps-per-audio-frame", type=int, default=1)
     parser.add_argument(
         "--audio-mode",
-        choices=("continuous", "gated", "event"),
+        choices=("continuous", "gated", "event", "slope"),
         default="continuous",
-        help="Continuous field monitor, gated monitor, or event response monitor.",
+        help="Continuous field monitor, gated monitor, event monitor, or slope trigger.",
     )
     parser.add_argument("--gate-threshold", type=float, default=0.002)
     parser.add_argument("--gate-sensitivity", type=float, default=24.0)
