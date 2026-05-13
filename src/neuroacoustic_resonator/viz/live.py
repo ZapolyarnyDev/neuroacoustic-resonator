@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib
 import threading
 import traceback
@@ -44,6 +45,8 @@ class LiveVisualizationConfig:
     audio_frequency_scale: float = 1.0
     audio_gate_threshold: float = 0.002
     audio_gate_sensitivity: float = 24.0
+    diagnostics_output_path: Path | None = None
+    diagnostics_sample_interval: int = 1
 
     def __post_init__(self) -> None:
         if self.interval_ms < 1:
@@ -79,6 +82,9 @@ class LiveVisualizationConfig:
         if self.audio_gate_sensitivity <= 0.0:
             msg = "audio_gate_sensitivity must be positive"
             raise ValueError(msg)
+        if self.diagnostics_sample_interval < 1:
+            msg = "diagnostics_sample_interval must be positive"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -100,6 +106,17 @@ class DiagnosticCurveSpec:
     label: str
     color: tuple[int, int, int]
     width: float = 1.5
+
+
+DIAGNOSTIC_CSV_FIELDS = (
+    "step",
+    "global_synchrony",
+    "mean_metabolite",
+    "output_activity",
+    "output_event_score",
+    "input_value",
+    "audio_envelope",
+)
 
 
 def diagnostic_curve_specs() -> tuple[DiagnosticCurveSpec, ...]:
@@ -236,6 +253,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--audio-frequency-scale", type=float, default=1.0)
     parser.add_argument("--audio-gate-threshold", type=float, default=0.002)
     parser.add_argument("--audio-gate-sensitivity", type=float, default=24.0)
+    parser.add_argument(
+        "--diagnostics-output",
+        type=Path,
+        default=None,
+        help="Optional CSV path for live diagnostics snapshots.",
+    )
+    parser.add_argument(
+        "--diagnostics-sample-interval",
+        type=int,
+        default=1,
+        help="Write every Nth diagnostics row when --diagnostics-output is set.",
+    )
     return parser
 
 
@@ -286,6 +315,10 @@ class _LiveFieldWindow:
         }
         self._diagnostic_curves: dict[str, Any] = {}
         self._diagnostics_legend_label: Any | None = None
+        self._diagnostics_recorder = DiagnosticsSnapshotRecorder(
+            config.diagnostics_output_path,
+            sample_interval=config.diagnostics_sample_interval,
+        )
         self._regional_tracker = RegionalActivityTracker()
 
         self._window = pg.GraphicsLayoutWidget(title="Neuroacoustic Resonator")
@@ -430,20 +463,59 @@ class _LiveFieldWindow:
         view_frame: VisualizationFrame,
         audio_envelope: float,
     ) -> None:
-        values = {
-            "global_synchrony": view_frame.global_synchrony,
-            "mean_metabolite": view_frame.mean_metabolite,
-            "output_activity": view_frame.regional_metrics.output_activity,
-            "output_event_score": view_frame.regional_metrics.output_event_score,
-            "input_value": abs(view_frame.regional_metrics.input_value),
-            "audio_envelope": audio_envelope,
-        }
+        values = diagnostics_row(view_frame, audio_envelope)
+        step = int(values["step"])
         for key, value in values.items():
-            self._diagnostic_values[key].append(value)
+            if key == "step":
+                continue
+            self._diagnostic_values[key].append(float(value))
             self._diagnostic_curves[key].setData(
                 list(self._steps),
                 list(self._diagnostic_values[key]),
             )
+        self._diagnostics_recorder.record(values, step=step)
+
+
+def diagnostics_row(
+    view_frame: VisualizationFrame,
+    audio_envelope: float,
+) -> dict[str, float | int]:
+    return {
+        "step": view_frame.step,
+        "global_synchrony": view_frame.global_synchrony,
+        "mean_metabolite": view_frame.mean_metabolite,
+        "output_activity": view_frame.regional_metrics.output_activity,
+        "output_event_score": view_frame.regional_metrics.output_event_score,
+        "input_value": abs(view_frame.regional_metrics.input_value),
+        "audio_envelope": audio_envelope,
+    }
+
+
+class DiagnosticsSnapshotRecorder:
+    def __init__(
+        self,
+        output_path: Path | None,
+        *,
+        sample_interval: int = 1,
+    ) -> None:
+        if sample_interval < 1:
+            msg = "sample_interval must be positive"
+            raise ValueError(msg)
+        self.output_path = output_path
+        self.sample_interval = sample_interval
+        self._initialized = False
+
+    def record(self, row: dict[str, float | int], *, step: int) -> None:
+        if self.output_path is None or step % self.sample_interval != 0:
+            return
+        self.output_path.parent.mkdir(parents=True, exist_ok=True)
+        write_header = not self._initialized or not self.output_path.exists()
+        with self.output_path.open("a", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=DIAGNOSTIC_CSV_FIELDS)
+            if write_header:
+                writer.writeheader()
+            writer.writerow(row)
+        self._initialized = True
 
 
 class _LiveAudioOutput:
@@ -582,5 +654,7 @@ def main(argv: list[str] | None = None) -> int:
             audio_frequency_scale=args.audio_frequency_scale,
             audio_gate_threshold=args.audio_gate_threshold,
             audio_gate_sensitivity=args.audio_gate_sensitivity,
+            diagnostics_output_path=args.diagnostics_output,
+            diagnostics_sample_interval=args.diagnostics_sample_interval,
         )
     )

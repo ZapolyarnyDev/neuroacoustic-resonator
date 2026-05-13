@@ -3,10 +3,12 @@ import pytest
 
 from neuroacoustic_resonator import FieldConfig, RegionMasks, Simulation
 from neuroacoustic_resonator.viz.live import (
+    DiagnosticsSnapshotRecorder,
     LiveVisualizationConfig,
     _LiveAudioOutput,
     diagnostic_curve_specs,
     diagnostic_legend_html,
+    diagnostics_row,
     frame_to_visualization,
     region_boundary_columns,
 )
@@ -58,6 +60,8 @@ def test_live_visualization_config_validates_values() -> None:
         LiveVisualizationConfig(audio_mode="unknown")
     with pytest.raises(ValueError, match="audio_sample_rate"):
         LiveVisualizationConfig(audio_sample_rate=0)
+    with pytest.raises(ValueError, match="diagnostics_sample_interval"):
+        LiveVisualizationConfig(diagnostics_sample_interval=0)
 
 
 def test_diagnostic_curve_specs_have_stable_labels() -> None:
@@ -81,6 +85,51 @@ def test_diagnostic_legend_html_contains_labels_and_colors() -> None:
     assert "global synchrony" in html
     assert "audio envelope" in html
     assert "rgb(" in html
+
+
+def test_diagnostics_row_contains_plotted_values() -> None:
+    simulation = Simulation(FieldConfig(size=5, seed=1))
+    regions = RegionMasks.from_size(5)
+    view_frame = frame_to_visualization(simulation.step(), regions)
+
+    row = diagnostics_row(view_frame, audio_envelope=0.25)
+
+    assert row["step"] == 1
+    assert row["audio_envelope"] == 0.25
+    assert row["output_activity"] >= 0.0
+
+
+def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
+    output = tmp_path / "diagnostics.csv"
+    recorder = DiagnosticsSnapshotRecorder(output, sample_interval=2)
+
+    recorder.record(
+        {
+            "step": 1,
+            "global_synchrony": 0.1,
+            "mean_metabolite": 0.2,
+            "output_activity": 0.3,
+            "output_event_score": 0.4,
+            "input_value": 0.5,
+            "audio_envelope": 0.6,
+        },
+        step=1,
+    )
+    recorder.record(
+        {
+            "step": 2,
+            "global_synchrony": 0.2,
+            "mean_metabolite": 0.3,
+            "output_activity": 0.4,
+            "output_event_score": 0.5,
+            "input_value": 0.6,
+            "audio_envelope": 0.7,
+        },
+        step=2,
+    )
+
+    assert "step,global_synchrony" in output.read_text(encoding="utf-8")
+    assert "2,0.2,0.3,0.4,0.5,0.6,0.7" in output.read_text(encoding="utf-8")
 
 
 def test_live_audio_output_callback_uses_latest_state() -> None:

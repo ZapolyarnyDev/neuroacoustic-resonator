@@ -123,6 +123,9 @@ live-field:
 live-custom config interval_ms steps_per_update:
     uv run python scripts/live_field.py --config {{config}} --interval-ms {{interval_ms}} --steps-per-update {{steps_per_update}}
 
+live-record config output:
+    uv run python scripts/live_field.py --config {{config}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode slope --diagnostics-output {{output}}
+
 lint:
     uv run ruff check .
 
