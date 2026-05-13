@@ -65,6 +65,9 @@ steps: 8
     assert len(rows) == 8
     assert rows[0]["offset"] == "1"
     assert "output_activity_delta" in rows[0]
+    assert "output_fast_response_score" in rows[0]
+    assert "output_slow_drift_score" in rows[0]
     assert summary["response_reached_output"] is True
     assert isinstance(summary["output_peak_at_horizon_end"], bool)
+    assert "slow_fast_peak_ratio" in summary
     assert loaded_summary["peak_output_activity_step"] >= 1

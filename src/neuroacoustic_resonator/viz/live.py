@@ -18,6 +18,9 @@ from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityTracker,
     compute_regional_activity_metrics,
 )
+from neuroacoustic_resonator.analysis.diagnostics_export import (
+    export_diagnostics_artifacts,
+)
 from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
@@ -113,7 +116,11 @@ DIAGNOSTIC_CSV_FIELDS = (
     "global_synchrony",
     "mean_metabolite",
     "output_activity",
+    "output_fast_activity",
+    "output_slow_activity",
     "output_event_score",
+    "output_fast_response_score",
+    "output_slow_drift_score",
     "input_value",
     "audio_envelope",
 )
@@ -141,6 +148,16 @@ def diagnostic_curve_specs() -> tuple[DiagnosticCurveSpec, ...]:
             key="output_event_score",
             label="output event score",
             color=(185, 135, 255),
+        ),
+        DiagnosticCurveSpec(
+            key="output_fast_response_score",
+            label="fast response score",
+            color=(255, 210, 120),
+        ),
+        DiagnosticCurveSpec(
+            key="output_slow_drift_score",
+            label="slow drift score",
+            color=(130, 170, 255),
         ),
         DiagnosticCurveSpec(
             key="input_value",
@@ -287,7 +304,13 @@ def run_live_visualizer(config: LiveVisualizationConfig) -> int:
         config=config,
     )
     visualizer.show()
-    return int(app.exec())
+    exit_code = int(app.exec())
+    if config.diagnostics_output_path is not None:
+        try:
+            export_diagnostics_artifacts(config.diagnostics_output_path)
+        except ValueError:
+            pass
+    return exit_code
 
 
 class _LiveFieldWindow:
@@ -466,7 +489,7 @@ class _LiveFieldWindow:
         values = diagnostics_row(view_frame, audio_envelope)
         step = int(values["step"])
         for key, value in values.items():
-            if key == "step":
+            if key == "step" or key not in self._diagnostic_curves:
                 continue
             self._diagnostic_values[key].append(float(value))
             self._diagnostic_curves[key].setData(
@@ -485,7 +508,13 @@ def diagnostics_row(
         "global_synchrony": view_frame.global_synchrony,
         "mean_metabolite": view_frame.mean_metabolite,
         "output_activity": view_frame.regional_metrics.output_activity,
+        "output_fast_activity": view_frame.regional_metrics.output_fast_activity,
+        "output_slow_activity": view_frame.regional_metrics.output_slow_activity,
         "output_event_score": view_frame.regional_metrics.output_event_score,
+        "output_fast_response_score": (
+            view_frame.regional_metrics.output_fast_response_score
+        ),
+        "output_slow_drift_score": view_frame.regional_metrics.output_slow_drift_score,
         "input_value": abs(view_frame.regional_metrics.input_value),
         "audio_envelope": audio_envelope,
     }

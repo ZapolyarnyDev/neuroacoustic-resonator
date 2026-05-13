@@ -87,8 +87,12 @@ def test_compute_regional_activity_metrics_reports_output_activity() -> None:
 
     assert metrics.step == 1
     assert metrics.input_activity >= 0.0
+    assert metrics.input_fast_activity >= 0.0
+    assert metrics.input_slow_activity >= 0.0
     assert metrics.assoc_activity >= 0.0
     assert metrics.output_activity >= 0.0
+    assert metrics.output_fast_activity >= 0.0
+    assert metrics.output_slow_activity >= 0.0
     assert metrics.left_to_right_ratio >= 0.0
     assert metrics.output_event_score == 0.0
 
@@ -104,6 +108,7 @@ def test_regional_activity_tracker_reports_output_event_score() -> None:
 
     assert changed.output_synchrony_delta != 0.0
     assert changed.output_event_score > 0.0
+    assert changed.output_fast_response_score > 0.0
 
 
 def test_compute_regional_activity_metrics_rejects_shape_mismatch() -> None:

@@ -26,6 +26,11 @@ from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityTracker,
     compute_regional_activity_metrics,
     region_activity,
+    region_fast_activity,
+    region_slow_activity,
+)
+from neuroacoustic_resonator.analysis.diagnostics_export import (
+    export_diagnostics_artifacts,
 )
 from neuroacoustic_resonator.io.persistence import (
     CheckpointPaths,
@@ -74,11 +79,14 @@ __all__ = [
     "SyntheticInputDrive",
     "VisualizationFrame",
     "compute_regional_activity_metrics",
+    "export_diagnostics_artifacts",
     "frame_to_visualization",
     "checkpoint_paths",
     "load_field_state",
     "load_simulation_checkpoint",
     "region_activity",
+    "region_fast_activity",
+    "region_slow_activity",
     "render_audio_demo",
     "render_output_frame",
     "play_realtime_audio",

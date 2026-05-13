@@ -4,6 +4,9 @@ from neuroacoustic_resonator.analysis.benchmark import (
     benchmark_sizes,
     write_benchmark_results,
 )
+from neuroacoustic_resonator.analysis.diagnostics_export import (
+    export_diagnostics_artifacts,
+)
 from neuroacoustic_resonator.analysis.experiments import (
     ExperimentAnalysisConfig,
     ExperimentRows,
@@ -15,7 +18,9 @@ from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityMetrics,
     RegionalActivityTracker,
     compute_regional_activity_metrics,
+    region_fast_activity,
     region_activity,
+    region_slow_activity,
 )
 from neuroacoustic_resonator.analysis.propagation_probe import (
     PropagationProbeConfig,
@@ -34,7 +39,10 @@ __all__ = [
     "benchmark_field_step",
     "benchmark_sizes",
     "compute_regional_activity_metrics",
+    "export_diagnostics_artifacts",
     "region_activity",
+    "region_fast_activity",
+    "region_slow_activity",
     "run_propagation_probe",
     "run_experiment_suite",
     "write_benchmark_results",

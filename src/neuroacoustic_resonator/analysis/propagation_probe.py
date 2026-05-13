@@ -109,8 +109,14 @@ def propagation_probe_row(
         "offset": offset,
         "input_value": metrics.input_value,
         "input_activity": metrics.input_activity,
+        "input_fast_activity": metrics.input_fast_activity,
+        "input_slow_activity": metrics.input_slow_activity,
         "assoc_activity": metrics.assoc_activity,
+        "assoc_fast_activity": metrics.assoc_fast_activity,
+        "assoc_slow_activity": metrics.assoc_slow_activity,
         "output_activity": metrics.output_activity,
+        "output_fast_activity": metrics.output_fast_activity,
+        "output_slow_activity": metrics.output_slow_activity,
         "input_activity_delta": input_delta,
         "assoc_activity_delta": assoc_delta,
         "output_activity_delta": output_delta,
@@ -118,7 +124,11 @@ def propagation_probe_row(
         "left_to_right_ratio": metrics.left_to_right_ratio,
         "output_trace": metrics.output_trace,
         "output_synchrony": metrics.output_synchrony,
+        "output_fast_delta": metrics.output_fast_delta,
+        "output_slow_delta": metrics.output_slow_delta,
         "output_event_score": metrics.output_event_score,
+        "output_fast_response_score": metrics.output_fast_response_score,
+        "output_slow_drift_score": metrics.output_slow_drift_score,
         "delta_right_left_ratio": abs(output_delta) / max(abs(input_delta), 1e-12),
     }
 
@@ -135,6 +145,8 @@ def summarize_probe_rows(
 
     output_delta = column(rows, "output_activity_delta")
     output_event_score = column(rows, "output_event_score")
+    output_fast_score = column(rows, "output_fast_response_score")
+    output_slow_score = column(rows, "output_slow_drift_score")
     left_to_right_ratio = column(rows, "left_to_right_ratio")
     input_delta = column(rows, "input_activity_delta")
     assoc_delta = column(rows, "assoc_activity_delta")
@@ -163,6 +175,11 @@ def summarize_probe_rows(
         "output_peak_at_horizon_end": peak_output_index == len(rows) - 1,
         "peak_output_event_score": float(output_event_score[peak_event_index]),
         "peak_output_event_step": int(rows[peak_event_index]["offset"]),
+        "peak_output_fast_response_score": float(np.max(output_fast_score)),
+        "peak_output_slow_drift_score": float(np.max(output_slow_score)),
+        "slow_fast_peak_ratio": float(
+            np.max(output_slow_score) / max(np.max(output_fast_score), 1e-12)
+        ),
         "mean_left_to_right_ratio": float(np.mean(left_to_right_ratio)),
         "max_left_to_right_ratio": float(np.max(left_to_right_ratio)),
         "response_latency_steps": response_latency,

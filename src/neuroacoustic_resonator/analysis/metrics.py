@@ -71,15 +71,25 @@ class RegionalActivityMetrics:
     step: int
     input_value: float
     input_activity: float
+    input_fast_activity: float
+    input_slow_activity: float
     assoc_activity: float
+    assoc_fast_activity: float
+    assoc_slow_activity: float
     output_activity: float
+    output_fast_activity: float
+    output_slow_activity: float
     left_to_right_ratio: float
     output_trace: float
     output_synchrony: float
+    output_fast_delta: float
+    output_slow_delta: float
     output_trace_delta: float
     output_synchrony_delta: float
     output_activity_delta: float
     output_event_score: float
+    output_fast_response_score: float
+    output_slow_drift_score: float
 
 
 class RegionalActivityTracker:
@@ -114,17 +124,29 @@ def compute_regional_activity_metrics(
         msg = "frame and regions must have matching shapes"
         raise ValueError(msg)
 
-    input_activity = region_activity(frame, regions.input)
-    assoc_activity = region_activity(frame, regions.assoc)
-    output_activity = region_activity(frame, regions.output)
+    input_fast_activity = region_fast_activity(frame, regions.input)
+    input_slow_activity = region_slow_activity(frame, regions.input)
+    assoc_fast_activity = region_fast_activity(frame, regions.assoc)
+    assoc_slow_activity = region_slow_activity(frame, regions.assoc)
+    output_fast_activity = region_fast_activity(frame, regions.output)
+    output_slow_activity = region_slow_activity(frame, regions.output)
+    input_activity = combine_region_activity(input_fast_activity, input_slow_activity)
+    assoc_activity = combine_region_activity(assoc_fast_activity, assoc_slow_activity)
+    output_activity = combine_region_activity(
+        output_fast_activity, output_slow_activity
+    )
     output_trace = region_mean(frame.state.trace, regions.output)
     output_synchrony = region_mean(frame.local_synchrony, regions.output)
 
     if previous is None:
+        output_fast_delta = 0.0
+        output_slow_delta = 0.0
         output_trace_delta = 0.0
         output_synchrony_delta = 0.0
         output_activity_delta = 0.0
     else:
+        output_fast_delta = output_fast_activity - previous.output_fast_activity
+        output_slow_delta = output_slow_activity - previous.output_slow_activity
         output_trace_delta = output_trace - previous.output_trace
         output_synchrony_delta = output_synchrony - previous.output_synchrony
         output_activity_delta = output_activity - previous.output_activity
@@ -138,23 +160,47 @@ def compute_regional_activity_metrics(
         step=frame.metrics.step,
         input_value=float(input_value),
         input_activity=input_activity,
+        input_fast_activity=input_fast_activity,
+        input_slow_activity=input_slow_activity,
         assoc_activity=assoc_activity,
+        assoc_fast_activity=assoc_fast_activity,
+        assoc_slow_activity=assoc_slow_activity,
         output_activity=output_activity,
+        output_fast_activity=output_fast_activity,
+        output_slow_activity=output_slow_activity,
         left_to_right_ratio=output_activity / max(input_activity, 1e-12),
         output_trace=output_trace,
         output_synchrony=output_synchrony,
+        output_fast_delta=output_fast_delta,
+        output_slow_delta=output_slow_delta,
         output_trace_delta=output_trace_delta,
         output_synchrony_delta=output_synchrony_delta,
         output_activity_delta=output_activity_delta,
         output_event_score=output_event_score,
+        output_fast_response_score=abs(output_fast_delta),
+        output_slow_drift_score=abs(output_slow_delta),
     )
 
 
 def region_activity(frame: SimulationFrame, mask: np.ndarray) -> float:
+    return combine_region_activity(
+        region_fast_activity(frame, mask),
+        region_slow_activity(frame, mask),
+    )
+
+
+def combine_region_activity(fast_activity: float, slow_activity: float) -> float:
+    return slow_activity + 0.25 * fast_activity
+
+
+def region_fast_activity(frame: SimulationFrame, mask: np.ndarray) -> float:
+    return region_mean(frame.local_synchrony, mask)
+
+
+def region_slow_activity(frame: SimulationFrame, mask: np.ndarray) -> float:
     trace = region_mean(frame.state.trace, mask)
     metabolite_depletion = region_mean(1.0 - frame.state.metabolite, mask)
-    synchrony = region_mean(frame.local_synchrony, mask)
-    return trace + metabolite_depletion + 0.25 * synchrony
+    return trace + metabolite_depletion
 
 
 def region_mean(values: np.ndarray, mask: np.ndarray) -> float:

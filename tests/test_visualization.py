@@ -72,6 +72,8 @@ def test_diagnostic_curve_specs_have_stable_labels() -> None:
         "mean_metabolite",
         "output_activity",
         "output_event_score",
+        "output_fast_response_score",
+        "output_slow_drift_score",
         "input_value",
         "audio_envelope",
     ]
@@ -97,6 +99,8 @@ def test_diagnostics_row_contains_plotted_values() -> None:
     assert row["step"] == 1
     assert row["audio_envelope"] == 0.25
     assert row["output_activity"] >= 0.0
+    assert row["output_fast_activity"] >= 0.0
+    assert row["output_slow_activity"] >= 0.0
 
 
 def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
@@ -109,7 +113,11 @@ def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
             "global_synchrony": 0.1,
             "mean_metabolite": 0.2,
             "output_activity": 0.3,
+            "output_fast_activity": 0.31,
+            "output_slow_activity": 0.32,
             "output_event_score": 0.4,
+            "output_fast_response_score": 0.41,
+            "output_slow_drift_score": 0.42,
             "input_value": 0.5,
             "audio_envelope": 0.6,
         },
@@ -121,7 +129,11 @@ def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
             "global_synchrony": 0.2,
             "mean_metabolite": 0.3,
             "output_activity": 0.4,
+            "output_fast_activity": 0.41,
+            "output_slow_activity": 0.42,
             "output_event_score": 0.5,
+            "output_fast_response_score": 0.51,
+            "output_slow_drift_score": 0.52,
             "input_value": 0.6,
             "audio_envelope": 0.7,
         },
@@ -129,7 +141,9 @@ def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
     )
 
     assert "step,global_synchrony" in output.read_text(encoding="utf-8")
-    assert "2,0.2,0.3,0.4,0.5,0.6,0.7" in output.read_text(encoding="utf-8")
+    assert "2,0.2,0.3,0.4,0.41,0.42,0.5,0.51,0.52,0.6,0.7" in output.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_live_audio_output_callback_uses_latest_state() -> None:
