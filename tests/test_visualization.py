@@ -1,12 +1,18 @@
 import numpy as np
 import pytest
 
-from neuroacoustic_resonator import FieldConfig, RegionMasks, Simulation
+from neuroacoustic_resonator import (
+    FieldConfig,
+    RegionMasks,
+    RegionalActivityTracker,
+    Simulation,
+)
 from neuroacoustic_resonator.audio.input import AudioInputFeatures, WavInputDrive
 from neuroacoustic_resonator.viz.live import (
     DiagnosticsSnapshotRecorder,
     LiveVisualizationConfig,
     _LiveAudioOutput,
+    coupled_response_score,
     diagnostic_curve_specs,
     diagnostic_legend_html,
     diagnostics_row,
@@ -81,6 +87,7 @@ def test_diagnostic_curve_specs_have_stable_labels() -> None:
         "global_synchrony",
         "mean_metabolite",
         "output_activity",
+        "output_response_activity",
         "output_event_score",
         "output_fast_response_score",
         "output_slow_drift_score",
@@ -132,6 +139,7 @@ def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
             "global_synchrony": 0.1,
             "mean_metabolite": 0.2,
             "output_activity": 0.3,
+            "output_response_activity": 0.03,
             "output_fast_activity": 0.31,
             "output_slow_activity": 0.32,
             "output_event_score": 0.4,
@@ -150,6 +158,7 @@ def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
             "global_synchrony": 0.2,
             "mean_metabolite": 0.3,
             "output_activity": 0.4,
+            "output_response_activity": 0.04,
             "output_fast_activity": 0.41,
             "output_slow_activity": 0.42,
             "output_event_score": 0.5,
@@ -164,8 +173,9 @@ def test_diagnostics_snapshot_recorder_writes_sampled_csv(tmp_path) -> None:
     )
 
     assert "step,global_synchrony" in output.read_text(encoding="utf-8")
-    assert "2,0.2,0.3,0.4,0.41,0.42,0.5,0.51,0.52,0.6,0.7,0.8,0.9" in output.read_text(
-        encoding="utf-8"
+    assert (
+        "2,0.2,0.3,0.4,0.04,0.41,0.42,0.5,0.51,0.52,0.6,0.7,0.8,0.9"
+        in output.read_text(encoding="utf-8")
     )
 
 
@@ -275,12 +285,25 @@ def test_live_audio_output_supports_coupled_mode() -> None:
     )
     outdata = np.zeros((32, 1), dtype=np.float32)
 
-    audio_output.update_state(simulation.step().state, input_value=0.5)
+    audio_output.update_state(
+        simulation.step().state,
+        input_value=0.5,
+        response_score=0.01,
+    )
     audio_output.callback(outdata, 32, None, None)
 
     assert np.all(np.isfinite(outdata))
     assert audio_output.stimulus_window >= 0.0
     assert audio_output.coupled_audio_trigger >= 0.0
+
+
+def test_coupled_response_score_uses_fast_event_and_baseline_response() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    tracker = RegionalActivityTracker()
+    metrics = tracker.update(simulation.step(), regions)
+
+    assert coupled_response_score(metrics) >= metrics.output_fast_response_score
 
 
 def test_live_audio_output_status_reporting_is_throttled(capsys) -> None:

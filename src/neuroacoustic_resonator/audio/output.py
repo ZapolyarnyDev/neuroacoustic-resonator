@@ -540,6 +540,7 @@ class StimulusCoupledAudioRenderer:
         regions: RegionMasks,
         *,
         input_value: float = 0.0,
+        response_score: float | None = None,
     ) -> AudioArray:
         input_level = abs(input_value)
         input_rise = max(0.0, input_level - self._previous_input)
@@ -556,12 +557,17 @@ class StimulusCoupledAudioRenderer:
             self._retrigger_remaining = self.retrigger_frames
         self._previous_input = input_level
 
-        activity = SlopeTriggeredAudioRenderer._output_activity_signal(state, regions)
-        if self._previous_activity is None:
-            slope = 0.0
+        if response_score is None:
+            activity = SlopeTriggeredAudioRenderer._output_activity_signal(
+                state, regions
+            )
+            if self._previous_activity is None:
+                response_score = 0.0
+            else:
+                response_score = max(0.0, activity - self._previous_activity)
+            self._previous_activity = activity
         else:
-            slope = max(0.0, activity - self._previous_activity)
-        self._previous_activity = activity
+            response_score = max(0.0, response_score)
 
         self.stimulus_window = (
             self._window_remaining / self.response_window_frames
@@ -572,7 +578,8 @@ class StimulusCoupledAudioRenderer:
             self._window_remaining -= 1
             self.last_activation = float(
                 np.clip(
-                    (slope - self.response_threshold) * self.response_sensitivity,
+                    (response_score - self.response_threshold)
+                    * self.response_sensitivity,
                     0.0,
                     1.0,
                 )

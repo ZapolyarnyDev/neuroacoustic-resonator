@@ -90,39 +90,97 @@ def test_from_state_rejects_wrong_shape() -> None:
         )
 
 
-def test_trace_accumulates_activity() -> None:
+def test_base_rotation_does_not_accumulate_trace() -> None:
     field = OscillatorField(
-        FieldConfig(size=4, base_frequency=2.0, frequency_spread=0.0)
+        FieldConfig(
+            size=4,
+            base_frequency=2.0,
+            frequency_spread=0.0,
+            coupling_strength=0.0,
+        )
     )
 
-    before = field.state.trace
     after = field.step().trace
 
-    assert np.all(after > before)
+    assert np.allclose(after, 0.0)
+
+
+def test_base_rotation_does_not_consume_metabolite() -> None:
+    field = OscillatorField(
+        FieldConfig(
+            size=4,
+            base_frequency=2.0,
+            frequency_spread=0.0,
+            coupling_strength=0.0,
+            metabolite_recovery=0.0,
+            metabolite_cost=1.0,
+        )
+    )
+
+    after = field.step().metabolite
+
+    assert np.allclose(after, 1.0)
+
+
+def test_trace_accumulates_coupling_activity() -> None:
+    config = FieldConfig(
+        size=4,
+        dt=1.0,
+        base_frequency=0.0,
+        frequency_spread=0.0,
+        coupling_strength=0.5,
+        trace_rate=0.5,
+    )
+    shape = (config.size, config.size)
+    phase = np.zeros(shape)
+    phase[:, 1::2] = np.pi / 2.0
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=phase,
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.full(shape, config.coupling_strength),
+            trace=np.zeros(shape),
+        ),
+    )
+
+    after = field.step().trace
+
+    assert np.max(after) > 0.0
 
 
 def test_trace_decay_reduces_sustained_activity_memory() -> None:
     base = FieldConfig(
         size=4,
         dt=1.0,
-        base_frequency=1.0,
+        base_frequency=0.0,
         frequency_spread=0.0,
-        coupling_strength=0.0,
+        coupling_strength=0.5,
         trace_rate=0.5,
         trace_decay=0.0,
     )
     decaying = FieldConfig(
         size=4,
         dt=1.0,
-        base_frequency=1.0,
+        base_frequency=0.0,
         frequency_spread=0.0,
-        coupling_strength=0.0,
+        coupling_strength=0.5,
         trace_rate=0.5,
         trace_decay=0.25,
     )
-
-    base_field = OscillatorField(base)
-    decaying_field = OscillatorField(decaying)
+    shape = (base.size, base.size)
+    phase = np.zeros(shape)
+    phase[:, 1::2] = np.pi / 2.0
+    state = FieldState(
+        phase=phase,
+        frequency=np.zeros(shape),
+        metabolite=np.ones(shape),
+        coupling=np.full(shape, base.coupling_strength),
+        trace=np.zeros(shape),
+    )
+    base_field = OscillatorField.from_state(base, state)
+    decaying_field = OscillatorField.from_state(decaying, state)
     for _ in range(3):
         base_trace = base_field.step().trace
         decaying_trace = decaying_field.step().trace

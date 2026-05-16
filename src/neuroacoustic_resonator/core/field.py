@@ -182,7 +182,7 @@ class OscillatorField:
     def step(self) -> FieldState:
         coupling_drive = self._coupling_drive()
         phase_drive = self._frequency + coupling_drive
-        activity = np.abs(phase_drive)
+        activity = self._metabolic_activity(coupling_drive)
         metabolite_laplacian = self._metabolite_laplacian()
         metabolite_depletion = 1.0 - self._metabolite
 
@@ -252,6 +252,9 @@ class OscillatorField:
             + np.sin(np.roll(self._phase, -1, axis=1) - self._phase)
         )
         return self._metabolite * self._coupling * neighbors / 4.0
+
+    def _metabolic_activity(self, coupling_drive: FloatArray) -> FloatArray:
+        return np.abs(coupling_drive)
 
     def _metabolite_laplacian(self) -> FloatArray:
         return (

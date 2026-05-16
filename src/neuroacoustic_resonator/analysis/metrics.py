@@ -77,6 +77,8 @@ class RegionalActivityMetrics:
     assoc_fast_activity: float
     assoc_slow_activity: float
     output_activity: float
+    output_activity_baseline: float
+    output_response_activity: float
     output_fast_activity: float
     output_slow_activity: float
     left_to_right_ratio: float
@@ -93,8 +95,13 @@ class RegionalActivityMetrics:
 
 
 class RegionalActivityTracker:
-    def __init__(self) -> None:
+    def __init__(self, *, baseline_smoothing: float = 0.02) -> None:
+        if not 0.0 < baseline_smoothing <= 1.0:
+            msg = "baseline_smoothing must be in (0, 1]"
+            raise ValueError(msg)
         self._previous: RegionalActivityMetrics | None = None
+        self._output_activity_baseline: float | None = None
+        self.baseline_smoothing = baseline_smoothing
 
     def update(
         self,
@@ -108,8 +115,16 @@ class RegionalActivityTracker:
             regions,
             input_value=input_value,
             previous=self._previous,
+            output_activity_baseline=self._output_activity_baseline,
         )
         self._previous = metrics
+        self._output_activity_baseline = (
+            metrics.output_activity
+            if self._output_activity_baseline is None
+            else self._output_activity_baseline
+            + self.baseline_smoothing
+            * (metrics.output_activity - self._output_activity_baseline)
+        )
         return metrics
 
 
@@ -119,6 +134,7 @@ def compute_regional_activity_metrics(
     *,
     input_value: float = 0.0,
     previous: RegionalActivityMetrics | None = None,
+    output_activity_baseline: float | None = None,
 ) -> RegionalActivityMetrics:
     if frame.state.phase.shape != regions.shape:
         msg = "frame and regions must have matching shapes"
@@ -135,6 +151,12 @@ def compute_regional_activity_metrics(
     output_activity = combine_region_activity(
         output_fast_activity, output_slow_activity
     )
+    output_activity_baseline = (
+        output_activity
+        if output_activity_baseline is None
+        else output_activity_baseline
+    )
+    output_response_activity = output_activity - output_activity_baseline
     output_trace = region_mean(frame.state.trace, regions.output)
     output_synchrony = region_mean(frame.local_synchrony, regions.output)
 
@@ -166,6 +188,8 @@ def compute_regional_activity_metrics(
         assoc_fast_activity=assoc_fast_activity,
         assoc_slow_activity=assoc_slow_activity,
         output_activity=output_activity,
+        output_activity_baseline=output_activity_baseline,
+        output_response_activity=output_response_activity,
         output_fast_activity=output_fast_activity,
         output_slow_activity=output_slow_activity,
         left_to_right_ratio=output_activity / max(input_activity, 1e-12),

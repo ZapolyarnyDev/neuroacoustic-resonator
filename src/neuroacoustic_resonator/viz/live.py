@@ -162,6 +162,7 @@ DIAGNOSTIC_CSV_FIELDS = (
     "global_synchrony",
     "mean_metabolite",
     "output_activity",
+    "output_response_activity",
     "output_fast_activity",
     "output_slow_activity",
     "output_event_score",
@@ -190,6 +191,12 @@ def diagnostic_curve_specs() -> tuple[DiagnosticCurveSpec, ...]:
             key="output_activity",
             label="output activity",
             color=(255, 135, 70),
+            width=2.0,
+        ),
+        DiagnosticCurveSpec(
+            key="output_response_activity",
+            label="baseline response",
+            color=(255, 165, 80),
             width=2.0,
         ),
         DiagnosticCurveSpec(
@@ -591,6 +598,7 @@ class _LiveFieldWindow:
                 self._audio_output.update_state(
                     frame.state,
                     input_value=regional_metrics.input_value,
+                    response_score=coupled_response_score(regional_metrics),
                 )
             audio_envelope = (
                 self._audio_output.envelope if self._audio_output is not None else 0.0
@@ -670,6 +678,9 @@ def diagnostics_row(
         "global_synchrony": view_frame.global_synchrony,
         "mean_metabolite": view_frame.mean_metabolite,
         "output_activity": view_frame.regional_metrics.output_activity,
+        "output_response_activity": (
+            view_frame.regional_metrics.output_response_activity
+        ),
         "output_fast_activity": view_frame.regional_metrics.output_fast_activity,
         "output_slow_activity": view_frame.regional_metrics.output_slow_activity,
         "output_event_score": view_frame.regional_metrics.output_event_score,
@@ -724,6 +735,7 @@ class _LiveAudioOutput:
         self._lock = threading.Lock()
         self._state: FieldState | None = None
         self._input_value = 0.0
+        self._response_score = 0.0
         self._stream: Any | None = None
         self._stream_factory = stream_factory
         self._renderer = self._build_renderer(config.audio_frame_size)
@@ -812,10 +824,17 @@ class _LiveAudioOutput:
         self._stream.__exit__(None, None, None)
         self._stream = None
 
-    def update_state(self, state: FieldState, *, input_value: float = 0.0) -> None:
+    def update_state(
+        self,
+        state: FieldState,
+        *,
+        input_value: float = 0.0,
+        response_score: float = 0.0,
+    ) -> None:
         with self._lock:
             self._state = state
             self._input_value = input_value
+            self._response_score = response_score
 
     @property
     def envelope(self) -> float:
@@ -843,6 +862,7 @@ class _LiveAudioOutput:
         with self._lock:
             state = self._state
             input_value = getattr(self, "_input_value", 0.0)
+            response_score = getattr(self, "_response_score", 0.0)
         if state is None:
             outdata[:, 0] = 0.0
             return
@@ -854,6 +874,7 @@ class _LiveAudioOutput:
                 state,
                 self._regions,
                 input_value=input_value,
+                response_score=response_score,
             )
         else:
             audio = self._renderer.render_frame(state, self._regions)
@@ -865,6 +886,14 @@ class _LiveAudioOutput:
             return
         self._last_status_text = status_text
         print(f"audio status: {status_text}")
+
+
+def coupled_response_score(metrics: RegionalActivityMetrics) -> float:
+    return max(
+        metrics.output_fast_response_score,
+        metrics.output_event_score,
+        max(0.0, metrics.output_response_activity) * 0.05,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

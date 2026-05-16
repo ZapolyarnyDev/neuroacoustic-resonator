@@ -53,9 +53,11 @@ steps: 8
 
     assert len(rows) == 5
     assert rows[0]["audio_step"] == "0"
+    assert "output_response_activity" in rows[0]
     assert "output_fast_response_score" in rows[0]
     assert summary["rows"] == 5
     assert summary["peak_input_value"] > 0.0
+    assert "peak_output_response_activity" in summary
     assert "input_output_lag_steps" in loaded
 
 

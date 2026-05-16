@@ -70,7 +70,12 @@ def run_audio_input_simulation(config: AudioInputRunConfig) -> AudioInputSummary
     drive = WavInputDrive(features, regions)
 
     for _ in range(config.warmup_steps):
-        simulation.step()
+        warmup_frame = simulation.step()
+        tracker.update(
+            warmup_frame,
+            regions,
+            input_value=simulation.last_input_value,
+        )
 
     steps = features.frame_count
     if config.max_steps is not None:
@@ -117,6 +122,8 @@ def audio_input_row(
         "assoc_fast_activity": metrics.assoc_fast_activity,
         "assoc_slow_activity": metrics.assoc_slow_activity,
         "output_activity": metrics.output_activity,
+        "output_activity_baseline": metrics.output_activity_baseline,
+        "output_response_activity": metrics.output_response_activity,
         "output_fast_activity": metrics.output_fast_activity,
         "output_slow_activity": metrics.output_slow_activity,
         "left_to_right_ratio": metrics.left_to_right_ratio,
@@ -137,6 +144,7 @@ def summarize_audio_input_rows(
 
     input_value = column(rows, "input_value")
     output_activity = column(rows, "output_activity")
+    output_response_activity = column(rows, "output_response_activity")
     output_fast_score = column(rows, "output_fast_response_score")
     output_slow_score = column(rows, "output_slow_drift_score")
     peak_drive_index = int(np.argmax(input_value))
@@ -156,6 +164,8 @@ def summarize_audio_input_rows(
         "peak_input_value": float(input_value[peak_drive_index]),
         "peak_input_step": int(rows[peak_drive_index]["audio_step"]),
         "peak_output_activity": float(np.max(output_activity)),
+        "peak_output_response_activity": float(np.max(output_response_activity)),
+        "mean_output_response_activity": float(np.mean(output_response_activity)),
         "peak_output_fast_response_score": float(output_fast_score[peak_fast_index]),
         "peak_output_fast_response_step": int(rows[peak_fast_index]["audio_step"]),
         "peak_output_slow_drift_score": float(np.max(output_slow_score)),

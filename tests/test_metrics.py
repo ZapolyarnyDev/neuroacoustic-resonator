@@ -91,6 +91,8 @@ def test_compute_regional_activity_metrics_reports_output_activity() -> None:
     assert metrics.input_slow_activity >= 0.0
     assert metrics.assoc_activity >= 0.0
     assert metrics.output_activity >= 0.0
+    assert metrics.output_activity_baseline == pytest.approx(metrics.output_activity)
+    assert metrics.output_response_activity == pytest.approx(0.0)
     assert metrics.output_fast_activity >= 0.0
     assert metrics.output_slow_activity >= 0.0
     assert metrics.left_to_right_ratio >= 0.0
@@ -109,6 +111,22 @@ def test_regional_activity_tracker_reports_output_event_score() -> None:
     assert changed.output_synchrony_delta != 0.0
     assert changed.output_event_score > 0.0
     assert changed.output_fast_response_score > 0.0
+
+
+def test_regional_activity_tracker_reports_baseline_corrected_response() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    tracker = RegionalActivityTracker(baseline_smoothing=0.1)
+
+    baseline = tracker.update(simulation.snapshot(), regions)
+    simulation.field.apply_phase_impulse(regions.output, 0.5)
+    changed = tracker.update(simulation.snapshot(), regions)
+
+    assert baseline.output_response_activity == pytest.approx(0.0)
+    assert changed.output_activity_baseline == pytest.approx(baseline.output_activity)
+    assert changed.output_response_activity == pytest.approx(
+        changed.output_activity - baseline.output_activity
+    )
 
 
 def test_compute_regional_activity_metrics_rejects_shape_mismatch() -> None:

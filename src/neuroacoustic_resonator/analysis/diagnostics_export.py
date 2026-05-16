@@ -19,6 +19,7 @@ DEFAULT_PLOT_FIELDS = (
     "global_synchrony",
     "mean_metabolite",
     "output_activity",
+    "output_response_activity",
     "output_fast_response_score",
     "output_slow_drift_score",
     "input_value",
