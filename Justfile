@@ -78,6 +78,12 @@ audio-input-run input:
 audio-input-run-custom config input output_csv output_summary frame_size hop_size drive_strength:
     uv run python scripts/run_audio_input.py --config {{config}} --input {{input}} --output-csv {{output_csv}} --output-summary {{output_summary}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}}
 
+voice-probe input:
+    uv run python scripts/probe_voice_response.py --config configs/field_only.yaml --input {{input}} --output-dir experiments/logs --prefix voice_vs_silence
+
+voice-probe-custom config input output_dir prefix frame_size hop_size drive_strength:
+    uv run python scripts/probe_voice_response.py --config {{config}} --input {{input}} --output-dir {{output_dir}} --prefix {{prefix}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}}
+
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav
 

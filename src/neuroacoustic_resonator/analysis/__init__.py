@@ -30,6 +30,10 @@ from neuroacoustic_resonator.analysis.propagation_probe import (
     PropagationProbeConfig,
     run_propagation_probe,
 )
+from neuroacoustic_resonator.analysis.voice_probe import (
+    VoiceVsSilenceProbeConfig,
+    run_voice_vs_silence_probe,
+)
 
 __all__ = [
     "AudioInputRunConfig",
@@ -41,6 +45,7 @@ __all__ = [
     "PropagationProbeConfig",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
+    "VoiceVsSilenceProbeConfig",
     "benchmark_field_step",
     "benchmark_sizes",
     "compute_regional_activity_metrics",
@@ -50,6 +55,7 @@ __all__ = [
     "region_slow_activity",
     "run_audio_input_simulation",
     "run_propagation_probe",
+    "run_voice_vs_silence_probe",
     "run_experiment_suite",
     "write_benchmark_results",
 ]
