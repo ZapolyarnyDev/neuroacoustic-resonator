@@ -619,6 +619,9 @@ class VoiceResponseSonificationRenderer:
         release: float = 0.05,
         pitch_depth: float = 0.45,
         timbre_depth: float = 0.7,
+        background_level: float = 0.03,
+        background_response_level: float = 0.25,
+        response_mix: float = 1.2,
     ) -> None:
         if response_threshold < 0.0:
             msg = "response_threshold must be non-negative"
@@ -638,6 +641,15 @@ class VoiceResponseSonificationRenderer:
         if timbre_depth < 0.0:
             msg = "timbre_depth must be non-negative"
             raise ValueError(msg)
+        if background_level < 0.0:
+            msg = "background_level must be non-negative"
+            raise ValueError(msg)
+        if background_response_level < background_level:
+            msg = "background_response_level must be at least background_level"
+            raise ValueError(msg)
+        if response_mix < 0.0:
+            msg = "response_mix must be non-negative"
+            raise ValueError(msg)
 
         self.continuous = ContinuousAudioRenderer(
             sample_rate=sample_rate,
@@ -653,6 +665,9 @@ class VoiceResponseSonificationRenderer:
         self.release = release
         self.pitch_depth = pitch_depth
         self.timbre_depth = timbre_depth
+        self.background_level = background_level
+        self.background_response_level = background_response_level
+        self.response_mix = response_mix
         self.envelope = 0.0
         self.last_activation = 0.0
         self._voice_phase = 0.0
@@ -696,7 +711,11 @@ class VoiceResponseSonificationRenderer:
 
         base = self.continuous.render_frame(state, regions)
         response = self._response_voice_frame(features)
-        mixed = (0.3 + 0.7 * self.envelope) * base + self.envelope * response
+        background_gain = (
+            self.background_level
+            + (self.background_response_level - self.background_level) * self.envelope
+        )
+        mixed = background_gain * base + self.response_mix * self.envelope * response
         return np.clip(mixed, -1.0, 1.0).astype(np.float64, copy=False)
 
     def _response_voice_frame(self, features: dict[str, float]) -> AudioArray:
