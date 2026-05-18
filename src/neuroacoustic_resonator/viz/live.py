@@ -65,6 +65,8 @@ class LiveVisualizationConfig:
     input_frame_size: int = 1024
     input_hop_size: int = 512
     input_drive_strength: float = 0.45
+    input_assoc_gain: float = 0.0
+    input_output_gain: float = 0.0
     input_loop: bool = False
 
     def __post_init__(self) -> None:
@@ -133,6 +135,12 @@ class LiveVisualizationConfig:
             raise ValueError(msg)
         if self.input_drive_strength < 0.0:
             msg = "input_drive_strength must be non-negative"
+            raise ValueError(msg)
+        if self.input_assoc_gain < 0.0:
+            msg = "input_assoc_gain must be non-negative"
+            raise ValueError(msg)
+        if self.input_output_gain < 0.0:
+            msg = "input_output_gain must be non-negative"
             raise ValueError(msg)
 
 
@@ -414,6 +422,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-hop-size", type=int, default=512)
     parser.add_argument("--input-drive-strength", type=float, default=0.45)
     parser.add_argument(
+        "--input-assoc-gain",
+        type=float,
+        default=0.0,
+        help="Extra fraction of WAV input drive injected into R_assoc.",
+    )
+    parser.add_argument(
+        "--input-output-gain",
+        type=float,
+        default=0.0,
+        help="Extra fraction of WAV input drive injected into R_out.",
+    )
+    parser.add_argument(
         "--input-loop",
         action="store_true",
         help="Loop the extracted WAV drive after it reaches the end.",
@@ -463,7 +483,12 @@ def build_live_input_drive(
         hop_size=config.input_hop_size,
         drive_strength=config.input_drive_strength,
     )
-    return WavInputDrive(features, regions)
+    return WavInputDrive(
+        features,
+        regions,
+        assoc_gain=config.input_assoc_gain,
+        output_gain=config.input_output_gain,
+    )
 
 
 def step_simulation_with_wav_input(
@@ -975,6 +1000,8 @@ def main(argv: list[str] | None = None) -> int:
             input_frame_size=args.input_frame_size,
             input_hop_size=args.input_hop_size,
             input_drive_strength=args.input_drive_strength,
+            input_assoc_gain=args.input_assoc_gain,
+            input_output_gain=args.input_output_gain,
             input_loop=args.input_loop,
         )
     )

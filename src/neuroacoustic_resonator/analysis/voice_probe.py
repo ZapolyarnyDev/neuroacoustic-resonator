@@ -28,6 +28,8 @@ class VoiceVsSilenceProbeConfig:
     frame_size: int = 1024
     hop_size: int = 512
     drive_strength: float = 0.45
+    input_assoc_gain: float = 0.0
+    input_output_gain: float = 0.0
     warmup_steps: int = 100
     max_steps: int | None = None
 
@@ -40,6 +42,12 @@ class VoiceVsSilenceProbeConfig:
             raise ValueError(msg)
         if self.drive_strength < 0.0:
             msg = "drive_strength must be non-negative"
+            raise ValueError(msg)
+        if self.input_assoc_gain < 0.0:
+            msg = "input_assoc_gain must be non-negative"
+            raise ValueError(msg)
+        if self.input_output_gain < 0.0:
+            msg = "input_output_gain must be non-negative"
             raise ValueError(msg)
         if self.warmup_steps < 0:
             msg = "warmup_steps must be non-negative"
@@ -70,6 +78,8 @@ def run_voice_vs_silence_probe(
             frame_size=config.frame_size,
             hop_size=config.hop_size,
             drive_strength=config.drive_strength,
+            input_assoc_gain=config.input_assoc_gain,
+            input_output_gain=config.input_output_gain,
             warmup_steps=config.warmup_steps,
             max_steps=config.max_steps,
         )
@@ -83,6 +93,8 @@ def run_voice_vs_silence_probe(
             frame_size=config.frame_size,
             hop_size=config.hop_size,
             drive_strength=config.drive_strength,
+            input_assoc_gain=config.input_assoc_gain,
+            input_output_gain=config.input_output_gain,
             warmup_steps=config.warmup_steps,
             max_steps=config.max_steps,
         )
@@ -131,6 +143,8 @@ def summarize_voice_probe(
             "frame_size": config.frame_size,
             "hop_size": config.hop_size,
             "drive_strength": config.drive_strength,
+            "input_assoc_gain": config.input_assoc_gain,
+            "input_output_gain": config.input_output_gain,
             "warmup_steps": config.warmup_steps,
             "max_steps": config.max_steps,
         },
@@ -220,6 +234,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--frame-size", type=int, default=1024)
     parser.add_argument("--hop-size", type=int, default=512)
     parser.add_argument("--drive-strength", type=float, default=0.45)
+    parser.add_argument("--input-assoc-gain", type=float, default=0.0)
+    parser.add_argument("--input-output-gain", type=float, default=0.0)
     parser.add_argument("--warmup-steps", type=int, default=100)
     parser.add_argument("--max-steps", type=int, default=None)
     return parser
@@ -235,6 +251,8 @@ def main(argv: list[str] | None = None) -> int:
         frame_size=args.frame_size,
         hop_size=args.hop_size,
         drive_strength=args.drive_strength,
+        input_assoc_gain=args.input_assoc_gain,
+        input_output_gain=args.input_output_gain,
         warmup_steps=args.warmup_steps,
         max_steps=args.max_steps,
     )

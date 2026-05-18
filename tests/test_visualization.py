@@ -79,6 +79,10 @@ def test_live_visualization_config_validates_values() -> None:
         LiveVisualizationConfig(input_frame_size=0)
     with pytest.raises(ValueError, match="input_drive_strength"):
         LiveVisualizationConfig(input_drive_strength=-0.1)
+    with pytest.raises(ValueError, match="input_assoc_gain"):
+        LiveVisualizationConfig(input_assoc_gain=-0.1)
+    with pytest.raises(ValueError, match="input_output_gain"):
+        LiveVisualizationConfig(input_output_gain=-0.1)
 
 
 def test_diagnostic_curve_specs_have_stable_labels() -> None:
@@ -252,6 +256,31 @@ def test_step_simulation_with_wav_input_routes_drive_to_input_region() -> None:
     assert frame.metrics.step == 1
     assert not np.allclose(
         simulation.field.state.phase[regions.input], before[regions.input]
+    )
+
+
+def test_step_simulation_with_wav_input_can_boost_downstream_regions() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    features = AudioInputFeatures(
+        sample_rate=8_000,
+        frame_size=64,
+        hop_size=64,
+        rms=np.asarray([1.0]),
+        onset=np.asarray([1.0]),
+        spectral_centroid=np.asarray([0.5]),
+        drive=np.asarray([0.25]),
+    )
+    drive = WavInputDrive(features, regions, assoc_gain=0.5, output_gain=0.25)
+    before = simulation.field.state.phase.copy()
+
+    step_simulation_with_wav_input(simulation, drive, input_step=0)
+
+    assert not np.allclose(
+        simulation.field.state.phase[regions.assoc], before[regions.assoc]
+    )
+    assert not np.allclose(
+        simulation.field.state.phase[regions.output], before[regions.output]
     )
 
 

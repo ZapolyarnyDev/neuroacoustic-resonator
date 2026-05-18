@@ -39,6 +39,8 @@ steps: 8
             prefix="probe",
             frame_size=128,
             hop_size=64,
+            input_assoc_gain=0.5,
+            input_output_gain=0.25,
             warmup_steps=2,
             max_steps=5,
         )
@@ -48,6 +50,8 @@ steps: 8
 
     assert summary["voice"]["peak_input_value"] > 0.0
     assert summary["silence"]["peak_input_value"] == 0.0
+    assert summary["parameters"]["input_assoc_gain"] == 0.5
+    assert summary["parameters"]["input_output_gain"] == 0.25
     assert "peak_fast_response" in summary["ratios"]
     assert loaded["voice"]["rows"] == 5
 
@@ -82,6 +86,10 @@ steps: 4
             "128",
             "--hop-size",
             "64",
+            "--input-assoc-gain",
+            "0.5",
+            "--input-output-gain",
+            "0.25",
             "--max-steps",
             "3",
         ]

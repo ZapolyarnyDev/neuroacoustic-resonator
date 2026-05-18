@@ -59,9 +59,20 @@ class WavInputDrive:
         self,
         features: AudioInputFeatures,
         regions: RegionMasks,
+        *,
+        assoc_gain: float = 0.0,
+        output_gain: float = 0.0,
     ) -> None:
+        if assoc_gain < 0.0:
+            msg = "assoc_gain must be non-negative"
+            raise ValueError(msg)
+        if output_gain < 0.0:
+            msg = "output_gain must be non-negative"
+            raise ValueError(msg)
         self.features = features
         self.regions = regions
+        self.assoc_gain = assoc_gain
+        self.output_gain = output_gain
 
     def value(self, step: int) -> float:
         return self.features.value_at_step(step)
@@ -70,6 +81,13 @@ class WavInputDrive:
         value = self.value(step)
         if value != 0.0:
             field.apply_phase_impulse(self.regions.input, value)
+            if self.assoc_gain != 0.0:
+                field.apply_phase_impulse(self.regions.assoc, value * self.assoc_gain)
+            if self.output_gain != 0.0:
+                field.apply_phase_impulse(
+                    self.regions.output,
+                    value * self.output_gain,
+                )
         return value
 
 

@@ -78,11 +78,17 @@ audio-input-run input:
 audio-input-run-custom config input output_csv output_summary frame_size hop_size drive_strength:
     uv run python scripts/run_audio_input.py --config {{config}} --input {{input}} --output-csv {{output_csv}} --output-summary {{output_summary}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}}
 
+audio-input-run-propagated input:
+    uv run python scripts/run_audio_input.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/audio_input_propagated.csv --output-summary experiments/logs/audio_input_propagated_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0
+
 voice-probe input:
     uv run python scripts/probe_voice_response.py --config configs/field_only.yaml --input {{input}} --output-dir experiments/logs --prefix voice_vs_silence
 
 voice-probe-custom config input output_dir prefix frame_size hop_size drive_strength:
     uv run python scripts/probe_voice_response.py --config {{config}} --input {{input}} --output-dir {{output_dir}} --prefix {{prefix}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}}
+
+voice-probe-propagated input:
+    uv run python scripts/probe_voice_response.py --config configs/field_only.yaml --input {{input}} --output-dir experiments/logs --prefix voice_vs_silence_propagated --input-assoc-gain 0.8 --input-output-gain 0.0
 
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav
@@ -152,6 +158,9 @@ live-wav-audio input:
 
 live-wav-coupled input:
     uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode coupled
+
+live-wav-coupled-propagated input:
+    uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode coupled --input-assoc-gain 0.8 --input-output-gain 0.0
 
 live-wav-record input output:
     uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode coupled --diagnostics-output {{output}}
