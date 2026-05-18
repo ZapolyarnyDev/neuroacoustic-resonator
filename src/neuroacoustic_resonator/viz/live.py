@@ -31,6 +31,7 @@ from neuroacoustic_resonator.audio.output import (
     GatedAudioRenderer,
     SlopeTriggeredAudioRenderer,
     StimulusCoupledAudioRenderer,
+    VoiceResponseSonificationRenderer,
 )
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.field import FieldState, FloatArray
@@ -79,10 +80,17 @@ class LiveVisualizationConfig:
         if self.history_size < 2:
             msg = "history_size must be at least 2"
             raise ValueError(msg)
-        if self.audio_mode not in {"continuous", "gated", "event", "slope", "coupled"}:
+        if self.audio_mode not in {
+            "continuous",
+            "gated",
+            "event",
+            "slope",
+            "coupled",
+            "voice-response",
+        }:
             msg = (
                 "audio_mode must be 'continuous', 'gated', 'event', "
-                "'slope', or 'coupled'"
+                "'slope', 'coupled', or 'voice-response'"
             )
             raise ValueError(msg)
         if self.audio_sample_rate < 1:
@@ -373,7 +381,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--audio-mode",
-        choices=("continuous", "gated", "event", "slope", "coupled"),
+        choices=(
+            "continuous",
+            "gated",
+            "event",
+            "slope",
+            "coupled",
+            "voice-response",
+        ),
         default="gated",
         help="Audio monitor mode used when --audio is enabled.",
     )
@@ -820,6 +835,7 @@ class _LiveAudioOutput:
         | EventDrivenAudioRenderer
         | SlopeTriggeredAudioRenderer
         | StimulusCoupledAudioRenderer
+        | VoiceResponseSonificationRenderer
     ):
         if self._config.audio_mode == "gated":
             return GatedAudioRenderer(
@@ -864,6 +880,14 @@ class _LiveAudioOutput:
                 response_window_frames=(
                     self._config.audio_coupled_response_window_frames
                 ),
+            )
+        if self._config.audio_mode == "voice-response":
+            return VoiceResponseSonificationRenderer(
+                sample_rate=self._config.audio_sample_rate,
+                frame_size=frame_size,
+                carrier_frequency=self._config.audio_carrier_frequency,
+                frequency_scale=self._config.audio_frequency_scale,
+                gain=self._config.audio_gain,
             )
         return ContinuousAudioRenderer(
             sample_rate=self._config.audio_sample_rate,
@@ -940,7 +964,13 @@ class _LiveAudioOutput:
 
         if frames != self._renderer.frame_size:
             self._renderer = self._build_renderer(frames)
-        if isinstance(self._renderer, StimulusCoupledAudioRenderer):
+        if isinstance(self._renderer, VoiceResponseSonificationRenderer):
+            audio = self._renderer.render_frame(
+                state,
+                self._regions,
+                response_score=response_score,
+            )
+        elif isinstance(self._renderer, StimulusCoupledAudioRenderer):
             audio = self._renderer.render_frame(
                 state,
                 self._regions,

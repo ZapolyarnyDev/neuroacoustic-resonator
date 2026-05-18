@@ -10,6 +10,7 @@ from neuroacoustic_resonator.audio.output import (
     GatedAudioRenderer,
     SlopeTriggeredAudioRenderer,
     StimulusCoupledAudioRenderer,
+    VoiceResponseSonificationRenderer,
     render_output_frame,
     write_wav,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "RealtimeAudioEngine",
     "SlopeTriggeredAudioRenderer",
     "StimulusCoupledAudioRenderer",
+    "VoiceResponseSonificationRenderer",
     "WavInputDrive",
     "extract_audio_input_features",
     "play_realtime_audio",

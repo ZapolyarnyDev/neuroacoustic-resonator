@@ -162,6 +162,9 @@ live-wav-coupled input:
 live-wav-coupled-propagated input:
     uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode coupled --input-assoc-gain 0.8 --input-output-gain 0.0
 
+live-wav-voice-response input:
+    uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode voice-response --input-assoc-gain 0.8 --input-output-gain 0.0 --audio-gain 0.35
+
 live-wav-record input output:
     uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2 --audio --audio-mode coupled --diagnostics-output {{output}}
 

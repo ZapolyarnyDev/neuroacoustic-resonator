@@ -603,6 +603,180 @@ class StimulusCoupledAudioRenderer:
         return self.continuous.render_frame(state, regions) * self.envelope
 
 
+class VoiceResponseSonificationRenderer:
+    def __init__(
+        self,
+        *,
+        sample_rate: int = 48_000,
+        frame_size: int = 512,
+        carrier_frequency: float = 220.0,
+        frequency_scale: float = 1.0,
+        gain: float = 0.2,
+        smoothing: float = 0.2,
+        response_threshold: float = 0.00025,
+        response_sensitivity: float = 420.0,
+        attack: float = 0.55,
+        release: float = 0.05,
+        pitch_depth: float = 0.45,
+        timbre_depth: float = 0.7,
+    ) -> None:
+        if response_threshold < 0.0:
+            msg = "response_threshold must be non-negative"
+            raise ValueError(msg)
+        if response_sensitivity <= 0.0:
+            msg = "response_sensitivity must be positive"
+            raise ValueError(msg)
+        if not 0.0 < attack <= 1.0:
+            msg = "attack must be in (0, 1]"
+            raise ValueError(msg)
+        if not 0.0 < release <= 1.0:
+            msg = "release must be in (0, 1]"
+            raise ValueError(msg)
+        if pitch_depth < 0.0:
+            msg = "pitch_depth must be non-negative"
+            raise ValueError(msg)
+        if timbre_depth < 0.0:
+            msg = "timbre_depth must be non-negative"
+            raise ValueError(msg)
+
+        self.continuous = ContinuousAudioRenderer(
+            sample_rate=sample_rate,
+            frame_size=frame_size,
+            carrier_frequency=carrier_frequency,
+            frequency_scale=frequency_scale,
+            gain=gain,
+            smoothing=smoothing,
+        )
+        self.response_threshold = response_threshold
+        self.response_sensitivity = response_sensitivity
+        self.attack = attack
+        self.release = release
+        self.pitch_depth = pitch_depth
+        self.timbre_depth = timbre_depth
+        self.envelope = 0.0
+        self.last_activation = 0.0
+        self._voice_phase = 0.0
+        self._brightness = 0.0
+        self._previous_activity: float | None = None
+
+    @property
+    def frame_size(self) -> int:
+        return self.continuous.frame_size
+
+    def render_frame(
+        self,
+        state: FieldState,
+        regions: RegionMasks,
+        *,
+        response_score: float | None = None,
+    ) -> AudioArray:
+        if state.phase.shape != regions.shape:
+            msg = "state and regions must have matching shapes"
+            raise ValueError(msg)
+        if response_score is None:
+            activity = SlopeTriggeredAudioRenderer._output_activity_signal(
+                state, regions
+            )
+            if self._previous_activity is None:
+                response_score = 0.0
+            else:
+                response_score = max(0.0, activity - self._previous_activity)
+            self._previous_activity = activity
+        else:
+            response_score = max(0.0, response_score)
+
+        self.last_activation = float(
+            np.clip(
+                (response_score - self.response_threshold) * self.response_sensitivity,
+                0.0,
+                1.0,
+            )
+        )
+        rate = self.attack if self.last_activation > self.envelope else self.release
+        self.envelope += rate * (self.last_activation - self.envelope)
+
+        features = self._output_voice_features(state, regions)
+        self._brightness += self.continuous.smoothing * (
+            features["brightness"] - self._brightness
+        )
+
+        base = self.continuous.render_frame(state, regions)
+        response = self._response_voice_frame(features)
+        mixed = (0.3 + 0.7 * self.envelope) * base + self.envelope * response
+        return np.clip(mixed, -1.0, 1.0).astype(np.float64, copy=False)
+
+    def _response_voice_frame(self, features: dict[str, float]) -> AudioArray:
+        samples = np.arange(self.frame_size, dtype=np.float64)
+        pitch_shift = 1.0 + self.pitch_depth * (
+            0.35 * features["synchrony"]
+            + 0.45 * features["trace"]
+            + 0.20 * features["frequency_spread"]
+        )
+        frequency = np.clip(
+            self.continuous.carrier_frequency
+            * self.continuous.frequency_scale
+            * pitch_shift,
+            20.0,
+            self.continuous.sample_rate / 2.0 - 1.0,
+        )
+        increment = TAU * frequency / float(self.continuous.sample_rate)
+        phase = self._voice_phase + increment * samples
+        self._voice_phase = float(
+            np.mod(self._voice_phase + increment * self.frame_size, TAU)
+        )
+
+        harmonic_mix = np.clip(self._brightness * self.timbre_depth, 0.0, 1.0)
+        fundamental = np.sin(phase + features["mean_phase"])
+        second = np.sin(2.0 * phase + 0.5 * features["mean_phase"])
+        third = np.sin(3.0 * phase - features["mean_phase"])
+        voice = (
+            (1.0 - 0.45 * harmonic_mix) * fundamental
+            + 0.30 * harmonic_mix * second
+            + 0.15 * harmonic_mix * third
+        )
+        return self.continuous.gain * voice
+
+    @staticmethod
+    def _output_voice_features(
+        state: FieldState,
+        regions: RegionMasks,
+    ) -> dict[str, float]:
+        mask = regions.output
+        if not np.any(mask):
+            return {
+                "synchrony": 0.0,
+                "trace": 0.0,
+                "metabolite_stress": 0.0,
+                "frequency_spread": 0.0,
+                "mean_phase": 0.0,
+                "brightness": 0.0,
+            }
+
+        phase = state.phase[mask]
+        order = np.mean(np.exp(1j * phase))
+        synchrony = float(np.abs(order))
+        trace = float(np.clip(np.mean(state.trace[mask]), 0.0, 1.0))
+        metabolite_stress = float(
+            np.clip(np.mean(1.0 - state.metabolite[mask]), 0.0, 1.0)
+        )
+        frequency_spread = float(np.clip(np.std(state.frequency[mask]), 0.0, 1.0))
+        brightness = float(
+            np.clip(
+                0.45 * synchrony + 0.35 * metabolite_stress + 0.20 * frequency_spread,
+                0.0,
+                1.0,
+            )
+        )
+        return {
+            "synchrony": synchrony,
+            "trace": trace,
+            "metabolite_stress": metabolite_stress,
+            "frequency_spread": frequency_spread,
+            "mean_phase": float(np.angle(order)),
+            "brightness": brightness,
+        }
+
+
 def write_wav(path: str | Path, audio: AudioArray, *, sample_rate: int) -> Path:
     if sample_rate < 1:
         msg = "sample_rate must be positive"

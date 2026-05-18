@@ -10,6 +10,7 @@ from neuroacoustic_resonator.audio.output import (
     GatedAudioRenderer,
     SlopeTriggeredAudioRenderer,
     StimulusCoupledAudioRenderer,
+    VoiceResponseSonificationRenderer,
     render_output_frame,
     write_wav,
 )
@@ -297,3 +298,51 @@ def test_stimulus_coupled_audio_renderer_uses_onset_not_sustained_input() -> Non
     assert first_window == pytest.approx(1.0)
     assert second_window < first_window
     assert third_window < second_window
+
+
+def test_voice_response_sonification_uses_response_score() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+    )
+
+    quiet = renderer.render_frame(field.state, regions, response_score=0.0)
+    active = renderer.render_frame(field.state, regions, response_score=0.02)
+
+    assert renderer.last_activation > 0.0
+    assert renderer.envelope > 0.0
+    assert np.max(np.abs(active)) > np.max(np.abs(quiet))
+    assert np.all((-1.0 <= active) & (active <= 1.0))
+
+
+def test_voice_response_sonification_changes_with_output_state() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+    )
+    renderer.render_frame(field.state, regions, response_score=0.02)
+    before = renderer.render_frame(field.state, regions, response_score=0.02)
+    field.state.trace[regions.output] += 0.5
+    field.state.phase[regions.output] += np.pi / 3.0
+
+    after = renderer.render_frame(field.state, regions, response_score=0.02)
+
+    assert not np.allclose(before, after)
+
+
+def test_voice_response_sonification_rejects_invalid_response_threshold() -> None:
+    with pytest.raises(ValueError, match="response_threshold"):
+        VoiceResponseSonificationRenderer(response_threshold=-0.1)
