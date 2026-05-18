@@ -321,6 +321,25 @@ def test_voice_response_sonification_uses_response_score() -> None:
     assert np.all((-1.0 <= active) & (active <= 1.0))
 
 
+def test_voice_response_sonification_softens_activation_before_ceiling() -> None:
+    field = OscillatorField(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=64,
+        response_threshold=0.0,
+        response_sensitivity=220.0,
+        attack=1.0,
+    )
+
+    renderer.render_frame(field.state, regions, response_score=0.001)
+    moderate_activation = renderer.last_activation
+    renderer.render_frame(field.state, regions, response_score=0.01)
+
+    assert 0.0 < moderate_activation < 0.5
+    assert moderate_activation < renderer.last_activation < 1.0
+
+
 def test_voice_response_sonification_changes_with_output_state() -> None:
     field = OscillatorField(FieldConfig(size=6, seed=1))
     regions = RegionMasks.from_size(6)

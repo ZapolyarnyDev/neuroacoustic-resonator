@@ -614,7 +614,7 @@ class VoiceResponseSonificationRenderer:
         gain: float = 0.2,
         smoothing: float = 0.2,
         response_threshold: float = 0.00025,
-        response_sensitivity: float = 420.0,
+        response_sensitivity: float = 220.0,
         attack: float = 0.55,
         release: float = 0.05,
         pitch_depth: float = 0.45,
@@ -685,13 +685,7 @@ class VoiceResponseSonificationRenderer:
         else:
             response_score = max(0.0, response_score)
 
-        self.last_activation = float(
-            np.clip(
-                (response_score - self.response_threshold) * self.response_sensitivity,
-                0.0,
-                1.0,
-            )
-        )
+        self.last_activation = self._soft_activation(response_score)
         rate = self.attack if self.last_activation > self.envelope else self.release
         self.envelope += rate * (self.last_activation - self.envelope)
 
@@ -735,6 +729,10 @@ class VoiceResponseSonificationRenderer:
             + 0.15 * harmonic_mix * third
         )
         return self.continuous.gain * voice
+
+    def _soft_activation(self, response_score: float) -> float:
+        scaled = max(0.0, response_score - self.response_threshold)
+        return float(1.0 - np.exp(-scaled * self.response_sensitivity))
 
     @staticmethod
     def _output_voice_features(
