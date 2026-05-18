@@ -96,6 +96,12 @@ voice-memory-probe input:
 voice-memory-probe-custom config input output_csv output_summary frame_size hop_size drive_strength pause_steps max_steps:
     uv run python scripts/probe_voice_memory.py --config {{config}} --input {{input}} --output-csv {{output_csv}} --output-summary {{output_summary}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}} --pause-steps {{pause_steps}} --max-steps {{max_steps}}
 
+conversation input:
+    uv run python scripts/run_conversation.py --config configs/field_only.yaml --inputs {{input}} --output experiments/audio/voice-conversation.wav --summary experiments/logs/voice_conversation_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0
+
+conversation-custom config output summary +inputs:
+    uv run python scripts/run_conversation.py --config {{config}} --inputs {{inputs}} --output {{output}} --summary {{summary}}
+
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav
 

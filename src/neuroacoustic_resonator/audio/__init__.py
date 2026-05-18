@@ -4,6 +4,10 @@ from neuroacoustic_resonator.audio.input import (
     extract_audio_input_features,
     write_audio_input_features_csv,
 )
+from neuroacoustic_resonator.audio.conversation import (
+    VoiceConversationConfig,
+    render_voice_conversation,
+)
 from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
@@ -31,10 +35,12 @@ __all__ = [
     "SlopeTriggeredAudioRenderer",
     "StimulusCoupledAudioRenderer",
     "VoiceResponseSonificationRenderer",
+    "VoiceConversationConfig",
     "WavInputDrive",
     "extract_audio_input_features",
     "play_realtime_audio",
     "render_audio_demo",
+    "render_voice_conversation",
     "render_output_frame",
     "write_audio_input_features_csv",
     "write_wav",

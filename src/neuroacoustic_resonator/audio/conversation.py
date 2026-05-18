@@ -1,0 +1,342 @@
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
+from neuroacoustic_resonator.audio.input import (
+    WavInputDrive,
+    extract_audio_input_features,
+)
+from neuroacoustic_resonator.audio.output import (
+    VoiceResponseSonificationRenderer,
+    write_wav,
+)
+from neuroacoustic_resonator.audio.render import steps_for_duration
+from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
+
+ConversationSummary = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class VoiceConversationConfig:
+    config_path: Path = Path("configs") / "field_only.yaml"
+    input_wavs: tuple[Path, ...] = ()
+    output_wav: Path = Path("experiments") / "audio" / "voice-conversation.wav"
+    output_summary: Path = (
+        Path("experiments") / "logs" / "voice_conversation_summary.json"
+    )
+    sample_rate: int = 48_000
+    output_frame_size: int = 512
+    input_frame_size: int = 1024
+    input_hop_size: int = 512
+    drive_strength: float = 0.45
+    input_assoc_gain: float = 0.8
+    input_output_gain: float = 0.0
+    response_seconds: float = 1.5
+    pause_seconds: float = 0.25
+    warmup_steps: int = 100
+    gain: float = 0.35
+    carrier_frequency: float = 220.0
+    frequency_scale: float = 1.0
+    response_threshold: float = 0.0
+    response_sensitivity: float = 900.0
+
+    def __post_init__(self) -> None:
+        if not self.input_wavs:
+            msg = "input_wavs must not be empty"
+            raise ValueError(msg)
+        if self.sample_rate < 1:
+            msg = "sample_rate must be positive"
+            raise ValueError(msg)
+        if self.output_frame_size < 1:
+            msg = "output_frame_size must be positive"
+            raise ValueError(msg)
+        if self.input_frame_size < 1:
+            msg = "input_frame_size must be positive"
+            raise ValueError(msg)
+        if self.input_hop_size < 1:
+            msg = "input_hop_size must be positive"
+            raise ValueError(msg)
+        if self.drive_strength < 0.0:
+            msg = "drive_strength must be non-negative"
+            raise ValueError(msg)
+        if self.input_assoc_gain < 0.0:
+            msg = "input_assoc_gain must be non-negative"
+            raise ValueError(msg)
+        if self.input_output_gain < 0.0:
+            msg = "input_output_gain must be non-negative"
+            raise ValueError(msg)
+        if self.response_seconds <= 0.0:
+            msg = "response_seconds must be positive"
+            raise ValueError(msg)
+        if self.pause_seconds < 0.0:
+            msg = "pause_seconds must be non-negative"
+            raise ValueError(msg)
+        if self.warmup_steps < 0:
+            msg = "warmup_steps must be non-negative"
+            raise ValueError(msg)
+        if self.gain < 0.0:
+            msg = "gain must be non-negative"
+            raise ValueError(msg)
+        if self.carrier_frequency <= 0.0:
+            msg = "carrier_frequency must be positive"
+            raise ValueError(msg)
+        if self.frequency_scale <= 0.0:
+            msg = "frequency_scale must be positive"
+            raise ValueError(msg)
+        if self.response_threshold < 0.0:
+            msg = "response_threshold must be non-negative"
+            raise ValueError(msg)
+        if self.response_sensitivity <= 0.0:
+            msg = "response_sensitivity must be positive"
+            raise ValueError(msg)
+
+
+def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSummary:
+    sim_config = SimulationConfig.from_file(config.config_path)
+    simulation = Simulation.from_config(sim_config)
+    regions = RegionMasks.from_size(sim_config.field.size)
+    tracker = RegionalActivityTracker()
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=config.sample_rate,
+        frame_size=config.output_frame_size,
+        carrier_frequency=config.carrier_frequency,
+        frequency_scale=config.frequency_scale,
+        gain=config.gain,
+        response_threshold=config.response_threshold,
+        response_sensitivity=config.response_sensitivity,
+    )
+
+    for _ in range(config.warmup_steps):
+        frame = simulation.step()
+        tracker.update(frame, regions, input_value=simulation.last_input_value)
+
+    response_steps = steps_for_duration(
+        config.response_seconds,
+        sample_rate=config.sample_rate,
+        frame_size=config.output_frame_size,
+    )
+    pause_samples = int(round(config.pause_seconds * config.sample_rate))
+    audio_frames: list[np.ndarray] = []
+    utterances: list[dict[str, Any]] = []
+
+    for utterance_index, input_wav in enumerate(config.input_wavs, start=1):
+        features = extract_audio_input_features(
+            input_wav,
+            frame_size=config.input_frame_size,
+            hop_size=config.input_hop_size,
+            drive_strength=config.drive_strength,
+        )
+        drive = WavInputDrive(
+            features,
+            regions,
+            assoc_gain=config.input_assoc_gain,
+            output_gain=config.input_output_gain,
+        )
+        input_scores = drive_utterance(simulation, tracker, regions, features, drive)
+        response_audio, response_scores = render_field_response(
+            simulation,
+            tracker,
+            regions,
+            renderer,
+            response_steps=response_steps,
+        )
+        audio_frames.append(response_audio)
+        if pause_samples:
+            audio_frames.append(np.zeros(pause_samples, dtype=np.float64))
+        utterances.append(
+            {
+                "index": utterance_index,
+                "input_wav": str(input_wav),
+                "input_frames": features.frame_count,
+                "input_duration_seconds": features.duration_seconds,
+                "peak_input_value": float(np.max(input_scores)),
+                "mean_input_value": float(np.mean(input_scores)),
+                "response_steps": response_steps,
+                "response_duration_seconds": (
+                    response_steps * config.output_frame_size / config.sample_rate
+                ),
+                "peak_response_score": float(np.max(response_scores)),
+                "mean_response_score": float(np.mean(response_scores)),
+            }
+        )
+
+    audio = (
+        np.concatenate(audio_frames) if audio_frames else np.zeros(0, dtype=np.float64)
+    )
+    write_wav(config.output_wav, audio, sample_rate=config.sample_rate)
+    summary: ConversationSummary = {
+        "config": str(config.config_path),
+        "output_wav": str(config.output_wav),
+        "parameters": {
+            "sample_rate": config.sample_rate,
+            "output_frame_size": config.output_frame_size,
+            "input_frame_size": config.input_frame_size,
+            "input_hop_size": config.input_hop_size,
+            "drive_strength": config.drive_strength,
+            "input_assoc_gain": config.input_assoc_gain,
+            "input_output_gain": config.input_output_gain,
+            "response_seconds": config.response_seconds,
+            "pause_seconds": config.pause_seconds,
+            "warmup_steps": config.warmup_steps,
+            "gain": config.gain,
+            "carrier_frequency": config.carrier_frequency,
+            "frequency_scale": config.frequency_scale,
+            "response_threshold": config.response_threshold,
+            "response_sensitivity": config.response_sensitivity,
+        },
+        "utterance_count": len(utterances),
+        "duration_seconds": float(audio.size / config.sample_rate),
+        "utterances": utterances,
+    }
+    write_conversation_summary(config.output_summary, summary)
+    return summary
+
+
+def drive_utterance(
+    simulation: Simulation,
+    tracker: RegionalActivityTracker,
+    regions: RegionMasks,
+    features: Any,
+    drive: WavInputDrive,
+) -> np.ndarray:
+    input_values: list[float] = []
+    for input_step in range(features.frame_count):
+        input_value = drive.apply(simulation.field, input_step)
+        simulation.step_index += 1
+        state = simulation.field.step()
+        simulation.last_input_value = input_value
+        frame = SimulationFrame(
+            state=state,
+            metrics=simulation.field.metrics(step=simulation.step_index),
+            local_synchrony=simulation.field.local_synchrony(),
+        )
+        tracker.update(frame, regions, input_value=input_value)
+        input_values.append(input_value)
+    return np.asarray(input_values, dtype=np.float64)
+
+
+def render_field_response(
+    simulation: Simulation,
+    tracker: RegionalActivityTracker,
+    regions: RegionMasks,
+    renderer: VoiceResponseSonificationRenderer,
+    *,
+    response_steps: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    frames: list[np.ndarray] = []
+    response_scores: list[float] = []
+    for _ in range(response_steps):
+        frame = simulation.step()
+        metrics = tracker.update(
+            frame, regions, input_value=simulation.last_input_value
+        )
+        response_score = max(
+            metrics.output_fast_response_score,
+            metrics.output_event_score,
+            max(0.0, metrics.output_response_activity) * 0.05,
+        )
+        frames.append(
+            renderer.render_frame(
+                frame.state,
+                regions,
+                response_score=response_score,
+            )
+        )
+        response_scores.append(response_score)
+    audio = np.concatenate(frames) if frames else np.zeros(0, dtype=np.float64)
+    scores = np.asarray(response_scores, dtype=np.float64)
+    return audio, scores
+
+
+def write_conversation_summary(
+    path: str | Path,
+    summary: ConversationSummary,
+) -> Path:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return output
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Render an offline field-response conversation from voice WAVs.",
+    )
+    parser.add_argument(
+        "--config", type=Path, default=VoiceConversationConfig.config_path
+    )
+    parser.add_argument(
+        "--inputs",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="One or more voice WAV utterances.",
+    )
+    parser.add_argument(
+        "--output", type=Path, default=VoiceConversationConfig.output_wav
+    )
+    parser.add_argument(
+        "--summary",
+        type=Path,
+        default=VoiceConversationConfig.output_summary,
+    )
+    parser.add_argument("--sample-rate", type=int, default=48_000)
+    parser.add_argument("--output-frame-size", type=int, default=512)
+    parser.add_argument("--input-frame-size", type=int, default=1024)
+    parser.add_argument("--input-hop-size", type=int, default=512)
+    parser.add_argument("--drive-strength", type=float, default=0.45)
+    parser.add_argument("--input-assoc-gain", type=float, default=0.8)
+    parser.add_argument("--input-output-gain", type=float, default=0.0)
+    parser.add_argument("--response-seconds", type=float, default=1.5)
+    parser.add_argument("--pause-seconds", type=float, default=0.25)
+    parser.add_argument("--warmup-steps", type=int, default=100)
+    parser.add_argument("--gain", type=float, default=0.35)
+    parser.add_argument("--carrier-frequency", type=float, default=220.0)
+    parser.add_argument("--frequency-scale", type=float, default=1.0)
+    parser.add_argument("--response-threshold", type=float, default=0.0)
+    parser.add_argument("--response-sensitivity", type=float, default=900.0)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    summary = render_voice_conversation(
+        VoiceConversationConfig(
+            config_path=args.config,
+            input_wavs=tuple(args.inputs),
+            output_wav=args.output,
+            output_summary=args.summary,
+            sample_rate=args.sample_rate,
+            output_frame_size=args.output_frame_size,
+            input_frame_size=args.input_frame_size,
+            input_hop_size=args.input_hop_size,
+            drive_strength=args.drive_strength,
+            input_assoc_gain=args.input_assoc_gain,
+            input_output_gain=args.input_output_gain,
+            response_seconds=args.response_seconds,
+            pause_seconds=args.pause_seconds,
+            warmup_steps=args.warmup_steps,
+            gain=args.gain,
+            carrier_frequency=args.carrier_frequency,
+            frequency_scale=args.frequency_scale,
+            response_threshold=args.response_threshold,
+            response_sensitivity=args.response_sensitivity,
+        )
+    )
+    print(
+        "Rendered voice conversation: "
+        f"{summary['output_wav']} "
+        f"utterances={summary['utterance_count']} "
+        f"duration={summary['duration_seconds']:.3f}s"
+    )
+    print(f"Wrote summary: {args.summary}")
+    return 0

@@ -16,6 +16,10 @@ from neuroacoustic_resonator.audio.output import (
     write_wav,
 )
 from neuroacoustic_resonator.audio.render import render_audio_demo
+from neuroacoustic_resonator.audio.conversation import (
+    VoiceConversationConfig,
+    render_voice_conversation,
+)
 from neuroacoustic_resonator.core.config import FieldConfigModel, SimulationConfig
 from neuroacoustic_resonator.core.field import (
     FieldConfig,
@@ -92,6 +96,7 @@ __all__ = [
     "SyntheticInputConfig",
     "SyntheticInputDrive",
     "VisualizationFrame",
+    "VoiceConversationConfig",
     "WavInputDrive",
     "compute_regional_activity_metrics",
     "export_diagnostics_artifacts",
@@ -104,6 +109,7 @@ __all__ = [
     "region_fast_activity",
     "region_slow_activity",
     "render_audio_demo",
+    "render_voice_conversation",
     "render_output_frame",
     "play_realtime_audio",
     "run_audio_input_simulation",
