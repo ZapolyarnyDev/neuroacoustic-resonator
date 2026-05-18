@@ -154,6 +154,7 @@ class DiagnosticCurveSpec:
     key: str
     label: str
     color: tuple[int, int, int]
+    group: str
     width: float = 1.5
 
 
@@ -181,58 +182,87 @@ def diagnostic_curve_specs() -> tuple[DiagnosticCurveSpec, ...]:
             key="global_synchrony",
             label="global synchrony",
             color=(250, 220, 70),
+            group="tonic",
         ),
         DiagnosticCurveSpec(
             key="mean_metabolite",
             label="mean metabolite",
             color=(70, 210, 230),
+            group="tonic",
         ),
         DiagnosticCurveSpec(
             key="output_activity",
             label="output activity",
             color=(255, 135, 70),
+            group="tonic",
             width=2.0,
         ),
         DiagnosticCurveSpec(
             key="output_response_activity",
             label="baseline response",
             color=(255, 165, 80),
+            group="response",
             width=2.0,
         ),
         DiagnosticCurveSpec(
             key="output_event_score",
             label="output event score",
             color=(185, 135, 255),
+            group="response",
         ),
         DiagnosticCurveSpec(
             key="output_fast_response_score",
             label="fast response score",
             color=(255, 210, 120),
+            group="response",
         ),
         DiagnosticCurveSpec(
             key="output_slow_drift_score",
             label="slow drift score",
             color=(130, 170, 255),
+            group="tonic",
         ),
         DiagnosticCurveSpec(
             key="input_value",
             label="input pulse |value|",
             color=(80, 235, 130),
+            group="response",
         ),
         DiagnosticCurveSpec(
             key="audio_envelope",
             label="audio envelope",
             color=(245, 245, 245),
+            group="response",
         ),
         DiagnosticCurveSpec(
             key="stimulus_window",
             label="stimulus window",
             color=(120, 255, 210),
+            group="response",
         ),
         DiagnosticCurveSpec(
             key="coupled_audio_trigger",
             label="coupled trigger",
             color=(255, 120, 170),
+            group="response",
+        ),
+    )
+
+
+def diagnostic_curve_groups() -> tuple[
+    tuple[str, str, tuple[DiagnosticCurveSpec, ...]], ...
+]:
+    specs = diagnostic_curve_specs()
+    return (
+        (
+            "tonic",
+            "tonic state",
+            tuple(spec for spec in specs if spec.group == "tonic"),
+        ),
+        (
+            "response",
+            "response / events",
+            tuple(spec for spec in specs if spec.group == "response"),
         ),
     )
 
@@ -241,14 +271,25 @@ def diagnostic_legend_html(specs: tuple[DiagnosticCurveSpec, ...]) -> str:
     rows = [
         "<div style='font-size: 11pt; font-weight: 600; color: #dddddd;'>diagnostics</div>"
     ]
-    for spec in specs:
-        red, green, blue = spec.color
+    for group_key, group_label, group_specs in diagnostic_curve_groups():
+        selected_specs = tuple(spec for spec in group_specs if spec in specs)
+        if not selected_specs:
+            continue
         rows.append(
-            "<div style='font-size: 10pt; margin-top: 10px;'>"
-            f"<span style='color: rgb({red}, {green}, {blue});'>--</span> "
-            f"<span style='color: #d8d8d8;'>{spec.label}</span>"
+            "<div style='font-size: 10pt; font-weight: 600; color: #9fd6ff; "
+            "margin-top: 14px;'>"
+            f"{group_label}"
             "</div>"
         )
+        for spec in selected_specs:
+            red, green, blue = spec.color
+            rows.append(
+                "<div style='font-size: 10pt; margin-top: 8px;'>"
+                f"<span style='color: rgb({red}, {green}, {blue});'>--</span> "
+                f"<span style='color: #d8d8d8;'>{spec.label}</span>"
+                "</div>"
+            )
+        rows.append(f"<span style='display:none'>{group_key}</span>")
     return "".join(rows)
 
 
@@ -468,6 +509,7 @@ class _LiveFieldWindow:
             for spec in self._diagnostic_specs
         }
         self._diagnostic_curves: dict[str, Any] = {}
+        self._diagnostic_plots: dict[str, Any] = {}
         self._diagnostics_legend_label: Any | None = None
         self._diagnostics_recorder = DiagnosticsSnapshotRecorder(
             config.diagnostics_output_path,
@@ -503,13 +545,7 @@ class _LiveFieldWindow:
         ):
             self._add_image_panel(title, item, row=index // 3, col=index % 3)
 
-        self._metrics_plot = self._window.addPlot(
-            row=0,
-            col=3,
-            rowspan=2,
-            title="diagnostics",
-        )
-        self._configure_diagnostics_plot()
+        self._add_diagnostics_plots()
         self._timer = qt_core.QTimer(self._window)
         self._timer.timeout.connect(self.update)
 
@@ -522,6 +558,9 @@ class _LiveFieldWindow:
         layout.setColumnStretchFactor(3, 2)
         layout.setColumnMinimumWidth(4, 190)
         layout.setColumnStretchFactor(4, 0)
+        for row in range(2):
+            layout.setRowMinimumHeight(row, 380)
+            layout.setRowStretchFactor(row, 1)
 
     def _add_image_panel(self, title: str, item: Any, *, row: int, col: int) -> None:
         plot = self._window.addPlot(row=row, col=col, title=title)
@@ -539,12 +578,17 @@ class _LiveFieldWindow:
             )
             plot.addItem(line)
 
-    def _configure_diagnostics_plot(self) -> None:
-        self._metrics_plot.setMenuEnabled(False)
-        self._metrics_plot.showGrid(x=True, y=True, alpha=0.25)
-        self._metrics_plot.setLabel("bottom", "step")
-        self._metrics_plot.setLabel("left", "value")
-        self._metrics_plot.getViewBox().setDefaultPadding(0.02)
+    def _add_diagnostics_plots(self) -> None:
+        for row, (group_key, title, specs) in enumerate(diagnostic_curve_groups()):
+            plot = self._window.addPlot(row=row, col=3, title=title)
+            self._configure_diagnostics_plot(plot)
+            self._diagnostic_plots[group_key] = plot
+            for spec in specs:
+                curve = plot.plot(
+                    pen=self._pg.mkPen(spec.color, width=spec.width),
+                )
+                self._diagnostic_curves[spec.key] = curve
+
         self._diagnostics_legend_label = self._pg.LabelItem(justify="left")
         self._diagnostics_legend_label.setText(
             diagnostic_legend_html(self._diagnostic_specs),
@@ -555,11 +599,13 @@ class _LiveFieldWindow:
             col=4,
             rowspan=2,
         )
-        for spec in self._diagnostic_specs:
-            curve = self._metrics_plot.plot(
-                pen=self._pg.mkPen(spec.color, width=spec.width),
-            )
-            self._diagnostic_curves[spec.key] = curve
+
+    def _configure_diagnostics_plot(self, plot: Any) -> None:
+        plot.setMenuEnabled(False)
+        plot.showGrid(x=True, y=True, alpha=0.25)
+        plot.setLabel("bottom", "step")
+        plot.setLabel("left", "value")
+        plot.getViewBox().setDefaultPadding(0.02)
 
     def show(self) -> None:
         self._window.show()

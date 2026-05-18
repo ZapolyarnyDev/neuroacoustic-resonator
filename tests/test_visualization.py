@@ -13,6 +13,7 @@ from neuroacoustic_resonator.viz.live import (
     LiveVisualizationConfig,
     _LiveAudioOutput,
     coupled_response_score,
+    diagnostic_curve_groups,
     diagnostic_curve_specs,
     diagnostic_legend_html,
     diagnostics_row,
@@ -98,6 +99,29 @@ def test_diagnostic_curve_specs_have_stable_labels() -> None:
     ]
     assert all(spec.label for spec in specs)
     assert all(len(spec.color) == 3 for spec in specs)
+    assert {spec.group for spec in specs} == {"tonic", "response"}
+
+
+def test_diagnostic_curve_groups_split_tonic_and_response_lines() -> None:
+    groups = diagnostic_curve_groups()
+
+    assert [group[0] for group in groups] == ["tonic", "response"]
+    assert [group[1] for group in groups] == ["tonic state", "response / events"]
+    assert [spec.key for spec in groups[0][2]] == [
+        "global_synchrony",
+        "mean_metabolite",
+        "output_activity",
+        "output_slow_drift_score",
+    ]
+    assert [spec.key for spec in groups[1][2]] == [
+        "output_response_activity",
+        "output_event_score",
+        "output_fast_response_score",
+        "input_value",
+        "audio_envelope",
+        "stimulus_window",
+        "coupled_audio_trigger",
+    ]
 
 
 def test_diagnostic_legend_html_contains_labels_and_colors() -> None:
@@ -105,6 +129,8 @@ def test_diagnostic_legend_html_contains_labels_and_colors() -> None:
 
     assert "global synchrony" in html
     assert "audio envelope" in html
+    assert "tonic state" in html
+    assert "response / events" in html
     assert "rgb(" in html
 
 
