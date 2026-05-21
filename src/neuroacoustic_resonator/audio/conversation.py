@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from scipy.io import wavfile  # type: ignore[import-untyped]
+from scipy.signal import resample_poly  # type: ignore[import-untyped]
 
 from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
 from neuroacoustic_resonator.audio.input import (
@@ -44,6 +47,8 @@ class VoiceConversationConfig:
     pause_seconds: float = 0.25
     warmup_steps: int = 100
     gain: float = 0.35
+    input_mix_gain: float = 0.8
+    include_input_audio: bool = True
     carrier_frequency: float = 220.0
     frequency_scale: float = 1.0
     response_threshold: float = 0.0
@@ -85,6 +90,9 @@ class VoiceConversationConfig:
             raise ValueError(msg)
         if self.gain < 0.0:
             msg = "gain must be non-negative"
+            raise ValueError(msg)
+        if self.input_mix_gain < 0.0:
+            msg = "input_mix_gain must be non-negative"
             raise ValueError(msg)
         if self.carrier_frequency <= 0.0:
             msg = "carrier_frequency must be positive"
@@ -129,6 +137,15 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     utterances: list[dict[str, Any]] = []
 
     for utterance_index, input_wav in enumerate(config.input_wavs, start=1):
+        input_audio = (
+            read_conversation_input_audio(
+                input_wav,
+                sample_rate=config.sample_rate,
+                gain=config.input_mix_gain,
+            )
+            if config.include_input_audio
+            else np.zeros(0, dtype=np.float64)
+        )
         features = extract_audio_input_features(
             input_wav,
             frame_size=config.input_frame_size,
@@ -149,6 +166,10 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             renderer,
             response_steps=response_steps,
         )
+        if input_audio.size:
+            audio_frames.append(input_audio)
+            if pause_samples:
+                audio_frames.append(np.zeros(pause_samples, dtype=np.float64))
         audio_frames.append(response_audio)
         if pause_samples:
             audio_frames.append(np.zeros(pause_samples, dtype=np.float64))
@@ -158,6 +179,9 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
                 "input_wav": str(input_wav),
                 "input_frames": features.frame_count,
                 "input_duration_seconds": features.duration_seconds,
+                "mixed_input_audio_seconds": float(
+                    input_audio.size / config.sample_rate
+                ),
                 "peak_input_value": float(np.max(input_scores)),
                 "mean_input_value": float(np.mean(input_scores)),
                 "response_steps": response_steps,
@@ -188,6 +212,8 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             "pause_seconds": config.pause_seconds,
             "warmup_steps": config.warmup_steps,
             "gain": config.gain,
+            "input_mix_gain": config.input_mix_gain,
+            "include_input_audio": config.include_input_audio,
             "carrier_frequency": config.carrier_frequency,
             "frequency_scale": config.frequency_scale,
             "response_threshold": config.response_threshold,
@@ -199,6 +225,38 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     }
     write_conversation_summary(config.output_summary, summary)
     return summary
+
+
+def read_conversation_input_audio(
+    path: str | Path,
+    *,
+    sample_rate: int,
+    gain: float,
+) -> np.ndarray:
+    source_rate, samples = wavfile.read(path)
+    audio = to_mono_float(samples)
+    if int(source_rate) != sample_rate:
+        common = math.gcd(int(source_rate), sample_rate)
+        audio = resample_poly(audio, sample_rate // common, int(source_rate) // common)
+    return np.clip(audio * gain, -1.0, 1.0).astype(np.float64, copy=False)
+
+
+def to_mono_float(samples: np.ndarray) -> np.ndarray:
+    audio = np.asarray(samples)
+    if audio.ndim == 2:
+        audio = np.mean(audio, axis=1)
+    if audio.ndim != 1:
+        msg = "WAV input must be mono or stereo"
+        raise ValueError(msg)
+    if np.issubdtype(audio.dtype, np.integer):
+        info = np.iinfo(audio.dtype)
+        integer_peak = max(abs(info.min), abs(info.max))
+        return audio.astype(np.float64) / integer_peak
+    floating = audio.astype(np.float64)
+    floating_peak = float(np.max(np.abs(floating))) if floating.size else 0.0
+    if floating_peak > 1.0:
+        floating = floating / floating_peak
+    return floating
 
 
 def drive_utterance(
@@ -300,6 +358,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pause-seconds", type=float, default=0.25)
     parser.add_argument("--warmup-steps", type=int, default=100)
     parser.add_argument("--gain", type=float, default=0.35)
+    parser.add_argument("--input-mix-gain", type=float, default=0.8)
+    parser.add_argument(
+        "--response-only",
+        action="store_true",
+        help="Write only generated field responses, without original input audio.",
+    )
     parser.add_argument("--carrier-frequency", type=float, default=220.0)
     parser.add_argument("--frequency-scale", type=float, default=1.0)
     parser.add_argument("--response-threshold", type=float, default=0.0)
@@ -326,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
             pause_seconds=args.pause_seconds,
             warmup_steps=args.warmup_steps,
             gain=args.gain,
+            input_mix_gain=args.input_mix_gain,
+            include_input_audio=not args.response_only,
             carrier_frequency=args.carrier_frequency,
             frequency_scale=args.frequency_scale,
             response_threshold=args.response_threshold,
