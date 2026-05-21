@@ -248,10 +248,65 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         },
         "utterance_count": len(utterances),
         "duration_seconds": float(audio.size / config.sample_rate),
+        "session": summarize_conversation_session(
+            utterances,
+            output_duration_seconds=float(audio.size / config.sample_rate),
+        ),
         "utterances": utterances,
     }
     write_conversation_summary(config.output_summary, summary)
     return summary
+
+
+def summarize_conversation_session(
+    utterances: list[dict[str, Any]],
+    *,
+    output_duration_seconds: float,
+) -> dict[str, float | int | None]:
+    if not utterances:
+        return {
+            "utterance_count": 0,
+            "output_duration_seconds": output_duration_seconds,
+            "total_input_audio_seconds": 0.0,
+            "total_response_audio_seconds": 0.0,
+            "peak_input_value": 0.0,
+            "peak_response_score": 0.0,
+            "mean_peak_response_score": 0.0,
+            "mean_planned_response_seconds": 0.0,
+            "strongest_input_index": None,
+            "strongest_response_index": None,
+        }
+
+    peak_inputs = np.asarray(
+        [utterance["peak_input_value"] for utterance in utterances],
+        dtype=np.float64,
+    )
+    peak_responses = np.asarray(
+        [utterance["peak_response_score"] for utterance in utterances],
+        dtype=np.float64,
+    )
+    planned_response_seconds = np.asarray(
+        [utterance["planned_response_seconds"] for utterance in utterances],
+        dtype=np.float64,
+    )
+    return {
+        "utterance_count": len(utterances),
+        "output_duration_seconds": output_duration_seconds,
+        "total_input_audio_seconds": float(
+            sum(utterance["mixed_input_audio_seconds"] for utterance in utterances)
+        ),
+        "total_response_audio_seconds": float(
+            sum(utterance["response_duration_seconds"] for utterance in utterances)
+        ),
+        "peak_input_value": float(np.max(peak_inputs)),
+        "peak_response_score": float(np.max(peak_responses)),
+        "mean_peak_response_score": float(np.mean(peak_responses)),
+        "mean_planned_response_seconds": float(np.mean(planned_response_seconds)),
+        "strongest_input_index": int(utterances[int(np.argmax(peak_inputs))]["index"]),
+        "strongest_response_index": int(
+            utterances[int(np.argmax(peak_responses))]["index"]
+        ),
+    }
 
 
 def response_duration_for_input(

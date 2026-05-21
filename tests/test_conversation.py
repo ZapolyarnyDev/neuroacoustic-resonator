@@ -58,11 +58,17 @@ steps: 8
         assert stream.getframerate() == 8_000
         assert stream.getnframes() == 2 * (256 + 400 + 800 + 400)
     assert summary["utterance_count"] == 2
+    assert summary["session"]["utterance_count"] == 2
+    assert summary["session"]["total_input_audio_seconds"] == 2 * 256 / 8_000
+    assert summary["session"]["total_response_audio_seconds"] == 2 * 0.1
+    assert summary["session"]["strongest_input_index"] in {1, 2}
+    assert summary["session"]["strongest_response_index"] in {1, 2}
     assert len(summary["utterances"]) == 2
     assert summary["utterances"][0]["peak_input_value"] > 0.0
     assert summary["utterances"][0]["mixed_input_audio_seconds"] == 256 / 8_000
     assert summary["parameters"]["include_input_audio"] is True
     assert loaded["output_wav"] == str(output)
+    assert "session" in loaded
 
 
 def test_render_voice_conversation_can_write_response_only(tmp_path) -> None:
