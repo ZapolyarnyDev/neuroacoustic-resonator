@@ -672,6 +672,8 @@ class VoiceResponseSonificationRenderer:
         self.last_activation = 0.0
         self._voice_phase = 0.0
         self._brightness = 0.0
+        self._roughness = 0.0
+        self._vibrato_phase = 0.0
         self._previous_activity: float | None = None
 
     @property
@@ -708,6 +710,9 @@ class VoiceResponseSonificationRenderer:
         self._brightness += self.continuous.smoothing * (
             features["brightness"] - self._brightness
         )
+        self._roughness += self.continuous.smoothing * (
+            features["roughness"] - self._roughness
+        )
 
         base = self.continuous.render_frame(state, regions)
         response = self._response_voice_frame(features)
@@ -720,11 +725,32 @@ class VoiceResponseSonificationRenderer:
 
     def _response_voice_frame(self, features: dict[str, float]) -> AudioArray:
         samples = np.arange(self.frame_size, dtype=np.float64)
-        pitch_shift = 1.0 + self.pitch_depth * (
-            0.35 * features["synchrony"]
-            + 0.45 * features["trace"]
-            + 0.20 * features["frequency_spread"]
+        phase_spread = features["phase_spread"]
+        trace_contrast = features["trace_contrast"]
+        metabolite_contrast = features["metabolite_contrast"]
+        phase_order_2 = features["phase_order_2"]
+        phase_order_3 = features["phase_order_3"]
+        trace_phase_lock = features["trace_phase_lock"]
+        metabolite_phase_lock = features["metabolite_phase_lock"]
+        base_pitch_shift = 1.0 + self.pitch_depth * (
+            0.25 * features["synchrony"]
+            + 0.30 * features["trace"]
+            + 0.20 * features["frequency_mean"]
+            + 0.15 * features["frequency_spread"]
+            - 0.10 * features["metabolite_stress"]
+            + 0.08 * phase_order_2
+            - 0.06 * phase_order_3
         )
+        vibrato_rate = (
+            3.0 + 5.0 * phase_spread + 2.0 * trace_contrast + 2.5 * trace_phase_lock
+        )
+        vibrato_increment = TAU * vibrato_rate / float(self.continuous.sample_rate)
+        vibrato_phase = self._vibrato_phase + vibrato_increment * samples
+        self._vibrato_phase = float(
+            np.mod(self._vibrato_phase + vibrato_increment * self.frame_size, TAU)
+        )
+        vibrato_depth = 0.004 + 0.035 * phase_spread + 0.02 * metabolite_contrast
+        pitch_shift = base_pitch_shift * (1.0 + vibrato_depth * np.sin(vibrato_phase))
         frequency = np.clip(
             self.continuous.carrier_frequency
             * self.continuous.frequency_scale
@@ -733,21 +759,47 @@ class VoiceResponseSonificationRenderer:
             self.continuous.sample_rate / 2.0 - 1.0,
         )
         increment = TAU * frequency / float(self.continuous.sample_rate)
-        phase = self._voice_phase + increment * samples
+        phase = self._voice_phase + np.cumsum(increment)
         self._voice_phase = float(
-            np.mod(self._voice_phase + increment * self.frame_size, TAU)
+            np.mod(self._voice_phase + float(np.sum(increment)), TAU)
         )
 
-        harmonic_mix = np.clip(self._brightness * self.timbre_depth, 0.0, 1.0)
-        fundamental = np.sin(phase + features["mean_phase"])
-        second = np.sin(2.0 * phase + 0.5 * features["mean_phase"])
-        third = np.sin(3.0 * phase - features["mean_phase"])
-        voice = (
-            (1.0 - 0.45 * harmonic_mix) * fundamental
-            + 0.30 * harmonic_mix * second
-            + 0.15 * harmonic_mix * third
+        harmonic_mix = np.clip(
+            (self._brightness + 0.25 * phase_order_2) * self.timbre_depth,
+            0.0,
+            1.0,
         )
-        return self.continuous.gain * voice
+        rough_mix = np.clip(
+            (self._roughness + 0.20 * phase_order_3 + 0.15 * metabolite_phase_lock)
+            * self.timbre_depth,
+            0.0,
+            1.0,
+        )
+        formant_phase = features["mean_phase"]
+        second_phase = features["phase_angle_2"]
+        third_phase = features["phase_angle_3"]
+        fundamental = np.sin(phase + formant_phase)
+        second = np.sin(2.0 * phase + 0.5 * formant_phase + second_phase)
+        third = np.sin(3.0 * phase - formant_phase + third_phase)
+        fourth = np.sin(4.0 * phase + 1.7 * formant_phase - second_phase)
+        ratio_a = 2.31 + 0.55 * phase_order_2 + 0.21 * trace_phase_lock
+        ratio_b = 4.63 + 0.71 * phase_order_3 + 0.33 * metabolite_phase_lock
+        inharmonic = np.sin(
+            ratio_a * phase + 0.7 * formant_phase + second_phase
+        ) * np.sin(ratio_b * phase - 0.3 * formant_phase + third_phase)
+        voice = (
+            (1.0 - 0.50 * harmonic_mix) * fundamental
+            + (0.18 + 0.18 * trace_contrast + 0.16 * phase_order_2)
+            * harmonic_mix
+            * second
+            + (0.08 + 0.18 * metabolite_contrast + 0.16 * phase_order_3)
+            * harmonic_mix
+            * third
+            + 0.10 * rough_mix * fourth
+            + (0.12 + 0.12 * phase_spread) * rough_mix * inharmonic
+        )
+        normalization = 1.0 + 0.52 * harmonic_mix + 0.28 * rough_mix
+        return self.continuous.gain * voice / normalization
 
     def _soft_activation(self, response_score: float) -> float:
         scaled = max(0.0, response_score - self.response_threshold)
@@ -764,22 +816,78 @@ class VoiceResponseSonificationRenderer:
                 "synchrony": 0.0,
                 "trace": 0.0,
                 "metabolite_stress": 0.0,
+                "metabolite_contrast": 0.0,
                 "frequency_spread": 0.0,
+                "frequency_mean": 0.0,
                 "mean_phase": 0.0,
+                "phase_angle_2": 0.0,
+                "phase_angle_3": 0.0,
+                "phase_order_2": 0.0,
+                "phase_order_3": 0.0,
+                "phase_spread": 0.0,
+                "trace_phase_lock": 0.0,
+                "metabolite_phase_lock": 0.0,
+                "trace_contrast": 0.0,
                 "brightness": 0.0,
+                "roughness": 0.0,
             }
 
         phase = state.phase[mask]
         order = np.mean(np.exp(1j * phase))
+        second_order = np.mean(np.exp(2j * phase))
+        third_order = np.mean(np.exp(3j * phase))
         synchrony = float(np.abs(order))
         trace = float(np.clip(np.mean(state.trace[mask]), 0.0, 1.0))
+        trace_contrast = float(np.clip(np.std(state.trace[mask]), 0.0, 1.0))
         metabolite_stress = float(
             np.clip(np.mean(1.0 - state.metabolite[mask]), 0.0, 1.0)
         )
+        metabolite_contrast = float(
+            np.clip(np.std(1.0 - state.metabolite[mask]), 0.0, 1.0)
+        )
         frequency_spread = float(np.clip(np.std(state.frequency[mask]), 0.0, 1.0))
+        frequency_mean = float(np.clip(np.mean(state.frequency[mask]), 0.0, 2.0) / 2.0)
+        phase_spread = float(np.clip(1.0 - synchrony, 0.0, 1.0))
+        phase_order_2 = float(np.abs(second_order))
+        phase_order_3 = float(np.abs(third_order))
+        trace_weights = np.clip(state.trace[mask], 0.0, None)
+        trace_weight_sum = float(np.sum(trace_weights))
+        if trace_weight_sum > 1e-12:
+            trace_phase_lock = float(
+                np.abs(np.sum(trace_weights * np.exp(1j * phase)) / trace_weight_sum)
+            )
+        else:
+            trace_phase_lock = 0.0
+        metabolite_weights = np.clip(1.0 - state.metabolite[mask], 0.0, None)
+        metabolite_weight_sum = float(np.sum(metabolite_weights))
+        if metabolite_weight_sum > 1e-12:
+            metabolite_phase_lock = float(
+                np.abs(
+                    np.sum(metabolite_weights * np.exp(1j * phase))
+                    / metabolite_weight_sum
+                )
+            )
+        else:
+            metabolite_phase_lock = 0.0
         brightness = float(
             np.clip(
-                0.45 * synchrony + 0.35 * metabolite_stress + 0.20 * frequency_spread,
+                0.28 * synchrony
+                + 0.24 * metabolite_stress
+                + 0.20 * frequency_spread
+                + 0.18 * trace_contrast
+                + 0.10 * frequency_mean
+                + 0.08 * phase_order_2,
+                0.0,
+                1.0,
+            )
+        )
+        roughness = float(
+            np.clip(
+                0.45 * phase_spread
+                + 0.25 * metabolite_contrast
+                + 0.20 * trace_contrast
+                + 0.10 * frequency_spread
+                + 0.10 * phase_order_3,
                 0.0,
                 1.0,
             )
@@ -788,9 +896,20 @@ class VoiceResponseSonificationRenderer:
             "synchrony": synchrony,
             "trace": trace,
             "metabolite_stress": metabolite_stress,
+            "metabolite_contrast": metabolite_contrast,
             "frequency_spread": frequency_spread,
+            "frequency_mean": frequency_mean,
             "mean_phase": float(np.angle(order)),
+            "phase_angle_2": float(np.angle(second_order)),
+            "phase_angle_3": float(np.angle(third_order)),
+            "phase_order_2": phase_order_2,
+            "phase_order_3": phase_order_3,
+            "phase_spread": phase_spread,
+            "trace_phase_lock": trace_phase_lock,
+            "metabolite_phase_lock": metabolite_phase_lock,
+            "trace_contrast": trace_contrast,
             "brightness": brightness,
+            "roughness": roughness,
         }
 
 
