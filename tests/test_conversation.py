@@ -7,6 +7,7 @@ import numpy as np
 from scipy.io import wavfile  # type: ignore[import-untyped]
 
 from neuroacoustic_resonator.audio.conversation import (
+    UtteranceDriveResult,
     VoiceConversationConfig,
     main,
     render_voice_conversation,
@@ -65,8 +66,12 @@ steps: 8
     assert summary["session"]["strongest_response_index"] in {1, 2}
     assert len(summary["utterances"]) == 2
     assert summary["utterances"][0]["peak_input_value"] > 0.0
+    assert summary["utterances"][0]["peak_input_fast_response_score"] >= 0.0
+    assert summary["utterances"][0]["peak_input_event_score"] >= 0.0
+    assert summary["utterances"][0]["initial_response_seed"] >= 0.0
     assert summary["utterances"][0]["mixed_input_audio_seconds"] == 256 / 8_000
     assert summary["parameters"]["include_input_audio"] is True
+    assert summary["parameters"]["response_seed_gain"] == 0.65
     assert loaded["output_wav"] == str(output)
     assert "session" in loaded
 
@@ -227,3 +232,34 @@ def test_response_duration_policy_scales_with_input_strength(tmp_path) -> None:
     assert quiet > 0.5
     assert loud > quiet
     assert loud <= 2.0
+
+
+def test_response_duration_policy_uses_field_response_profile(tmp_path) -> None:
+    config = VoiceConversationConfig(
+        config_path=tmp_path / "config.yaml",
+        input_wavs=(tmp_path / "voice.wav",),
+        response_seconds=0.5,
+        min_response_seconds=0.5,
+        max_response_seconds=2.0,
+        input_peak_response_gain=0.0,
+        input_mean_response_gain=0.0,
+        fast_response_duration_gain=100.0,
+        event_response_duration_gain=50.0,
+    )
+    quiet_profile = UtteranceDriveResult(
+        input_values=np.asarray([0.2, 0.2]),
+        fast_response_scores=np.asarray([0.0, 0.0]),
+        event_scores=np.asarray([0.0, 0.0]),
+    )
+    responsive_profile = UtteranceDriveResult(
+        input_values=np.asarray([0.2, 0.2]),
+        fast_response_scores=np.asarray([0.002, 0.004]),
+        event_scores=np.asarray([0.001, 0.003]),
+    )
+
+    quiet = response_duration_for_input(quiet_profile, config=config)
+    responsive = response_duration_for_input(responsive_profile, config=config)
+
+    assert quiet == 0.5
+    assert responsive > quiet
+    assert responsive <= 2.0
