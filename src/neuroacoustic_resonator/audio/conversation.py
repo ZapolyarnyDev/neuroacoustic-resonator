@@ -49,6 +49,11 @@ class VoiceConversationConfig:
     gain: float = 0.35
     input_mix_gain: float = 0.8
     include_input_audio: bool = True
+    use_response_policy: bool = True
+    min_response_seconds: float = 0.6
+    max_response_seconds: float = 3.0
+    input_peak_response_gain: float = 3.0
+    input_mean_response_gain: float = 1.0
     carrier_frequency: float = 220.0
     frequency_scale: float = 1.0
     response_threshold: float = 0.0
@@ -94,6 +99,18 @@ class VoiceConversationConfig:
         if self.input_mix_gain < 0.0:
             msg = "input_mix_gain must be non-negative"
             raise ValueError(msg)
+        if self.min_response_seconds <= 0.0:
+            msg = "min_response_seconds must be positive"
+            raise ValueError(msg)
+        if self.max_response_seconds < self.min_response_seconds:
+            msg = "max_response_seconds must be at least min_response_seconds"
+            raise ValueError(msg)
+        if self.input_peak_response_gain < 0.0:
+            msg = "input_peak_response_gain must be non-negative"
+            raise ValueError(msg)
+        if self.input_mean_response_gain < 0.0:
+            msg = "input_mean_response_gain must be non-negative"
+            raise ValueError(msg)
         if self.carrier_frequency <= 0.0:
             msg = "carrier_frequency must be positive"
             raise ValueError(msg)
@@ -127,11 +144,6 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         frame = simulation.step()
         tracker.update(frame, regions, input_value=simulation.last_input_value)
 
-    response_steps = steps_for_duration(
-        config.response_seconds,
-        sample_rate=config.sample_rate,
-        frame_size=config.output_frame_size,
-    )
     pause_samples = int(round(config.pause_seconds * config.sample_rate))
     audio_frames: list[np.ndarray] = []
     utterances: list[dict[str, Any]] = []
@@ -159,6 +171,15 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             output_gain=config.input_output_gain,
         )
         input_scores = drive_utterance(simulation, tracker, regions, features, drive)
+        planned_response_seconds = response_duration_for_input(
+            input_scores,
+            config=config,
+        )
+        response_steps = steps_for_duration(
+            planned_response_seconds,
+            sample_rate=config.sample_rate,
+            frame_size=config.output_frame_size,
+        )
         response_audio, response_scores = render_field_response(
             simulation,
             tracker,
@@ -184,6 +205,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
                 ),
                 "peak_input_value": float(np.max(input_scores)),
                 "mean_input_value": float(np.mean(input_scores)),
+                "planned_response_seconds": planned_response_seconds,
                 "response_steps": response_steps,
                 "response_duration_seconds": (
                     response_steps * config.output_frame_size / config.sample_rate
@@ -214,6 +236,11 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             "gain": config.gain,
             "input_mix_gain": config.input_mix_gain,
             "include_input_audio": config.include_input_audio,
+            "use_response_policy": config.use_response_policy,
+            "min_response_seconds": config.min_response_seconds,
+            "max_response_seconds": config.max_response_seconds,
+            "input_peak_response_gain": config.input_peak_response_gain,
+            "input_mean_response_gain": config.input_mean_response_gain,
             "carrier_frequency": config.carrier_frequency,
             "frequency_scale": config.frequency_scale,
             "response_threshold": config.response_threshold,
@@ -225,6 +252,29 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     }
     write_conversation_summary(config.output_summary, summary)
     return summary
+
+
+def response_duration_for_input(
+    input_scores: np.ndarray,
+    *,
+    config: VoiceConversationConfig,
+) -> float:
+    if not config.use_response_policy:
+        return config.response_seconds
+    peak = float(np.max(input_scores)) if input_scores.size else 0.0
+    mean = float(np.mean(input_scores)) if input_scores.size else 0.0
+    duration = (
+        config.response_seconds
+        + peak * config.input_peak_response_gain
+        + mean * config.input_mean_response_gain
+    )
+    return float(
+        np.clip(
+            duration,
+            config.min_response_seconds,
+            config.max_response_seconds,
+        )
+    )
 
 
 def read_conversation_input_audio(
@@ -364,6 +414,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write only generated field responses, without original input audio.",
     )
+    parser.add_argument(
+        "--fixed-response-duration",
+        action="store_true",
+        help="Disable input-strength response duration policy.",
+    )
+    parser.add_argument("--min-response-seconds", type=float, default=0.6)
+    parser.add_argument("--max-response-seconds", type=float, default=3.0)
+    parser.add_argument("--input-peak-response-gain", type=float, default=3.0)
+    parser.add_argument("--input-mean-response-gain", type=float, default=1.0)
     parser.add_argument("--carrier-frequency", type=float, default=220.0)
     parser.add_argument("--frequency-scale", type=float, default=1.0)
     parser.add_argument("--response-threshold", type=float, default=0.0)
@@ -392,6 +451,11 @@ def main(argv: list[str] | None = None) -> int:
             gain=args.gain,
             input_mix_gain=args.input_mix_gain,
             include_input_audio=not args.response_only,
+            use_response_policy=not args.fixed_response_duration,
+            min_response_seconds=args.min_response_seconds,
+            max_response_seconds=args.max_response_seconds,
+            input_peak_response_gain=args.input_peak_response_gain,
+            input_mean_response_gain=args.input_mean_response_gain,
             carrier_frequency=args.carrier_frequency,
             frequency_scale=args.frequency_scale,
             response_threshold=args.response_threshold,

@@ -10,6 +10,7 @@ from neuroacoustic_resonator.audio.conversation import (
     VoiceConversationConfig,
     main,
     render_voice_conversation,
+    response_duration_for_input,
 )
 
 
@@ -47,6 +48,7 @@ steps: 8
             response_seconds=0.1,
             pause_seconds=0.05,
             warmup_steps=2,
+            use_response_policy=False,
         )
     )
 
@@ -95,6 +97,7 @@ steps: 4
             pause_seconds=0.0,
             warmup_steps=2,
             include_input_audio=False,
+            use_response_policy=False,
         )
     )
 
@@ -140,6 +143,7 @@ steps: 8
             warmup_steps=2,
             response_threshold=0.0,
             response_sensitivity=900.0,
+            use_response_policy=False,
         )
     )
 
@@ -191,9 +195,29 @@ steps: 4
             "0.0",
             "--input-mix-gain",
             "0.7",
+            "--fixed-response-duration",
         ]
     )
 
     assert exit_code == 0
     assert output.exists()
     assert summary.exists()
+
+
+def test_response_duration_policy_scales_with_input_strength(tmp_path) -> None:
+    config = VoiceConversationConfig(
+        config_path=tmp_path / "config.yaml",
+        input_wavs=(tmp_path / "voice.wav",),
+        response_seconds=0.5,
+        min_response_seconds=0.5,
+        max_response_seconds=2.0,
+        input_peak_response_gain=2.0,
+        input_mean_response_gain=1.0,
+    )
+
+    quiet = response_duration_for_input(np.asarray([0.0, 0.05]), config=config)
+    loud = response_duration_for_input(np.asarray([0.3, 0.5]), config=config)
+
+    assert quiet > 0.5
+    assert loud > quiet
+    assert loud <= 2.0
