@@ -102,6 +102,12 @@ conversation input:
 conversation-custom config output summary +inputs:
     uv run python scripts/run_conversation.py --config {{config}} --inputs {{inputs}} --output {{output}} --summary {{summary}}
 
+turn-detect input:
+    uv run python scripts/detect_turns.py --input {{input}} --output-dir experiments/audio/turns
+
+turn-detect-custom input output_dir threshold_ratio min_silence_ms:
+    uv run python scripts/detect_turns.py --input {{input}} --output-dir {{output_dir}} --threshold-ratio {{threshold_ratio}} --min-silence-ms {{min_silence_ms}}
+
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav
 

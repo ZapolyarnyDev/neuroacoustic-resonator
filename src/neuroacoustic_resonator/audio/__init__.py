@@ -24,6 +24,11 @@ from neuroacoustic_resonator.audio.realtime import (
     play_realtime_audio,
 )
 from neuroacoustic_resonator.audio.render import render_audio_demo
+from neuroacoustic_resonator.audio.turn_detection import (
+    TurnDetectionConfig,
+    detect_and_write_turns,
+    detect_voice_turns,
+)
 
 __all__ = [
     "AudioInputFeatures",
@@ -34,10 +39,13 @@ __all__ = [
     "RealtimeAudioEngine",
     "SlopeTriggeredAudioRenderer",
     "StimulusCoupledAudioRenderer",
+    "TurnDetectionConfig",
     "VoiceResponseSonificationRenderer",
     "VoiceConversationConfig",
     "WavInputDrive",
     "extract_audio_input_features",
+    "detect_and_write_turns",
+    "detect_voice_turns",
     "play_realtime_audio",
     "render_audio_demo",
     "render_voice_conversation",
