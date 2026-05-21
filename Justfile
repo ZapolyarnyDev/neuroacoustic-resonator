@@ -102,6 +102,21 @@ conversation input:
 conversation-custom config output summary +inputs:
     uv run python scripts/run_conversation.py --config {{config}} --inputs {{inputs}} --output {{output}} --summary {{summary}}
 
+live-conversation:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0
+
+live-conversation-test:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --max-turns 3
+
+live-conversation-levels:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --max-turns 1 --print-rms --idle-timeout-seconds 8
+
+audio-devices:
+    uv run python scripts/run_live_conversation.py --list-devices
+
+live-conversation-custom config max_turns start_rms stop_rms:
+    uv run python scripts/run_live_conversation.py --config {{config}} --max-turns {{max_turns}} --start-rms {{start_rms}} --stop-rms {{stop_rms}} --input-assoc-gain 0.8 --input-output-gain 0.0
+
 turn-detect input:
     uv run python scripts/detect_turns.py --input {{input}} --output-dir experiments/audio/turns
 
