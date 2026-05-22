@@ -110,8 +110,60 @@ steps: 8
     assert "memory_drive_comparison" in summary
     assert loaded["memory_drive"]["parameters"]["compare_memory_drive_strength"] == 0.25
     assert (
-        "output_fast_response_score_mean_abs_delta_memory_to_baseline_ratio"
+        "output_fast_response_score_mean_abs_delta_memory_drive_to_baseline_ratio"
         in summary["memory_drive_comparison"]
+    )
+
+
+def test_voice_memory_probe_compares_silence_control(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+field:
+  size: 6
+  seed: 1
+  coupling_strength: 0.2
+synthetic_input:
+  enabled: false
+steps: 8
+""",
+        encoding="utf-8",
+    )
+    wav_path = tmp_path / "voice.wav"
+    samples = np.zeros(512, dtype=np.float32)
+    samples[128:256] = 1.0
+    wavfile.write(wav_path, 8_000, samples)
+    csv_path = tmp_path / "voice-memory.csv"
+    summary_path = tmp_path / "voice-memory.json"
+
+    summary = run_voice_memory_probe(
+        VoiceMemoryProbeConfig(
+            config_path=config_path,
+            input_wav=wav_path,
+            output_csv=csv_path,
+            output_summary=summary_path,
+            frame_size=128,
+            hop_size=64,
+            input_assoc_gain=0.5,
+            pause_steps=3,
+            warmup_steps=2,
+            max_steps=5,
+            compare_silence_control=True,
+        )
+    )
+
+    with csv_path.open(newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    loaded = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    assert len(rows) == 20
+    assert {row["probe_label"] for row in rows} == {"baseline", "silence_control"}
+    assert "silence_control" in summary
+    assert "voice_vs_silence_control" in summary
+    assert loaded["silence_control"]["parameters"]["compare_silence_control"] is True
+    assert (
+        "output_fast_response_score_mean_abs_delta_silence_control_to_baseline_ratio"
+        in summary["voice_vs_silence_control"]
     )
 
 

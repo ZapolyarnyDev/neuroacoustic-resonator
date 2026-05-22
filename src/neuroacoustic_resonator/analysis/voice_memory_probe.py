@@ -43,6 +43,7 @@ class VoiceMemoryProbeConfig:
     pause_steps: int = 128
     max_steps: int | None = None
     compare_memory_drive_strength: float | None = None
+    compare_silence_control: bool = False
 
     def __post_init__(self) -> None:
         if self.frame_size < 1:
@@ -79,12 +80,49 @@ class VoiceMemoryProbeConfig:
 
 def run_voice_memory_probe(config: VoiceMemoryProbeConfig) -> VoiceMemorySummary:
     sim_config = SimulationConfig.from_file(config.config_path)
-    rows = collect_voice_memory_rows(sim_config, config)
+    features = extract_audio_input_features(
+        config.input_wav,
+        frame_size=config.frame_size,
+        hop_size=config.hop_size,
+        drive_strength=config.drive_strength,
+    )
+    rows = collect_voice_memory_rows(sim_config, config, features=features)
     summary = summarize_voice_memory_rows(rows, config=config)
-    if config.compare_memory_drive_strength is None:
+    if (
+        config.compare_memory_drive_strength is None
+        and not config.compare_silence_control
+    ):
         write_voice_memory_rows(config.output_csv, rows)
         write_voice_memory_summary(config.output_summary, summary)
         return summary
+
+    labeled_rows = label_rows(rows, "baseline")
+    comparison_summary: VoiceMemorySummary = {
+        "config": str(config.config_path),
+        "input_wav": str(config.input_wav),
+        "parameters": summary["parameters"],
+        "baseline": summary,
+    }
+
+    if config.compare_silence_control:
+        silence_rows = collect_voice_memory_rows(
+            sim_config,
+            config,
+            features=silence_features_like(features),
+        )
+        silence_summary = summarize_voice_memory_rows(silence_rows, config=config)
+        labeled_rows += label_rows(silence_rows, "silence_control")
+        comparison_summary["silence_control"] = silence_summary
+        comparison_summary["voice_vs_silence_control"] = compare_probe_summaries(
+            summary,
+            silence_summary,
+            right_label="silence_control",
+        )
+
+    if config.compare_memory_drive_strength is None:
+        write_voice_memory_rows(config.output_csv, labeled_rows)
+        write_voice_memory_summary(config.output_summary, comparison_summary)
+        return comparison_summary
 
     memory_sim_config = sim_config.model_copy(
         update={
@@ -95,23 +133,19 @@ def run_voice_memory_probe(config: VoiceMemoryProbeConfig) -> VoiceMemorySummary
             )
         }
     )
-    memory_rows = collect_voice_memory_rows(memory_sim_config, config)
-    memory_summary = summarize_voice_memory_rows(memory_rows, config=config)
-    labeled_rows = label_rows(rows, "baseline") + label_rows(
-        memory_rows,
-        "memory_drive",
+    memory_rows = collect_voice_memory_rows(
+        memory_sim_config,
+        config,
+        features=features,
     )
-    comparison_summary = {
-        "config": str(config.config_path),
-        "input_wav": str(config.input_wav),
-        "parameters": summary["parameters"],
-        "baseline": summary,
-        "memory_drive": memory_summary,
-        "memory_drive_comparison": compare_memory_drive_summaries(
-            summary,
-            memory_summary,
-        ),
-    }
+    memory_summary = summarize_voice_memory_rows(memory_rows, config=config)
+    labeled_rows += label_rows(memory_rows, "memory_drive")
+    comparison_summary["memory_drive"] = memory_summary
+    comparison_summary["memory_drive_comparison"] = compare_probe_summaries(
+        summary,
+        memory_summary,
+        right_label="memory_drive",
+    )
     write_voice_memory_rows(config.output_csv, labeled_rows)
     write_voice_memory_summary(config.output_summary, comparison_summary)
     return comparison_summary
@@ -120,16 +154,12 @@ def run_voice_memory_probe(config: VoiceMemoryProbeConfig) -> VoiceMemorySummary
 def collect_voice_memory_rows(
     sim_config: SimulationConfig,
     config: VoiceMemoryProbeConfig,
+    *,
+    features: AudioInputFeatures,
 ) -> VoiceMemoryRows:
     simulation = Simulation.from_config(sim_config)
     regions = RegionMasks.from_size(sim_config.field.size)
     tracker = RegionalActivityTracker()
-    features = extract_audio_input_features(
-        config.input_wav,
-        frame_size=config.frame_size,
-        hop_size=config.hop_size,
-        drive_strength=config.drive_strength,
-    )
     drive = WavInputDrive(
         features,
         regions,
@@ -173,6 +203,19 @@ def collect_voice_memory_rows(
 
 def label_rows(rows: VoiceMemoryRows, label: str) -> VoiceMemoryRows:
     return [{"probe_label": label, **row} for row in rows]
+
+
+def silence_features_like(features: AudioInputFeatures) -> AudioInputFeatures:
+    zeros = np.zeros(features.frame_count, dtype=np.float64)
+    return AudioInputFeatures(
+        sample_rate=features.sample_rate,
+        frame_size=features.frame_size,
+        hop_size=features.hop_size,
+        rms=zeros.copy(),
+        onset=zeros.copy(),
+        spectral_centroid=zeros.copy(),
+        drive=zeros.copy(),
+    )
 
 
 def run_voice_repeat(
@@ -266,6 +309,7 @@ def summarize_voice_memory_rows(
             "pause_steps": config.pause_steps,
             "max_steps": config.max_steps,
             "compare_memory_drive_strength": config.compare_memory_drive_strength,
+            "compare_silence_control": config.compare_silence_control,
         },
         "rows": len(rows),
         "first": summarize_repeat(first),
@@ -320,12 +364,14 @@ def compare_repeats(
     return comparison
 
 
-def compare_memory_drive_summaries(
+def compare_probe_summaries(
     baseline: VoiceMemorySummary,
-    memory_drive: VoiceMemorySummary,
+    compared: VoiceMemorySummary,
+    *,
+    right_label: str,
 ) -> dict[str, float]:
     baseline_comparison = baseline["comparison"]
-    memory_comparison = memory_drive["comparison"]
+    compared_comparison = compared["comparison"]
     keys = (
         "output_response_activity_mean_abs_delta",
         "output_fast_response_score_mean_abs_delta",
@@ -335,11 +381,11 @@ def compare_memory_drive_summaries(
     comparison: dict[str, float] = {}
     for key in keys:
         baseline_value = float(baseline_comparison[key])
-        memory_value = float(memory_comparison[key])
+        compared_value = float(compared_comparison[key])
         comparison[f"{key}_baseline"] = baseline_value
-        comparison[f"{key}_memory_drive"] = memory_value
-        comparison[f"{key}_memory_to_baseline_ratio"] = safe_ratio(
-            memory_value,
+        comparison[f"{key}_{right_label}"] = compared_value
+        comparison[f"{key}_{right_label}_to_baseline_ratio"] = safe_ratio(
+            compared_value,
             baseline_value,
         )
     return comparison
@@ -418,6 +464,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pause-steps", type=int, default=128)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--compare-memory-drive-strength", type=float, default=None)
+    parser.add_argument("--compare-silence-control", action="store_true")
     return parser
 
 
@@ -437,6 +484,7 @@ def main(argv: list[str] | None = None) -> int:
         pause_steps=args.pause_steps,
         max_steps=args.max_steps,
         compare_memory_drive_strength=args.compare_memory_drive_strength,
+        compare_silence_control=args.compare_silence_control,
     )
     summary = run_voice_memory_probe(config)
     if "memory_drive_comparison" in summary:
@@ -446,9 +494,19 @@ def main(argv: list[str] | None = None) -> int:
             "Voice memory probe: "
             f"memory_drive_strength={config.compare_memory_drive_strength:.3f} "
             "fast_delta_ratio="
-            f"{memory_comparison['output_fast_response_score_mean_abs_delta_memory_to_baseline_ratio']:.3f} "
+            f"{memory_comparison['output_fast_response_score_mean_abs_delta_memory_drive_to_baseline_ratio']:.3f} "
             "event_delta_ratio="
-            f"{memory_comparison['output_event_score_mean_abs_delta_memory_to_baseline_ratio']:.3f}"
+            f"{memory_comparison['output_event_score_mean_abs_delta_memory_drive_to_baseline_ratio']:.3f}"
+        )
+    elif "voice_vs_silence_control" in summary:
+        control = summary["voice_vs_silence_control"]
+        print(
+            "Voice memory probe: "
+            "silence_control=true "
+            "fast_delta_ratio="
+            f"{control['output_fast_response_score_mean_abs_delta_silence_control_to_baseline_ratio']:.3f} "
+            "event_delta_ratio="
+            f"{control['output_event_score_mean_abs_delta_silence_control_to_baseline_ratio']:.3f}"
         )
     else:
         comparison = summary["comparison"]
