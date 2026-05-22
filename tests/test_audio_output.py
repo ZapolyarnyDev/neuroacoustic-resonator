@@ -375,10 +375,17 @@ def test_voice_response_sonification_changes_with_output_state() -> None:
     )
     renderer.render_frame(field.state, regions, response_score=0.02)
     before = renderer.render_frame(field.state, regions, response_score=0.02)
-    field.state.trace[regions.output] += 0.5
-    field.state.phase[regions.output] += np.pi / 3.0
+    changed_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    changed_state.trace[regions.output] += 0.5
+    changed_state.phase[regions.output] += np.pi / 3.0
 
-    after = renderer.render_frame(field.state, regions, response_score=0.02)
+    after = renderer.render_frame(changed_state, regions, response_score=0.02)
 
     assert not np.allclose(before, after)
 

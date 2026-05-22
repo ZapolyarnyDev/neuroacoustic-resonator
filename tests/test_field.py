@@ -38,10 +38,20 @@ def test_step_keeps_state_finite_and_bounded() -> None:
 def test_state_returns_copy() -> None:
     field = OscillatorField(FieldConfig(size=4, seed=1))
     state = field.state
+    original = field.state
 
     state.phase[0, 0] = -1.0
+    state.frequency[0, 0] = -1.0
+    state.metabolite[0, 0] = -1.0
+    state.coupling[0, 0] = -1.0
+    state.trace[0, 0] = -1.0
 
-    assert field.state.phase[0, 0] >= 0.0
+    current = field.state
+    assert current.phase[0, 0] == original.phase[0, 0]
+    assert current.frequency[0, 0] == original.frequency[0, 0]
+    assert current.metabolite[0, 0] == original.metabolite[0, 0]
+    assert current.coupling[0, 0] == original.coupling[0, 0]
+    assert current.trace[0, 0] == original.trace[0, 0]
 
 
 def test_config_rejects_invalid_size() -> None:
