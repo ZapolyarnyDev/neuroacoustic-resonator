@@ -96,6 +96,9 @@ steps: 8
             warmup_steps=2,
             max_steps=5,
             compare_memory_drive_strength=0.25,
+            compare_memory_drive_input_gain=0.0,
+            compare_memory_drive_assoc_gain=1.5,
+            compare_memory_drive_output_gain=0.5,
         )
     )
 
@@ -109,6 +112,9 @@ steps: 8
     assert "memory_drive" in summary
     assert "memory_drive_comparison" in summary
     assert loaded["memory_drive"]["parameters"]["compare_memory_drive_strength"] == 0.25
+    assert (
+        loaded["memory_drive"]["parameters"]["compare_memory_drive_assoc_gain"] == 1.5
+    )
     assert (
         "output_fast_response_score_mean_abs_delta_memory_drive_to_baseline_ratio"
         in summary["memory_drive_comparison"]

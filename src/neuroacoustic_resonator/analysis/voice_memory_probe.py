@@ -43,6 +43,9 @@ class VoiceMemoryProbeConfig:
     pause_steps: int = 128
     max_steps: int | None = None
     compare_memory_drive_strength: float | None = None
+    compare_memory_drive_input_gain: float = 1.0
+    compare_memory_drive_assoc_gain: float = 1.0
+    compare_memory_drive_output_gain: float = 1.0
     compare_silence_control: bool = False
 
     def __post_init__(self) -> None:
@@ -75,6 +78,15 @@ class VoiceMemoryProbeConfig:
             and self.compare_memory_drive_strength < 0.0
         ):
             msg = "compare_memory_drive_strength must be non-negative"
+            raise ValueError(msg)
+        if self.compare_memory_drive_input_gain < 0.0:
+            msg = "compare_memory_drive_input_gain must be non-negative"
+            raise ValueError(msg)
+        if self.compare_memory_drive_assoc_gain < 0.0:
+            msg = "compare_memory_drive_assoc_gain must be non-negative"
+            raise ValueError(msg)
+        if self.compare_memory_drive_output_gain < 0.0:
+            msg = "compare_memory_drive_output_gain must be non-negative"
             raise ValueError(msg)
 
 
@@ -129,6 +141,9 @@ def run_voice_memory_probe(config: VoiceMemoryProbeConfig) -> VoiceMemorySummary
             "field": sim_config.field.model_copy(
                 update={
                     "memory_drive_strength": config.compare_memory_drive_strength,
+                    "memory_drive_input_gain": config.compare_memory_drive_input_gain,
+                    "memory_drive_assoc_gain": config.compare_memory_drive_assoc_gain,
+                    "memory_drive_output_gain": config.compare_memory_drive_output_gain,
                 }
             )
         }
@@ -309,6 +324,9 @@ def summarize_voice_memory_rows(
             "pause_steps": config.pause_steps,
             "max_steps": config.max_steps,
             "compare_memory_drive_strength": config.compare_memory_drive_strength,
+            "compare_memory_drive_input_gain": config.compare_memory_drive_input_gain,
+            "compare_memory_drive_assoc_gain": config.compare_memory_drive_assoc_gain,
+            "compare_memory_drive_output_gain": config.compare_memory_drive_output_gain,
             "compare_silence_control": config.compare_silence_control,
         },
         "rows": len(rows),
@@ -464,6 +482,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pause-steps", type=int, default=128)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--compare-memory-drive-strength", type=float, default=None)
+    parser.add_argument("--compare-memory-drive-input-gain", type=float, default=1.0)
+    parser.add_argument("--compare-memory-drive-assoc-gain", type=float, default=1.0)
+    parser.add_argument("--compare-memory-drive-output-gain", type=float, default=1.0)
     parser.add_argument("--compare-silence-control", action="store_true")
     return parser
 
@@ -484,6 +505,9 @@ def main(argv: list[str] | None = None) -> int:
         pause_steps=args.pause_steps,
         max_steps=args.max_steps,
         compare_memory_drive_strength=args.compare_memory_drive_strength,
+        compare_memory_drive_input_gain=args.compare_memory_drive_input_gain,
+        compare_memory_drive_assoc_gain=args.compare_memory_drive_assoc_gain,
+        compare_memory_drive_output_gain=args.compare_memory_drive_output_gain,
         compare_silence_control=args.compare_silence_control,
     )
     summary = run_voice_memory_probe(config)
@@ -493,6 +517,9 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "Voice memory probe: "
             f"memory_drive_strength={config.compare_memory_drive_strength:.3f} "
+            f"region_gains=({config.compare_memory_drive_input_gain:.3f},"
+            f"{config.compare_memory_drive_assoc_gain:.3f},"
+            f"{config.compare_memory_drive_output_gain:.3f}) "
             "fast_delta_ratio="
             f"{memory_comparison['output_fast_response_score_mean_abs_delta_memory_drive_to_baseline_ratio']:.3f} "
             "event_delta_ratio="

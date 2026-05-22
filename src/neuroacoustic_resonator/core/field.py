@@ -24,6 +24,9 @@ class FieldConfig:
     trace_rate: float = 0.08
     trace_decay: float = 0.0
     memory_drive_strength: float = 0.0
+    memory_drive_input_gain: float = 1.0
+    memory_drive_assoc_gain: float = 1.0
+    memory_drive_output_gain: float = 1.0
     frequency_plasticity_rate: float = 0.01
     frequency_homeostasis_rate: float = 0.01
     synchrony_target_low: float = 0.05
@@ -68,6 +71,15 @@ class FieldConfig:
             raise ValueError(msg)
         if self.memory_drive_strength < 0.0:
             msg = "memory_drive_strength must be non-negative"
+            raise ValueError(msg)
+        if self.memory_drive_input_gain < 0.0:
+            msg = "memory_drive_input_gain must be non-negative"
+            raise ValueError(msg)
+        if self.memory_drive_assoc_gain < 0.0:
+            msg = "memory_drive_assoc_gain must be non-negative"
+            raise ValueError(msg)
+        if self.memory_drive_output_gain < 0.0:
+            msg = "memory_drive_output_gain must be non-negative"
             raise ValueError(msg)
         if self.frequency_plasticity_rate < 0.0:
             msg = "frequency_plasticity_rate must be non-negative"
@@ -137,6 +149,7 @@ class OscillatorField:
         self._metabolite = np.ones(shape, dtype=np.float64)
         self._coupling = np.full(shape, config.coupling_strength, dtype=np.float64)
         self._trace = np.zeros(shape, dtype=np.float64)
+        self._memory_drive_gain = np.ones(shape, dtype=np.float64)
 
     @classmethod
     def from_state(cls, config: FieldConfig, state: FieldState) -> OscillatorField:
@@ -161,6 +174,7 @@ class OscillatorField:
         )
         field._coupling = state.coupling.astype(np.float64, copy=True)
         field._trace = np.clip(state.trace, 0.0, None).astype(np.float64, copy=True)
+        field._memory_drive_gain = np.ones(expected_shape, dtype=np.float64)
         return field
 
     @property
@@ -223,6 +237,18 @@ class OscillatorField:
             self.config.max_frequency,
         )
 
+    def set_memory_drive_gain(self, mask: NDArray[np.bool_], gain: float) -> None:
+        if mask.shape != self._phase.shape:
+            msg = f"mask shape must be {self._phase.shape}"
+            raise ValueError(msg)
+        if mask.dtype != np.bool_:
+            msg = "mask must be boolean"
+            raise ValueError(msg)
+        if gain < 0.0:
+            msg = "gain must be non-negative"
+            raise ValueError(msg)
+        self._memory_drive_gain[mask] = gain
+
     def step(self) -> FieldState:
         coupling_drive = self._coupling_drive()
         memory_drive = self.memory_drive()
@@ -281,7 +307,7 @@ class OscillatorField:
         if strength == 0.0:
             return np.zeros_like(self._trace)
         trace_centered = self._trace - float(np.mean(self._trace))
-        return strength * trace_centered
+        return strength * trace_centered * self._memory_drive_gain
 
     def metrics(self, step: int = 0) -> FieldMetrics:
         local = self.local_synchrony()

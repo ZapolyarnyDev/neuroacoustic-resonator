@@ -99,6 +99,9 @@ voice-memory-probe input:
 voice-memory-probe-memory-drive input strength:
     uv run python scripts/probe_voice_memory.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/voice_memory_probe_memory_drive.csv --output-summary experiments/logs/voice_memory_probe_memory_drive_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0 --compare-memory-drive-strength {{strength}}
 
+voice-memory-probe-region-memory input strength input_gain assoc_gain output_gain:
+    uv run python scripts/probe_voice_memory.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/voice_memory_probe_region_memory.csv --output-summary experiments/logs/voice_memory_probe_region_memory_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0 --compare-memory-drive-strength {{strength}} --compare-memory-drive-input-gain {{input_gain}} --compare-memory-drive-assoc-gain {{assoc_gain}} --compare-memory-drive-output-gain {{output_gain}}
+
 voice-memory-probe-control input:
     uv run python scripts/probe_voice_memory.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/voice_memory_probe_control.csv --output-summary experiments/logs/voice_memory_probe_control_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0 --compare-silence-control
 

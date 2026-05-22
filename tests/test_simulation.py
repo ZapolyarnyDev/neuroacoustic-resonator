@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
 
-from neuroacoustic_resonator import FieldConfig, OscillatorField, Simulation
+from neuroacoustic_resonator import FieldConfig, FieldState, OscillatorField, Simulation
 from neuroacoustic_resonator.core.input_drive import SyntheticInputConfig
+from neuroacoustic_resonator.core.regions import RegionMasks
 
 
 def test_simulation_starts_at_step_zero() -> None:
@@ -41,6 +42,41 @@ def test_simulation_accepts_existing_field() -> None:
     frame = simulation.snapshot()
 
     assert frame.state.phase.shape == (5, 5)
+
+
+def test_simulation_applies_memory_drive_region_gains() -> None:
+    config = FieldConfig(
+        size=6,
+        memory_drive_strength=1.0,
+        memory_drive_input_gain=0.0,
+        memory_drive_assoc_gain=2.0,
+        memory_drive_output_gain=0.5,
+        base_frequency=0.0,
+        coupling_strength=0.0,
+    )
+    regions = RegionMasks.from_size(config.size)
+    shape = (config.size, config.size)
+    trace = np.zeros(shape)
+    trace[regions.assoc] = 1.0
+    trace[regions.output] = 1.0
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.zeros(shape),
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=trace,
+        ),
+    )
+    simulation = Simulation(field=field)
+
+    drive = simulation.field.memory_drive()
+
+    assert np.allclose(drive[regions.input], 0.0)
+    assert np.mean(np.abs(drive[regions.assoc])) > np.mean(
+        np.abs(drive[regions.output])
+    )
 
 
 def test_simulation_rejects_ambiguous_inputs() -> None:

@@ -289,6 +289,36 @@ def test_uniform_trace_memory_drive_has_no_phase_bias() -> None:
     assert np.allclose(field.step().phase, 1.0)
 
 
+def test_region_scoped_memory_drive_gain_weights_trace_contrast() -> None:
+    config = FieldConfig(
+        size=4,
+        memory_drive_strength=1.0,
+    )
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.zeros(shape),
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=np.tile(np.asarray([0.0, 1.0, 0.0, 1.0]), (4, 1)),
+        ),
+    )
+    left_mask = np.zeros(shape, dtype=np.bool_)
+    right_mask = np.zeros(shape, dtype=np.bool_)
+    left_mask[:, :2] = True
+    right_mask[:, 2:] = True
+
+    field.set_memory_drive_gain(left_mask, 0.0)
+    field.set_memory_drive_gain(right_mask, 2.0)
+    drive = field.memory_drive()
+
+    assert np.allclose(drive[left_mask], 0.0)
+    assert np.max(np.abs(drive[right_mask])) > 0.0
+    assert np.max(np.abs(drive[right_mask])) == pytest.approx(1.0)
+
+
 def test_config_rejects_invalid_trace_rate() -> None:
     with pytest.raises(ValueError, match="trace_rate"):
         FieldConfig(trace_rate=-0.1)
@@ -302,6 +332,15 @@ def test_config_rejects_invalid_trace_decay() -> None:
 def test_config_rejects_invalid_memory_drive_strength() -> None:
     with pytest.raises(ValueError, match="memory_drive_strength"):
         FieldConfig(memory_drive_strength=-0.1)
+
+
+def test_config_rejects_invalid_memory_drive_region_gains() -> None:
+    with pytest.raises(ValueError, match="memory_drive_input_gain"):
+        FieldConfig(memory_drive_input_gain=-0.1)
+    with pytest.raises(ValueError, match="memory_drive_assoc_gain"):
+        FieldConfig(memory_drive_assoc_gain=-0.1)
+    with pytest.raises(ValueError, match="memory_drive_output_gain"):
+        FieldConfig(memory_drive_output_gain=-0.1)
 
 
 def test_config_rejects_invalid_metabolite_diffusion() -> None:

@@ -12,6 +12,7 @@ field:
   size: 6
   seed: 12
   memory_drive_strength: 0.15
+  memory_drive_assoc_gain: 1.5
 steps: 5
 preview_path: outputs/test-preview.png
 """,
@@ -23,6 +24,7 @@ preview_path: outputs/test-preview.png
     assert config.field.size == 6
     assert config.field.seed == 12
     assert config.field.memory_drive_strength == 0.15
+    assert config.field.memory_drive_assoc_gain == 1.5
     assert config.field.metabolite_diffusion == 0.0
     assert not config.synthetic_input.enabled
     assert config.steps == 5
