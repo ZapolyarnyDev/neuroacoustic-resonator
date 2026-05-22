@@ -99,7 +99,7 @@ def run_voice_memory_probe(config: VoiceMemoryProbeConfig) -> VoiceMemorySummary
         drive_strength=config.drive_strength,
     )
     rows = collect_voice_memory_rows(sim_config, config, features=features)
-    summary = summarize_voice_memory_rows(rows, config=config)
+    summary = summarize_voice_memory_rows(rows, config=config, sim_config=sim_config)
     if (
         config.compare_memory_drive_strength is None
         and not config.compare_silence_control
@@ -112,7 +112,7 @@ def run_voice_memory_probe(config: VoiceMemoryProbeConfig) -> VoiceMemorySummary
     comparison_summary: VoiceMemorySummary = {
         "config": str(config.config_path),
         "input_wav": str(config.input_wav),
-        "parameters": summary["parameters"],
+        "probe_parameters": probe_parameters(config),
         "baseline": summary,
     }
 
@@ -122,7 +122,11 @@ def run_voice_memory_probe(config: VoiceMemoryProbeConfig) -> VoiceMemorySummary
             config,
             features=silence_features_like(features),
         )
-        silence_summary = summarize_voice_memory_rows(silence_rows, config=config)
+        silence_summary = summarize_voice_memory_rows(
+            silence_rows,
+            config=config,
+            sim_config=sim_config,
+        )
         labeled_rows += label_rows(silence_rows, "silence_control")
         comparison_summary["silence_control"] = silence_summary
         comparison_summary["voice_vs_silence_control"] = compare_probe_summaries(
@@ -153,7 +157,11 @@ def run_voice_memory_probe(config: VoiceMemoryProbeConfig) -> VoiceMemorySummary
         config,
         features=features,
     )
-    memory_summary = summarize_voice_memory_rows(memory_rows, config=config)
+    memory_summary = summarize_voice_memory_rows(
+        memory_rows,
+        config=config,
+        sim_config=memory_sim_config,
+    )
     labeled_rows += label_rows(memory_rows, "memory_drive")
     comparison_summary["memory_drive"] = memory_summary
     comparison_summary["memory_drive_comparison"] = compare_probe_summaries(
@@ -304,6 +312,7 @@ def summarize_voice_memory_rows(
     rows: VoiceMemoryRows,
     *,
     config: VoiceMemoryProbeConfig,
+    sim_config: SimulationConfig,
 ) -> VoiceMemorySummary:
     first = [row for row in rows if row["repeat_index"] == 1]
     second = [row for row in rows if row["repeat_index"] == 2]
@@ -314,26 +323,55 @@ def summarize_voice_memory_rows(
     return {
         "config": str(config.config_path),
         "input_wav": str(config.input_wav),
-        "parameters": {
-            "frame_size": config.frame_size,
-            "hop_size": config.hop_size,
-            "drive_strength": config.drive_strength,
-            "input_assoc_gain": config.input_assoc_gain,
-            "input_output_gain": config.input_output_gain,
-            "warmup_steps": config.warmup_steps,
-            "pause_steps": config.pause_steps,
-            "max_steps": config.max_steps,
-            "compare_memory_drive_strength": config.compare_memory_drive_strength,
-            "compare_memory_drive_input_gain": config.compare_memory_drive_input_gain,
-            "compare_memory_drive_assoc_gain": config.compare_memory_drive_assoc_gain,
-            "compare_memory_drive_output_gain": config.compare_memory_drive_output_gain,
-            "compare_silence_control": config.compare_silence_control,
-        },
+        "parameters": run_parameters(config, sim_config),
         "rows": len(rows),
         "first": summarize_repeat(first),
         "second": summarize_repeat(second),
         "comparison": compare_repeats(first, second),
     }
+
+
+def probe_parameters(config: VoiceMemoryProbeConfig) -> dict[str, Any]:
+    parameters = common_run_parameters(config)
+    parameters.update(
+        {
+            "compare_memory_drive_strength": config.compare_memory_drive_strength,
+            "compare_memory_drive_input_gain": config.compare_memory_drive_input_gain,
+            "compare_memory_drive_assoc_gain": config.compare_memory_drive_assoc_gain,
+            "compare_memory_drive_output_gain": config.compare_memory_drive_output_gain,
+            "compare_silence_control": config.compare_silence_control,
+        }
+    )
+    return parameters
+
+
+def common_run_parameters(config: VoiceMemoryProbeConfig) -> dict[str, Any]:
+    return {
+        "frame_size": config.frame_size,
+        "hop_size": config.hop_size,
+        "drive_strength": config.drive_strength,
+        "input_assoc_gain": config.input_assoc_gain,
+        "input_output_gain": config.input_output_gain,
+        "warmup_steps": config.warmup_steps,
+        "pause_steps": config.pause_steps,
+        "max_steps": config.max_steps,
+    }
+
+
+def run_parameters(
+    config: VoiceMemoryProbeConfig,
+    sim_config: SimulationConfig,
+) -> dict[str, Any]:
+    parameters = common_run_parameters(config)
+    parameters.update(
+        {
+            "memory_drive_strength": sim_config.field.memory_drive_strength,
+            "memory_drive_input_gain": sim_config.field.memory_drive_input_gain,
+            "memory_drive_assoc_gain": sim_config.field.memory_drive_assoc_gain,
+            "memory_drive_output_gain": sim_config.field.memory_drive_output_gain,
+        }
+    )
+    return parameters
 
 
 def summarize_repeat(rows: VoiceMemoryRows) -> dict[str, float | int]:
@@ -371,7 +409,10 @@ def compare_repeats(
     for key in keys:
         first_values = column(first[:length], key)
         second_values = column(second[:length], key)
-        comparison[f"{key}_corr"] = safe_correlation(first_values, second_values)
+        repeatability_corr = safe_correlation(first_values, second_values)
+        comparison[f"{key}_corr"] = repeatability_corr
+        comparison[f"{key}_repeatability_corr"] = repeatability_corr
+        comparison[f"{key}_repeatability_rmse"] = rmse(first_values, second_values)
         comparison[f"{key}_mean_abs_delta"] = float(
             np.mean(np.abs(second_values - first_values))
         )
@@ -392,9 +433,13 @@ def compare_probe_summaries(
     compared_comparison = compared["comparison"]
     keys = (
         "output_response_activity_mean_abs_delta",
+        "output_response_activity_repeatability_rmse",
         "output_fast_response_score_mean_abs_delta",
+        "output_fast_response_score_repeatability_rmse",
         "output_event_score_mean_abs_delta",
+        "output_event_score_repeatability_rmse",
         "output_slow_drift_score_mean_abs_delta",
+        "output_slow_drift_score_repeatability_rmse",
     )
     comparison: dict[str, float] = {}
     for key in keys:
@@ -428,6 +473,13 @@ def safe_correlation(left: np.ndarray, right: np.ndarray) -> float:
 
 def safe_ratio(numerator: float, denominator: float) -> float:
     return float(numerator / max(denominator, 1e-12))
+
+
+def rmse(left: np.ndarray, right: np.ndarray) -> float:
+    if left.size != right.size:
+        msg = "rmse arrays must have matching sizes"
+        raise ValueError(msg)
+    return float(np.sqrt(np.mean(np.square(right - left))))
 
 
 def write_voice_memory_rows(path: str | Path, rows: VoiceMemoryRows) -> Path:

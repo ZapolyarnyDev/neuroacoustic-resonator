@@ -59,6 +59,7 @@ steps: 8
     assert summary["second"]["rows"] == 5
     assert summary["parameters"]["input_assoc_gain"] == 0.5
     assert "output_fast_response_score_corr" in summary["comparison"]
+    assert "output_fast_response_score_repeatability_rmse" in summary["comparison"]
     assert "output_event_score_second_to_first_peak" in loaded["comparison"]
 
 
@@ -111,12 +112,16 @@ steps: 8
     assert "baseline" in summary
     assert "memory_drive" in summary
     assert "memory_drive_comparison" in summary
-    assert loaded["memory_drive"]["parameters"]["compare_memory_drive_strength"] == 0.25
-    assert (
-        loaded["memory_drive"]["parameters"]["compare_memory_drive_assoc_gain"] == 1.5
-    )
+    assert loaded["probe_parameters"]["compare_memory_drive_strength"] == 0.25
+    assert loaded["baseline"]["parameters"]["memory_drive_strength"] == 0.0
+    assert loaded["memory_drive"]["parameters"]["memory_drive_strength"] == 0.25
+    assert loaded["memory_drive"]["parameters"]["memory_drive_assoc_gain"] == 1.5
     assert (
         "output_fast_response_score_mean_abs_delta_memory_drive_to_baseline_ratio"
+        in summary["memory_drive_comparison"]
+    )
+    assert (
+        "output_fast_response_score_repeatability_rmse_memory_drive_to_baseline_ratio"
         in summary["memory_drive_comparison"]
     )
 
@@ -166,7 +171,8 @@ steps: 8
     assert {row["probe_label"] for row in rows} == {"baseline", "silence_control"}
     assert "silence_control" in summary
     assert "voice_vs_silence_control" in summary
-    assert loaded["silence_control"]["parameters"]["compare_silence_control"] is True
+    assert loaded["probe_parameters"]["compare_silence_control"] is True
+    assert "compare_silence_control" not in loaded["silence_control"]["parameters"]
     assert (
         "output_fast_response_score_mean_abs_delta_silence_control_to_baseline_ratio"
         in summary["voice_vs_silence_control"]
