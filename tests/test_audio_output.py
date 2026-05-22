@@ -545,6 +545,57 @@ def test_voice_response_sonification_keeps_short_response_memory() -> None:
     assert not np.allclose(remembered, stateless)
 
 
+def test_voice_response_sonification_articulates_response_events() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        release=0.5,
+        background_level=0.0,
+        background_response_level=0.0,
+        articulation_attack=1.0,
+        articulation_release=0.5,
+        articulation_hold_frames=0,
+        articulation_floor=0.0,
+        energy_normalization_rate=1.0,
+    )
+
+    active = renderer.render_frame(field.state, regions, response_score=0.02)
+    active_articulation = renderer.articulation
+    fading = renderer.render_frame(field.state, regions, response_score=0.0)
+
+    assert active_articulation > renderer.articulation
+    assert np.sqrt(np.mean(active * active)) > np.sqrt(np.mean(fading * fading))
+
+
+def test_voice_response_sonification_normalizes_response_energy() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.03,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        background_level=0.0,
+        background_response_level=0.0,
+        articulation_attack=1.0,
+        target_response_rms=0.08,
+        energy_normalization_rate=1.0,
+        max_energy_gain=3.0,
+    )
+
+    renderer.render_frame(field.state, regions, response_score=0.02)
+
+    assert renderer.energy_gain > 1.0
+
+
 def test_voice_response_sonification_rejects_invalid_response_threshold() -> None:
     with pytest.raises(ValueError, match="response_threshold"):
         VoiceResponseSonificationRenderer(response_threshold=-0.1)
@@ -558,3 +609,15 @@ def test_voice_response_sonification_rejects_invalid_background_levels() -> None
             background_level=0.2,
             background_response_level=0.1,
         )
+
+
+def test_voice_response_sonification_rejects_invalid_articulation() -> None:
+    with pytest.raises(ValueError, match="articulation_hold_frames"):
+        VoiceResponseSonificationRenderer(articulation_hold_frames=-1)
+
+
+def test_voice_response_sonification_rejects_invalid_energy_normalization() -> None:
+    with pytest.raises(ValueError, match="target_response_rms"):
+        VoiceResponseSonificationRenderer(target_response_rms=0.0)
+    with pytest.raises(ValueError, match="max_energy_gain"):
+        VoiceResponseSonificationRenderer(min_energy_gain=2.0, max_energy_gain=1.0)

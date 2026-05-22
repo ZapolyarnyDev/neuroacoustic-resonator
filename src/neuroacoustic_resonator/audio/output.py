@@ -620,10 +620,18 @@ class VoiceResponseSonificationRenderer:
         pitch_depth: float = 0.45,
         timbre_depth: float = 0.7,
         background_level: float = 0.03,
-        background_response_level: float = 0.25,
-        response_mix: float = 1.2,
+        background_response_level: float = 0.16,
+        response_mix: float = 1.35,
         response_memory: float = 0.35,
         response_memory_decay: float = 0.03,
+        articulation_attack: float = 0.9,
+        articulation_release: float = 0.2,
+        articulation_hold_frames: int = 5,
+        articulation_floor: float = 0.02,
+        target_response_rms: float = 0.1,
+        energy_normalization_rate: float = 0.06,
+        min_energy_gain: float = 0.65,
+        max_energy_gain: float = 1.8,
     ) -> None:
         if response_threshold < 0.0:
             msg = "response_threshold must be non-negative"
@@ -658,6 +666,30 @@ class VoiceResponseSonificationRenderer:
         if not 0.0 < response_memory_decay <= 1.0:
             msg = "response_memory_decay must be in (0, 1]"
             raise ValueError(msg)
+        if not 0.0 < articulation_attack <= 1.0:
+            msg = "articulation_attack must be in (0, 1]"
+            raise ValueError(msg)
+        if not 0.0 < articulation_release <= 1.0:
+            msg = "articulation_release must be in (0, 1]"
+            raise ValueError(msg)
+        if articulation_hold_frames < 0:
+            msg = "articulation_hold_frames must be non-negative"
+            raise ValueError(msg)
+        if not 0.0 <= articulation_floor <= 1.0:
+            msg = "articulation_floor must be between 0 and 1"
+            raise ValueError(msg)
+        if target_response_rms <= 0.0:
+            msg = "target_response_rms must be positive"
+            raise ValueError(msg)
+        if not 0.0 < energy_normalization_rate <= 1.0:
+            msg = "energy_normalization_rate must be in (0, 1]"
+            raise ValueError(msg)
+        if min_energy_gain <= 0.0:
+            msg = "min_energy_gain must be positive"
+            raise ValueError(msg)
+        if max_energy_gain < min_energy_gain:
+            msg = "max_energy_gain must be at least min_energy_gain"
+            raise ValueError(msg)
 
         self.continuous = ContinuousAudioRenderer(
             sample_rate=sample_rate,
@@ -678,8 +710,20 @@ class VoiceResponseSonificationRenderer:
         self.response_mix = response_mix
         self.response_memory = response_memory
         self.response_memory_decay = response_memory_decay
+        self.articulation_attack = articulation_attack
+        self.articulation_release = articulation_release
+        self.articulation_hold_frames = articulation_hold_frames
+        self.articulation_floor = articulation_floor
+        self.target_response_rms = target_response_rms
+        self.energy_normalization_rate = energy_normalization_rate
+        self.min_energy_gain = min_energy_gain
+        self.max_energy_gain = max_energy_gain
         self.envelope = 0.0
         self.last_activation = 0.0
+        self._articulation = 0.0
+        self._articulation_hold_remaining = 0
+        self._previous_response_score = 0.0
+        self._energy_gain = 1.0
         self._voice_phase = 0.0
         self._brightness = 0.0
         self._roughness = 0.0
@@ -690,6 +734,14 @@ class VoiceResponseSonificationRenderer:
     @property
     def frame_size(self) -> int:
         return self.continuous.frame_size
+
+    @property
+    def articulation(self) -> float:
+        return self._articulation
+
+    @property
+    def energy_gain(self) -> float:
+        return self._energy_gain
 
     def render_frame(
         self,
@@ -716,6 +768,7 @@ class VoiceResponseSonificationRenderer:
         self.last_activation = self._soft_activation(response_score)
         rate = self.attack if self.last_activation > self.envelope else self.release
         self.envelope += rate * (self.last_activation - self.envelope)
+        self._update_articulation(response_score)
 
         features = self._output_voice_features(state, regions)
         self._brightness += self.continuous.smoothing * (
@@ -732,8 +785,55 @@ class VoiceResponseSonificationRenderer:
             self.background_level
             + (self.background_response_level - self.background_level) * self.envelope
         )
-        mixed = background_gain * base + self.response_mix * self.envelope * response
+        response_gain = self.envelope * (
+            self.articulation_floor
+            + (1.0 - self.articulation_floor) * self._articulation
+        )
+        response_layer = self.response_mix * response_gain * response
+        self._update_energy_gain(response_layer, response_gain)
+        mixed = background_gain * base + self._energy_gain * response_layer
         return np.clip(mixed, -1.0, 1.0).astype(np.float64, copy=False)
+
+    def _update_articulation(self, response_score: float) -> None:
+        response_rise = max(0.0, response_score - self._previous_response_score)
+        self._previous_response_score = response_score
+        event_activation = max(
+            0.25 * self.last_activation,
+            self._soft_activation(response_rise * 2.5),
+        )
+        if event_activation > 0.0:
+            self._articulation_hold_remaining = self.articulation_hold_frames
+        elif self._articulation_hold_remaining > 0:
+            self._articulation_hold_remaining -= 1
+
+        target = event_activation
+        if self._articulation_hold_remaining > 0:
+            target = max(target, self.articulation_floor + 0.18 * self.envelope)
+
+        rate = (
+            self.articulation_attack
+            if target > self._articulation
+            else self.articulation_release
+        )
+        self._articulation += rate * (target - self._articulation)
+
+    def _update_energy_gain(
+        self, response_layer: AudioArray, response_gain: float
+    ) -> None:
+        if response_gain <= 1e-6:
+            target_gain = 1.0
+        else:
+            rms = float(np.sqrt(np.mean(response_layer * response_layer)))
+            if rms <= 1e-9:
+                target_gain = self.max_energy_gain
+            else:
+                target_gain = self.target_response_rms / rms
+            target_gain = float(
+                np.clip(target_gain, self.min_energy_gain, self.max_energy_gain)
+            )
+        self._energy_gain += self.energy_normalization_rate * (
+            target_gain - self._energy_gain
+        )
 
     def _response_voice_frame(self, features: dict[str, float]) -> AudioArray:
         samples = np.arange(self.frame_size, dtype=np.float64)
@@ -799,18 +899,22 @@ class VoiceResponseSonificationRenderer:
         inharmonic = np.sin(
             ratio_a * phase + 0.7 * formant_phase + second_phase
         ) * np.sin(ratio_b * phase - 0.3 * formant_phase + third_phase)
+        sparse_focus = np.clip(0.35 + 0.65 * phase_order_2, 0.0, 1.0)
+        rough_focus = np.clip(1.0 - 0.45 * sparse_focus, 0.0, 1.0)
         voice = (
-            (1.0 - 0.50 * harmonic_mix) * fundamental
-            + (0.18 + 0.18 * trace_contrast + 0.16 * phase_order_2)
+            (1.0 - 0.32 * harmonic_mix) * fundamental
+            + (0.10 + 0.10 * trace_contrast + 0.08 * phase_order_2)
             * harmonic_mix
+            * sparse_focus
             * second
-            + (0.08 + 0.18 * metabolite_contrast + 0.16 * phase_order_3)
+            + (0.04 + 0.10 * metabolite_contrast + 0.08 * phase_order_3)
             * harmonic_mix
+            * (0.65 + 0.35 * phase_spread)
             * third
-            + 0.10 * rough_mix * fourth
-            + (0.12 + 0.12 * phase_spread) * rough_mix * inharmonic
+            + 0.035 * rough_mix * rough_focus * fourth
+            + (0.045 + 0.065 * phase_spread) * rough_mix * rough_focus * inharmonic
         )
-        normalization = 1.0 + 0.52 * harmonic_mix + 0.28 * rough_mix
+        normalization = 1.0 + 0.32 * harmonic_mix + 0.16 * rough_mix
         return self.continuous.gain * voice / normalization
 
     def _soft_activation(self, response_score: float) -> float:
