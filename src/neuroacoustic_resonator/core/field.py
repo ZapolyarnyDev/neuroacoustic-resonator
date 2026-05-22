@@ -179,6 +179,46 @@ class OscillatorField:
 
         self._phase[mask] = np.mod(self._phase[mask] + amount, TAU)
 
+    def apply_region_plasticity(
+        self,
+        mask: NDArray[np.bool_],
+        signal: float,
+        *,
+        coupling_rate: float = 0.0,
+        frequency_rate: float = 0.0,
+    ) -> None:
+        if mask.shape != self._phase.shape:
+            msg = f"mask shape must be {self._phase.shape}"
+            raise ValueError(msg)
+        if mask.dtype != np.bool_:
+            msg = "mask must be boolean"
+            raise ValueError(msg)
+        if signal < 0.0:
+            msg = "signal must be non-negative"
+            raise ValueError(msg)
+        if coupling_rate < 0.0:
+            msg = "coupling_rate must be non-negative"
+            raise ValueError(msg)
+        if frequency_rate < 0.0:
+            msg = "frequency_rate must be non-negative"
+            raise ValueError(msg)
+        if signal == 0.0 or not np.any(mask):
+            return
+
+        local = self.local_synchrony()
+        local_centered = local[mask] - float(np.mean(local[mask]))
+        trace_centered = self._trace[mask] - float(np.mean(self._trace[mask]))
+        self._coupling[mask] = np.clip(
+            self._coupling[mask] + coupling_rate * signal * local_centered,
+            self.config.min_coupling,
+            self.config.max_coupling,
+        )
+        self._frequency[mask] = np.clip(
+            self._frequency[mask] + frequency_rate * signal * trace_centered,
+            self.config.min_frequency,
+            self.config.max_frequency,
+        )
+
     def step(self) -> FieldState:
         coupling_drive = self._coupling_drive()
         phase_drive = self._frequency + coupling_drive

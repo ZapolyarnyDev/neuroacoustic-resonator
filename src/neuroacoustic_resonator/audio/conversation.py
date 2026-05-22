@@ -75,6 +75,8 @@ class VoiceConversationConfig:
     event_response_duration_gain: float = 80.0
     response_seed_gain: float = 0.65
     response_seed_decay_seconds: float = 0.7
+    output_plasticity_rate: float = 0.02
+    output_frequency_plasticity_rate: float = 0.004
     carrier_frequency: float = 220.0
     frequency_scale: float = 1.0
     response_threshold: float = 0.0
@@ -143,6 +145,12 @@ class VoiceConversationConfig:
             raise ValueError(msg)
         if self.response_seed_decay_seconds <= 0.0:
             msg = "response_seed_decay_seconds must be positive"
+            raise ValueError(msg)
+        if self.output_plasticity_rate < 0.0:
+            msg = "output_plasticity_rate must be non-negative"
+            raise ValueError(msg)
+        if self.output_frequency_plasticity_rate < 0.0:
+            msg = "output_frequency_plasticity_rate must be non-negative"
             raise ValueError(msg)
         if self.carrier_frequency <= 0.0:
             msg = "carrier_frequency must be positive"
@@ -223,6 +231,8 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             * config.response_seed_gain,
             seed_decay_seconds=config.response_seed_decay_seconds,
             sample_rate=config.sample_rate,
+            output_plasticity_rate=config.output_plasticity_rate,
+            output_frequency_plasticity_rate=config.output_frequency_plasticity_rate,
         )
         if input_audio.size:
             audio_frames.append(input_audio)
@@ -293,6 +303,8 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             "event_response_duration_gain": config.event_response_duration_gain,
             "response_seed_gain": config.response_seed_gain,
             "response_seed_decay_seconds": config.response_seed_decay_seconds,
+            "output_plasticity_rate": config.output_plasticity_rate,
+            "output_frequency_plasticity_rate": config.output_frequency_plasticity_rate,
             "carrier_frequency": config.carrier_frequency,
             "frequency_scale": config.frequency_scale,
             "response_threshold": config.response_threshold,
@@ -469,6 +481,8 @@ def render_field_response(
     initial_response_score: float = 0.0,
     seed_decay_seconds: float = 0.7,
     sample_rate: int = 48_000,
+    output_plasticity_rate: float = 0.0,
+    output_frequency_plasticity_rate: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     frames: list[np.ndarray] = []
     response_scores: list[float] = []
@@ -483,6 +497,12 @@ def render_field_response(
             metrics.output_event_score,
             max(0.0, metrics.output_response_activity) * 0.05,
             initial_response_score * math.exp(-response_step / decay_steps),
+        )
+        simulation.field.apply_region_plasticity(
+            regions.output,
+            response_score,
+            coupling_rate=output_plasticity_rate,
+            frequency_rate=output_frequency_plasticity_rate,
         )
         frames.append(
             renderer.render_frame(
@@ -559,6 +579,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--event-response-duration-gain", type=float, default=80.0)
     parser.add_argument("--response-seed-gain", type=float, default=0.65)
     parser.add_argument("--response-seed-decay-seconds", type=float, default=0.7)
+    parser.add_argument("--output-plasticity-rate", type=float, default=0.02)
+    parser.add_argument("--output-frequency-plasticity-rate", type=float, default=0.004)
     parser.add_argument("--carrier-frequency", type=float, default=220.0)
     parser.add_argument("--frequency-scale", type=float, default=1.0)
     parser.add_argument("--response-threshold", type=float, default=0.0)
@@ -596,6 +618,8 @@ def main(argv: list[str] | None = None) -> int:
             event_response_duration_gain=args.event_response_duration_gain,
             response_seed_gain=args.response_seed_gain,
             response_seed_decay_seconds=args.response_seed_decay_seconds,
+            output_plasticity_rate=args.output_plasticity_rate,
+            output_frequency_plasticity_rate=args.output_frequency_plasticity_rate,
             carrier_frequency=args.carrier_frequency,
             frequency_scale=args.frequency_scale,
             response_threshold=args.response_threshold,

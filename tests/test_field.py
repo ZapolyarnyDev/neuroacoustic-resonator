@@ -1,7 +1,12 @@
 import numpy as np
 import pytest
 
-from neuroacoustic_resonator import FieldConfig, FieldState, OscillatorField
+from neuroacoustic_resonator import (
+    FieldConfig,
+    FieldState,
+    OscillatorField,
+    RegionMasks,
+)
 
 
 def test_field_initializes_with_expected_shape() -> None:
@@ -72,6 +77,34 @@ def test_synchrony_is_one_for_uniform_phase() -> None:
 
     assert np.allclose(field.local_synchrony(), 1.0)
     assert field.global_synchrony() == pytest.approx(1.0)
+
+
+def test_apply_region_plasticity_changes_masked_output_state() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    before = field.state
+    field._trace[regions.output] = np.linspace(0.0, 1.0, int(np.sum(regions.output)))
+
+    field.apply_region_plasticity(
+        regions.output,
+        0.5,
+        coupling_rate=0.1,
+        frequency_rate=0.1,
+    )
+    after = field.state
+
+    assert not np.allclose(
+        before.coupling[regions.output],
+        after.coupling[regions.output],
+    )
+    assert not np.allclose(
+        before.frequency[regions.output],
+        after.frequency[regions.output],
+    )
+    assert np.allclose(
+        before.coupling[~regions.output],
+        after.coupling[~regions.output],
+    )
 
 
 def test_from_state_rejects_wrong_shape() -> None:

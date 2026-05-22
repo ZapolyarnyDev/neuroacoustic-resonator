@@ -78,6 +78,8 @@ class LiveConversationConfig:
     event_response_duration_gain: float = 80.0
     response_seed_gain: float = 0.65
     response_seed_decay_seconds: float = 0.7
+    output_plasticity_rate: float = 0.02
+    output_frequency_plasticity_rate: float = 0.004
     warmup_steps: int = 100
     gain: float = 0.35
     carrier_frequency: float = 220.0
@@ -134,6 +136,12 @@ class LiveConversationConfig:
             raise ValueError(msg)
         if self.response_seed_decay_seconds <= 0.0:
             msg = "response_seed_decay_seconds must be positive"
+            raise ValueError(msg)
+        if self.output_plasticity_rate < 0.0:
+            msg = "output_plasticity_rate must be non-negative"
+            raise ValueError(msg)
+        if self.output_frequency_plasticity_rate < 0.0:
+            msg = "output_frequency_plasticity_rate must be non-negative"
             raise ValueError(msg)
         if self.warmup_steps < 0:
             msg = "warmup_steps must be non-negative"
@@ -256,6 +264,8 @@ class LiveConversationEngine:
             * self.config.response_seed_gain,
             seed_decay_seconds=self.config.response_seed_decay_seconds,
             sample_rate=self.config.sample_rate,
+            output_plasticity_rate=self.config.output_plasticity_rate,
+            output_frequency_plasticity_rate=self.config.output_frequency_plasticity_rate,
         )
         summary: dict[str, Any] = {
             "index": index,
@@ -422,6 +432,8 @@ def live_config_parameters(config: LiveConversationConfig) -> dict[str, Any]:
         "response_seconds": config.response_seconds,
         "min_response_seconds": config.min_response_seconds,
         "max_response_seconds": config.max_response_seconds,
+        "output_plasticity_rate": config.output_plasticity_rate,
+        "output_frequency_plasticity_rate": config.output_frequency_plasticity_rate,
         "start_rms": config.start_rms,
         "stop_rms": config.stop_rms,
         "silence_seconds": config.silence_seconds,
@@ -517,6 +529,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--response-seconds", type=float, default=1.5)
     parser.add_argument("--min-response-seconds", type=float, default=0.6)
     parser.add_argument("--max-response-seconds", type=float, default=3.0)
+    parser.add_argument("--output-plasticity-rate", type=float, default=0.02)
+    parser.add_argument("--output-frequency-plasticity-rate", type=float, default=0.004)
     parser.add_argument("--gain", type=float, default=0.35)
     parser.add_argument("--start-rms", type=float, default=0.015)
     parser.add_argument("--stop-rms", type=float, default=0.008)
@@ -567,6 +581,8 @@ def main(argv: list[str] | None = None) -> int:
                 response_seconds=args.response_seconds,
                 min_response_seconds=args.min_response_seconds,
                 max_response_seconds=args.max_response_seconds,
+                output_plasticity_rate=args.output_plasticity_rate,
+                output_frequency_plasticity_rate=args.output_frequency_plasticity_rate,
                 gain=args.gain,
                 start_rms=args.start_rms,
                 stop_rms=args.stop_rms,

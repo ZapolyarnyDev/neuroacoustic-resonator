@@ -72,6 +72,7 @@ steps: 8
     assert summary["utterances"][0]["mixed_input_audio_seconds"] == 256 / 8_000
     assert summary["parameters"]["include_input_audio"] is True
     assert summary["parameters"]["response_seed_gain"] == 0.65
+    assert summary["parameters"]["output_plasticity_rate"] == 0.02
     assert loaded["output_wav"] == str(output)
     assert "session" in loaded
 
