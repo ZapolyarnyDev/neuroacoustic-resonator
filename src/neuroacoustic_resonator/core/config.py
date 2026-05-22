@@ -24,6 +24,7 @@ class FieldConfigModel(BaseModel):
     metabolite_adaptive_recovery: float = Field(default=0.0, ge=0.0)
     trace_rate: float = Field(default=0.08, ge=0.0)
     trace_decay: float = Field(default=0.0, ge=0.0)
+    memory_drive_strength: float = Field(default=0.0, ge=0.0)
     frequency_plasticity_rate: float = Field(default=0.01, ge=0.0)
     frequency_homeostasis_rate: float = Field(default=0.01, ge=0.0)
     synchrony_target_low: float = Field(default=0.05, ge=0.0, le=1.0)

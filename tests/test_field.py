@@ -231,6 +231,64 @@ def test_trace_decay_reduces_sustained_activity_memory() -> None:
     assert np.all(decaying_trace < base_trace)
 
 
+def test_centered_memory_drive_changes_phase_from_trace_contrast() -> None:
+    config = FieldConfig(
+        size=2,
+        dt=0.1,
+        base_frequency=0.0,
+        memory_drive_strength=1.0,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.0,
+        coupling_homeostasis_rate=0.0,
+    )
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.full(shape, 1.0),
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=np.asarray([[0.0, 1.0], [0.0, 1.0]], dtype=np.float64),
+        ),
+    )
+
+    memory_drive = field.memory_drive()
+    after = field.step().phase
+
+    assert np.mean(memory_drive) == pytest.approx(0.0)
+    assert memory_drive[0, 0] < 0.0
+    assert memory_drive[0, 1] > 0.0
+    assert after[0, 0] < 1.0
+    assert after[0, 1] > 1.0
+
+
+def test_uniform_trace_memory_drive_has_no_phase_bias() -> None:
+    config = FieldConfig(
+        size=2,
+        dt=0.1,
+        base_frequency=0.0,
+        memory_drive_strength=1.0,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.0,
+        coupling_homeostasis_rate=0.0,
+    )
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.full(shape, 1.0),
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=np.full(shape, 0.7),
+        ),
+    )
+
+    assert np.allclose(field.memory_drive(), 0.0)
+    assert np.allclose(field.step().phase, 1.0)
+
+
 def test_config_rejects_invalid_trace_rate() -> None:
     with pytest.raises(ValueError, match="trace_rate"):
         FieldConfig(trace_rate=-0.1)
@@ -239,6 +297,11 @@ def test_config_rejects_invalid_trace_rate() -> None:
 def test_config_rejects_invalid_trace_decay() -> None:
     with pytest.raises(ValueError, match="trace_decay"):
         FieldConfig(trace_decay=-0.1)
+
+
+def test_config_rejects_invalid_memory_drive_strength() -> None:
+    with pytest.raises(ValueError, match="memory_drive_strength"):
+        FieldConfig(memory_drive_strength=-0.1)
 
 
 def test_config_rejects_invalid_metabolite_diffusion() -> None:

@@ -11,6 +11,7 @@ def test_simulation_config_loads_from_yaml(tmp_path) -> None:
 field:
   size: 6
   seed: 12
+  memory_drive_strength: 0.15
 steps: 5
 preview_path: outputs/test-preview.png
 """,
@@ -21,6 +22,7 @@ preview_path: outputs/test-preview.png
 
     assert config.field.size == 6
     assert config.field.seed == 12
+    assert config.field.memory_drive_strength == 0.15
     assert config.field.metabolite_diffusion == 0.0
     assert not config.synthetic_input.enabled
     assert config.steps == 5

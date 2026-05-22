@@ -23,6 +23,7 @@ class FieldConfig:
     metabolite_adaptive_recovery: float = 0.0
     trace_rate: float = 0.08
     trace_decay: float = 0.0
+    memory_drive_strength: float = 0.0
     frequency_plasticity_rate: float = 0.01
     frequency_homeostasis_rate: float = 0.01
     synchrony_target_low: float = 0.05
@@ -64,6 +65,9 @@ class FieldConfig:
             raise ValueError(msg)
         if self.trace_decay < 0.0:
             msg = "trace_decay must be non-negative"
+            raise ValueError(msg)
+        if self.memory_drive_strength < 0.0:
+            msg = "memory_drive_strength must be non-negative"
             raise ValueError(msg)
         if self.frequency_plasticity_rate < 0.0:
             msg = "frequency_plasticity_rate must be non-negative"
@@ -221,7 +225,8 @@ class OscillatorField:
 
     def step(self) -> FieldState:
         coupling_drive = self._coupling_drive()
-        phase_drive = self._frequency + coupling_drive
+        memory_drive = self.memory_drive()
+        phase_drive = self._frequency + coupling_drive + memory_drive
         activity = self._metabolic_activity(coupling_drive)
         metabolite_laplacian = self._metabolite_laplacian()
         metabolite_depletion = 1.0 - self._metabolite
@@ -270,6 +275,13 @@ class OscillatorField:
 
     def global_synchrony(self) -> float:
         return float(np.abs(np.mean(np.exp(1j * self._phase))))
+
+    def memory_drive(self) -> FloatArray:
+        strength = self.config.memory_drive_strength
+        if strength == 0.0:
+            return np.zeros_like(self._trace)
+        trace_centered = self._trace - float(np.mean(self._trace))
+        return strength * trace_centered
 
     def metrics(self, step: int = 0) -> FieldMetrics:
         local = self.local_synchrony()

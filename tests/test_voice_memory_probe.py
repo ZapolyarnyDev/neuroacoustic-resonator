@@ -62,6 +62,59 @@ steps: 8
     assert "output_event_score_second_to_first_peak" in loaded["comparison"]
 
 
+def test_voice_memory_probe_compares_memory_drive_strength(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+field:
+  size: 6
+  seed: 1
+  coupling_strength: 0.2
+synthetic_input:
+  enabled: false
+steps: 8
+""",
+        encoding="utf-8",
+    )
+    wav_path = tmp_path / "voice.wav"
+    samples = np.zeros(512, dtype=np.float32)
+    samples[128:256] = 1.0
+    wavfile.write(wav_path, 8_000, samples)
+    csv_path = tmp_path / "voice-memory.csv"
+    summary_path = tmp_path / "voice-memory.json"
+
+    summary = run_voice_memory_probe(
+        VoiceMemoryProbeConfig(
+            config_path=config_path,
+            input_wav=wav_path,
+            output_csv=csv_path,
+            output_summary=summary_path,
+            frame_size=128,
+            hop_size=64,
+            input_assoc_gain=0.5,
+            pause_steps=3,
+            warmup_steps=2,
+            max_steps=5,
+            compare_memory_drive_strength=0.25,
+        )
+    )
+
+    with csv_path.open(newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    loaded = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    assert len(rows) == 20
+    assert {row["probe_label"] for row in rows} == {"baseline", "memory_drive"}
+    assert "baseline" in summary
+    assert "memory_drive" in summary
+    assert "memory_drive_comparison" in summary
+    assert loaded["memory_drive"]["parameters"]["compare_memory_drive_strength"] == 0.25
+    assert (
+        "output_fast_response_score_mean_abs_delta_memory_to_baseline_ratio"
+        in summary["memory_drive_comparison"]
+    )
+
+
 def test_voice_memory_probe_main_writes_outputs(tmp_path) -> None:
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
