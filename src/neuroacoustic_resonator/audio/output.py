@@ -622,6 +622,8 @@ class VoiceResponseSonificationRenderer:
         background_level: float = 0.03,
         background_response_level: float = 0.25,
         response_mix: float = 1.2,
+        response_memory: float = 0.35,
+        response_memory_decay: float = 0.03,
     ) -> None:
         if response_threshold < 0.0:
             msg = "response_threshold must be non-negative"
@@ -650,6 +652,12 @@ class VoiceResponseSonificationRenderer:
         if response_mix < 0.0:
             msg = "response_mix must be non-negative"
             raise ValueError(msg)
+        if response_memory < 0.0:
+            msg = "response_memory must be non-negative"
+            raise ValueError(msg)
+        if not 0.0 < response_memory_decay <= 1.0:
+            msg = "response_memory_decay must be in (0, 1]"
+            raise ValueError(msg)
 
         self.continuous = ContinuousAudioRenderer(
             sample_rate=sample_rate,
@@ -668,12 +676,15 @@ class VoiceResponseSonificationRenderer:
         self.background_level = background_level
         self.background_response_level = background_response_level
         self.response_mix = response_mix
+        self.response_memory = response_memory
+        self.response_memory_decay = response_memory_decay
         self.envelope = 0.0
         self.last_activation = 0.0
         self._voice_phase = 0.0
         self._brightness = 0.0
         self._roughness = 0.0
         self._vibrato_phase = 0.0
+        self._memory = self._empty_voice_features()
         self._previous_activity: float | None = None
 
     @property
@@ -713,9 +724,10 @@ class VoiceResponseSonificationRenderer:
         self._roughness += self.continuous.smoothing * (
             features["roughness"] - self._roughness
         )
+        memory_features = self._update_response_memory(features)
 
         base = self.continuous.render_frame(state, regions)
-        response = self._response_voice_frame(features)
+        response = self._response_voice_frame(memory_features)
         background_gain = (
             self.background_level
             + (self.background_response_level - self.background_level) * self.envelope
@@ -805,6 +817,48 @@ class VoiceResponseSonificationRenderer:
         scaled = max(0.0, response_score - self.response_threshold)
         return float(1.0 - np.exp(-scaled * self.response_sensitivity))
 
+    def _update_response_memory(
+        self,
+        features: dict[str, float],
+    ) -> dict[str, float]:
+        imprint = self.response_memory * self.envelope
+        decay = self.response_memory_decay
+        mixed: dict[str, float] = {}
+        for key, value in features.items():
+            remembered = self._memory[key] * (1.0 - decay)
+            remembered += imprint * (value - remembered)
+            self._memory[key] = remembered
+            mixed[key] = float(
+                np.clip(
+                    value + self.response_memory * self._memory[key],
+                    -TAU,
+                    TAU,
+                )
+            )
+        return mixed
+
+    @staticmethod
+    def _empty_voice_features() -> dict[str, float]:
+        return {
+            "synchrony": 0.0,
+            "trace": 0.0,
+            "metabolite_stress": 0.0,
+            "metabolite_contrast": 0.0,
+            "frequency_spread": 0.0,
+            "frequency_mean": 0.0,
+            "mean_phase": 0.0,
+            "phase_angle_2": 0.0,
+            "phase_angle_3": 0.0,
+            "phase_order_2": 0.0,
+            "phase_order_3": 0.0,
+            "phase_spread": 0.0,
+            "trace_phase_lock": 0.0,
+            "metabolite_phase_lock": 0.0,
+            "trace_contrast": 0.0,
+            "brightness": 0.0,
+            "roughness": 0.0,
+        }
+
     @staticmethod
     def _output_voice_features(
         state: FieldState,
@@ -812,26 +866,7 @@ class VoiceResponseSonificationRenderer:
     ) -> dict[str, float]:
         mask = regions.output
         if not np.any(mask):
-            return {
-                "synchrony": 0.0,
-                "trace": 0.0,
-                "metabolite_stress": 0.0,
-                "metabolite_contrast": 0.0,
-                "frequency_spread": 0.0,
-                "frequency_mean": 0.0,
-                "mean_phase": 0.0,
-                "phase_angle_2": 0.0,
-                "phase_angle_3": 0.0,
-                "phase_order_2": 0.0,
-                "phase_order_3": 0.0,
-                "phase_spread": 0.0,
-                "trace_phase_lock": 0.0,
-                "metabolite_phase_lock": 0.0,
-                "trace_contrast": 0.0,
-                "brightness": 0.0,
-                "roughness": 0.0,
-            }
-
+            return VoiceResponseSonificationRenderer._empty_voice_features()
         phase = state.phase[mask]
         order = np.mean(np.exp(1j * phase))
         second_order = np.mean(np.exp(2j * phase))

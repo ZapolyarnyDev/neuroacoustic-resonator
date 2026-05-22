@@ -499,6 +499,52 @@ def test_voice_response_sonification_uses_phase_texture_moments() -> None:
     assert not np.allclose(bimodal, trimodal)
 
 
+def test_voice_response_sonification_keeps_short_response_memory() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    memory_renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+        response_memory=0.6,
+        response_memory_decay=0.01,
+    )
+    stateless_renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+        response_memory=0.0,
+    )
+    textured_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    textured_state.phase[regions.output] += np.pi / 2.0
+    textured_state.trace[regions.output] = 1.0
+
+    memory_renderer.render_frame(textured_state, regions, response_score=0.02)
+    remembered = memory_renderer.render_frame(field.state, regions, response_score=0.02)
+    stateless_renderer.render_frame(textured_state, regions, response_score=0.02)
+    stateless = stateless_renderer.render_frame(
+        field.state,
+        regions,
+        response_score=0.02,
+    )
+
+    assert not np.allclose(remembered, stateless)
+
+
 def test_voice_response_sonification_rejects_invalid_response_threshold() -> None:
     with pytest.raises(ValueError, match="response_threshold"):
         VoiceResponseSonificationRenderer(response_threshold=-0.1)
