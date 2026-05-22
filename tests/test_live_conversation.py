@@ -128,3 +128,41 @@ steps: 8
     assert result.summary["peak_input_value"] > 0.0
     assert result.summary["initial_response_seed"] >= 0.0
     assert engine.session_summary()["turn_count"] == 1
+
+
+def test_live_conversation_engine_records_turn_audio(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+field:
+  size: 6
+  seed: 1
+synthetic_input:
+  enabled: false
+steps: 4
+""",
+        encoding="utf-8",
+    )
+    record_dir = tmp_path / "records"
+    config = LiveConversationConfig(
+        config_path=config_path,
+        sample_rate=8_000,
+        output_frame_size=80,
+        input_frame_size=128,
+        input_hop_size=64,
+        response_seconds=0.1,
+        min_response_seconds=0.1,
+        max_response_seconds=0.1,
+        warmup_steps=1,
+        record_dir=record_dir,
+    )
+    audio = np.zeros(256, dtype=np.float64)
+    audio[64:128] = 0.7
+    engine = LiveConversationEngine(config)
+
+    result = engine.process_utterance(audio, index=1)
+
+    assert (record_dir / "turn_001_input.wav").exists()
+    assert (record_dir / "turn_001_response.wav").exists()
+    assert result.summary["input_wav"] == str(record_dir / "turn_001_input.wav")
+    assert result.summary["response_wav"] == str(record_dir / "turn_001_response.wav")

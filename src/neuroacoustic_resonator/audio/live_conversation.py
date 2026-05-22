@@ -19,7 +19,10 @@ from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
     extract_audio_array_features,
 )
-from neuroacoustic_resonator.audio.output import VoiceResponseSonificationRenderer
+from neuroacoustic_resonator.audio.output import (
+    VoiceResponseSonificationRenderer,
+    write_wav,
+)
 from neuroacoustic_resonator.audio.render import steps_for_duration
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
@@ -92,6 +95,7 @@ class LiveConversationConfig:
     print_rms: bool = False
     rms_report_interval: float = 0.5
     idle_timeout_seconds: float | None = None
+    record_dir: Path | None = None
     summary_path: Path | None = Path("experiments") / "logs" / "live_conversation.json"
 
     def __post_init__(self) -> None:
@@ -180,7 +184,7 @@ class LiveTurnResult:
     index: int
     input_audio: np.ndarray
     response_audio: np.ndarray
-    summary: dict[str, float | int]
+    summary: dict[str, Any]
 
 
 class LiveConversationEngine:
@@ -199,7 +203,9 @@ class LiveConversationEngine:
             response_threshold=config.response_threshold,
             response_sensitivity=config.response_sensitivity,
         )
-        self.turns: list[dict[str, float | int]] = []
+        self.turns: list[dict[str, Any]] = []
+        if config.record_dir is not None:
+            config.record_dir.mkdir(parents=True, exist_ok=True)
 
         for _ in range(config.warmup_steps):
             frame = self.simulation.step()
@@ -251,7 +257,7 @@ class LiveConversationEngine:
             seed_decay_seconds=self.config.response_seed_decay_seconds,
             sample_rate=self.config.sample_rate,
         )
-        summary: dict[str, float | int] = {
+        summary: dict[str, Any] = {
             "index": index,
             "input_samples": int(samples.size),
             "input_duration_seconds": float(samples.size / self.config.sample_rate),
@@ -273,6 +279,17 @@ class LiveConversationEngine:
             "peak_response_score": float(np.max(response_scores)),
             "mean_response_score": float(np.mean(response_scores)),
         }
+        if self.config.record_dir is not None:
+            input_path = self.config.record_dir / f"turn_{index:03d}_input.wav"
+            response_path = self.config.record_dir / f"turn_{index:03d}_response.wav"
+            write_wav(input_path, samples, sample_rate=self.config.sample_rate)
+            write_wav(
+                response_path,
+                response_audio,
+                sample_rate=self.config.sample_rate,
+            )
+            summary["input_wav"] = str(input_path)
+            summary["response_wav"] = str(response_path)
         self.turns.append(summary)
         return LiveTurnResult(
             index=index,
@@ -414,6 +431,7 @@ def live_config_parameters(config: LiveConversationConfig) -> dict[str, Any]:
         "output_device": config.output_device,
         "print_rms": config.print_rms,
         "idle_timeout_seconds": config.idle_timeout_seconds,
+        "record_dir": str(config.record_dir) if config.record_dir is not None else None,
     }
 
 
@@ -510,6 +528,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--print-rms", action="store_true")
     parser.add_argument("--rms-report-interval", type=float, default=0.5)
     parser.add_argument("--idle-timeout-seconds", type=float, default=None)
+    parser.add_argument("--record-dir", type=Path, default=None)
     parser.add_argument(
         "--list-devices",
         action="store_true",
@@ -559,6 +578,7 @@ def main(argv: list[str] | None = None) -> int:
                 print_rms=args.print_rms,
                 rms_report_interval=args.rms_report_interval,
                 idle_timeout_seconds=args.idle_timeout_seconds,
+                record_dir=args.record_dir,
                 summary_path=None if args.no_summary else args.summary,
             )
         )
