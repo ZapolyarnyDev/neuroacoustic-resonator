@@ -620,8 +620,18 @@ class VoiceResponseSonificationRenderer:
         pitch_depth: float = 0.45,
         timbre_depth: float = 0.7,
         background_level: float = 0.03,
-        background_response_level: float = 0.25,
-        response_mix: float = 1.2,
+        background_response_level: float = 0.16,
+        response_mix: float = 1.35,
+        response_memory: float = 0.35,
+        response_memory_decay: float = 0.03,
+        articulation_attack: float = 0.9,
+        articulation_release: float = 0.2,
+        articulation_hold_frames: int = 5,
+        articulation_floor: float = 0.02,
+        target_response_rms: float = 0.1,
+        energy_normalization_rate: float = 0.06,
+        min_energy_gain: float = 0.65,
+        max_energy_gain: float = 1.8,
     ) -> None:
         if response_threshold < 0.0:
             msg = "response_threshold must be non-negative"
@@ -650,6 +660,36 @@ class VoiceResponseSonificationRenderer:
         if response_mix < 0.0:
             msg = "response_mix must be non-negative"
             raise ValueError(msg)
+        if response_memory < 0.0:
+            msg = "response_memory must be non-negative"
+            raise ValueError(msg)
+        if not 0.0 < response_memory_decay <= 1.0:
+            msg = "response_memory_decay must be in (0, 1]"
+            raise ValueError(msg)
+        if not 0.0 < articulation_attack <= 1.0:
+            msg = "articulation_attack must be in (0, 1]"
+            raise ValueError(msg)
+        if not 0.0 < articulation_release <= 1.0:
+            msg = "articulation_release must be in (0, 1]"
+            raise ValueError(msg)
+        if articulation_hold_frames < 0:
+            msg = "articulation_hold_frames must be non-negative"
+            raise ValueError(msg)
+        if not 0.0 <= articulation_floor <= 1.0:
+            msg = "articulation_floor must be between 0 and 1"
+            raise ValueError(msg)
+        if target_response_rms <= 0.0:
+            msg = "target_response_rms must be positive"
+            raise ValueError(msg)
+        if not 0.0 < energy_normalization_rate <= 1.0:
+            msg = "energy_normalization_rate must be in (0, 1]"
+            raise ValueError(msg)
+        if min_energy_gain <= 0.0:
+            msg = "min_energy_gain must be positive"
+            raise ValueError(msg)
+        if max_energy_gain < min_energy_gain:
+            msg = "max_energy_gain must be at least min_energy_gain"
+            raise ValueError(msg)
 
         self.continuous = ContinuousAudioRenderer(
             sample_rate=sample_rate,
@@ -668,15 +708,40 @@ class VoiceResponseSonificationRenderer:
         self.background_level = background_level
         self.background_response_level = background_response_level
         self.response_mix = response_mix
+        self.response_memory = response_memory
+        self.response_memory_decay = response_memory_decay
+        self.articulation_attack = articulation_attack
+        self.articulation_release = articulation_release
+        self.articulation_hold_frames = articulation_hold_frames
+        self.articulation_floor = articulation_floor
+        self.target_response_rms = target_response_rms
+        self.energy_normalization_rate = energy_normalization_rate
+        self.min_energy_gain = min_energy_gain
+        self.max_energy_gain = max_energy_gain
         self.envelope = 0.0
         self.last_activation = 0.0
+        self._articulation = 0.0
+        self._articulation_hold_remaining = 0
+        self._previous_response_score = 0.0
+        self._energy_gain = 1.0
         self._voice_phase = 0.0
         self._brightness = 0.0
+        self._roughness = 0.0
+        self._vibrato_phase = 0.0
+        self._memory = self._empty_voice_features()
         self._previous_activity: float | None = None
 
     @property
     def frame_size(self) -> int:
         return self.continuous.frame_size
+
+    @property
+    def articulation(self) -> float:
+        return self._articulation
+
+    @property
+    def energy_gain(self) -> float:
+        return self._energy_gain
 
     def render_frame(
         self,
@@ -703,28 +768,101 @@ class VoiceResponseSonificationRenderer:
         self.last_activation = self._soft_activation(response_score)
         rate = self.attack if self.last_activation > self.envelope else self.release
         self.envelope += rate * (self.last_activation - self.envelope)
+        self._update_articulation(response_score)
 
         features = self._output_voice_features(state, regions)
         self._brightness += self.continuous.smoothing * (
             features["brightness"] - self._brightness
         )
+        self._roughness += self.continuous.smoothing * (
+            features["roughness"] - self._roughness
+        )
+        memory_features = self._update_response_memory(features)
 
         base = self.continuous.render_frame(state, regions)
-        response = self._response_voice_frame(features)
+        response = self._response_voice_frame(memory_features)
         background_gain = (
             self.background_level
             + (self.background_response_level - self.background_level) * self.envelope
         )
-        mixed = background_gain * base + self.response_mix * self.envelope * response
+        response_gain = self.envelope * (
+            self.articulation_floor
+            + (1.0 - self.articulation_floor) * self._articulation
+        )
+        response_layer = self.response_mix * response_gain * response
+        self._update_energy_gain(response_layer, response_gain)
+        mixed = background_gain * base + self._energy_gain * response_layer
         return np.clip(mixed, -1.0, 1.0).astype(np.float64, copy=False)
+
+    def _update_articulation(self, response_score: float) -> None:
+        response_rise = max(0.0, response_score - self._previous_response_score)
+        self._previous_response_score = response_score
+        event_activation = max(
+            0.25 * self.last_activation,
+            self._soft_activation(response_rise * 2.5),
+        )
+        if event_activation > 0.0:
+            self._articulation_hold_remaining = self.articulation_hold_frames
+        elif self._articulation_hold_remaining > 0:
+            self._articulation_hold_remaining -= 1
+
+        target = event_activation
+        if self._articulation_hold_remaining > 0:
+            target = max(target, self.articulation_floor + 0.18 * self.envelope)
+
+        rate = (
+            self.articulation_attack
+            if target > self._articulation
+            else self.articulation_release
+        )
+        self._articulation += rate * (target - self._articulation)
+
+    def _update_energy_gain(
+        self, response_layer: AudioArray, response_gain: float
+    ) -> None:
+        if response_gain <= 1e-6:
+            target_gain = 1.0
+        else:
+            rms = float(np.sqrt(np.mean(response_layer * response_layer)))
+            if rms <= 1e-9:
+                target_gain = self.max_energy_gain
+            else:
+                target_gain = self.target_response_rms / rms
+            target_gain = float(
+                np.clip(target_gain, self.min_energy_gain, self.max_energy_gain)
+            )
+        self._energy_gain += self.energy_normalization_rate * (
+            target_gain - self._energy_gain
+        )
 
     def _response_voice_frame(self, features: dict[str, float]) -> AudioArray:
         samples = np.arange(self.frame_size, dtype=np.float64)
-        pitch_shift = 1.0 + self.pitch_depth * (
-            0.35 * features["synchrony"]
-            + 0.45 * features["trace"]
-            + 0.20 * features["frequency_spread"]
+        phase_spread = features["phase_spread"]
+        trace_contrast = features["trace_contrast"]
+        metabolite_contrast = features["metabolite_contrast"]
+        phase_order_2 = features["phase_order_2"]
+        phase_order_3 = features["phase_order_3"]
+        trace_phase_lock = features["trace_phase_lock"]
+        metabolite_phase_lock = features["metabolite_phase_lock"]
+        base_pitch_shift = 1.0 + self.pitch_depth * (
+            0.25 * features["synchrony"]
+            + 0.30 * features["trace"]
+            + 0.20 * features["frequency_mean"]
+            + 0.15 * features["frequency_spread"]
+            - 0.10 * features["metabolite_stress"]
+            + 0.08 * phase_order_2
+            - 0.06 * phase_order_3
         )
+        vibrato_rate = (
+            3.0 + 5.0 * phase_spread + 2.0 * trace_contrast + 2.5 * trace_phase_lock
+        )
+        vibrato_increment = TAU * vibrato_rate / float(self.continuous.sample_rate)
+        vibrato_phase = self._vibrato_phase + vibrato_increment * samples
+        self._vibrato_phase = float(
+            np.mod(self._vibrato_phase + vibrato_increment * self.frame_size, TAU)
+        )
+        vibrato_depth = 0.004 + 0.035 * phase_spread + 0.02 * metabolite_contrast
+        pitch_shift = base_pitch_shift * (1.0 + vibrato_depth * np.sin(vibrato_phase))
         frequency = np.clip(
             self.continuous.carrier_frequency
             * self.continuous.frequency_scale
@@ -733,25 +871,97 @@ class VoiceResponseSonificationRenderer:
             self.continuous.sample_rate / 2.0 - 1.0,
         )
         increment = TAU * frequency / float(self.continuous.sample_rate)
-        phase = self._voice_phase + increment * samples
+        phase = self._voice_phase + np.cumsum(increment)
         self._voice_phase = float(
-            np.mod(self._voice_phase + increment * self.frame_size, TAU)
+            np.mod(self._voice_phase + float(np.sum(increment)), TAU)
         )
 
-        harmonic_mix = np.clip(self._brightness * self.timbre_depth, 0.0, 1.0)
-        fundamental = np.sin(phase + features["mean_phase"])
-        second = np.sin(2.0 * phase + 0.5 * features["mean_phase"])
-        third = np.sin(3.0 * phase - features["mean_phase"])
-        voice = (
-            (1.0 - 0.45 * harmonic_mix) * fundamental
-            + 0.30 * harmonic_mix * second
-            + 0.15 * harmonic_mix * third
+        harmonic_mix = np.clip(
+            (self._brightness + 0.25 * phase_order_2) * self.timbre_depth,
+            0.0,
+            1.0,
         )
-        return self.continuous.gain * voice
+        rough_mix = np.clip(
+            (self._roughness + 0.20 * phase_order_3 + 0.15 * metabolite_phase_lock)
+            * self.timbre_depth,
+            0.0,
+            1.0,
+        )
+        formant_phase = features["mean_phase"]
+        second_phase = features["phase_angle_2"]
+        third_phase = features["phase_angle_3"]
+        fundamental = np.sin(phase + formant_phase)
+        second = np.sin(2.0 * phase + 0.5 * formant_phase + second_phase)
+        third = np.sin(3.0 * phase - formant_phase + third_phase)
+        fourth = np.sin(4.0 * phase + 1.7 * formant_phase - second_phase)
+        ratio_a = 2.31 + 0.55 * phase_order_2 + 0.21 * trace_phase_lock
+        ratio_b = 4.63 + 0.71 * phase_order_3 + 0.33 * metabolite_phase_lock
+        inharmonic = np.sin(
+            ratio_a * phase + 0.7 * formant_phase + second_phase
+        ) * np.sin(ratio_b * phase - 0.3 * formant_phase + third_phase)
+        sparse_focus = np.clip(0.35 + 0.65 * phase_order_2, 0.0, 1.0)
+        rough_focus = np.clip(1.0 - 0.45 * sparse_focus, 0.0, 1.0)
+        voice = (
+            (1.0 - 0.32 * harmonic_mix) * fundamental
+            + (0.10 + 0.10 * trace_contrast + 0.08 * phase_order_2)
+            * harmonic_mix
+            * sparse_focus
+            * second
+            + (0.04 + 0.10 * metabolite_contrast + 0.08 * phase_order_3)
+            * harmonic_mix
+            * (0.65 + 0.35 * phase_spread)
+            * third
+            + 0.035 * rough_mix * rough_focus * fourth
+            + (0.045 + 0.065 * phase_spread) * rough_mix * rough_focus * inharmonic
+        )
+        normalization = 1.0 + 0.32 * harmonic_mix + 0.16 * rough_mix
+        return self.continuous.gain * voice / normalization
 
     def _soft_activation(self, response_score: float) -> float:
         scaled = max(0.0, response_score - self.response_threshold)
         return float(1.0 - np.exp(-scaled * self.response_sensitivity))
+
+    def _update_response_memory(
+        self,
+        features: dict[str, float],
+    ) -> dict[str, float]:
+        imprint = self.response_memory * self.envelope
+        decay = self.response_memory_decay
+        mixed: dict[str, float] = {}
+        for key, value in features.items():
+            remembered = self._memory[key] * (1.0 - decay)
+            remembered += imprint * (value - remembered)
+            self._memory[key] = remembered
+            mixed[key] = float(
+                np.clip(
+                    value + self.response_memory * self._memory[key],
+                    -TAU,
+                    TAU,
+                )
+            )
+        return mixed
+
+    @staticmethod
+    def _empty_voice_features() -> dict[str, float]:
+        return {
+            "synchrony": 0.0,
+            "trace": 0.0,
+            "metabolite_stress": 0.0,
+            "metabolite_contrast": 0.0,
+            "frequency_spread": 0.0,
+            "frequency_mean": 0.0,
+            "mean_phase": 0.0,
+            "phase_angle_2": 0.0,
+            "phase_angle_3": 0.0,
+            "phase_order_2": 0.0,
+            "phase_order_3": 0.0,
+            "phase_spread": 0.0,
+            "trace_phase_lock": 0.0,
+            "metabolite_phase_lock": 0.0,
+            "trace_contrast": 0.0,
+            "brightness": 0.0,
+            "roughness": 0.0,
+        }
 
     @staticmethod
     def _output_voice_features(
@@ -760,26 +970,63 @@ class VoiceResponseSonificationRenderer:
     ) -> dict[str, float]:
         mask = regions.output
         if not np.any(mask):
-            return {
-                "synchrony": 0.0,
-                "trace": 0.0,
-                "metabolite_stress": 0.0,
-                "frequency_spread": 0.0,
-                "mean_phase": 0.0,
-                "brightness": 0.0,
-            }
-
+            return VoiceResponseSonificationRenderer._empty_voice_features()
         phase = state.phase[mask]
         order = np.mean(np.exp(1j * phase))
+        second_order = np.mean(np.exp(2j * phase))
+        third_order = np.mean(np.exp(3j * phase))
         synchrony = float(np.abs(order))
         trace = float(np.clip(np.mean(state.trace[mask]), 0.0, 1.0))
+        trace_contrast = float(np.clip(np.std(state.trace[mask]), 0.0, 1.0))
         metabolite_stress = float(
             np.clip(np.mean(1.0 - state.metabolite[mask]), 0.0, 1.0)
         )
+        metabolite_contrast = float(
+            np.clip(np.std(1.0 - state.metabolite[mask]), 0.0, 1.0)
+        )
         frequency_spread = float(np.clip(np.std(state.frequency[mask]), 0.0, 1.0))
+        frequency_mean = float(np.clip(np.mean(state.frequency[mask]), 0.0, 2.0) / 2.0)
+        phase_spread = float(np.clip(1.0 - synchrony, 0.0, 1.0))
+        phase_order_2 = float(np.abs(second_order))
+        phase_order_3 = float(np.abs(third_order))
+        trace_weights = np.clip(state.trace[mask], 0.0, None)
+        trace_weight_sum = float(np.sum(trace_weights))
+        if trace_weight_sum > 1e-12:
+            trace_phase_lock = float(
+                np.abs(np.sum(trace_weights * np.exp(1j * phase)) / trace_weight_sum)
+            )
+        else:
+            trace_phase_lock = 0.0
+        metabolite_weights = np.clip(1.0 - state.metabolite[mask], 0.0, None)
+        metabolite_weight_sum = float(np.sum(metabolite_weights))
+        if metabolite_weight_sum > 1e-12:
+            metabolite_phase_lock = float(
+                np.abs(
+                    np.sum(metabolite_weights * np.exp(1j * phase))
+                    / metabolite_weight_sum
+                )
+            )
+        else:
+            metabolite_phase_lock = 0.0
         brightness = float(
             np.clip(
-                0.45 * synchrony + 0.35 * metabolite_stress + 0.20 * frequency_spread,
+                0.28 * synchrony
+                + 0.24 * metabolite_stress
+                + 0.20 * frequency_spread
+                + 0.18 * trace_contrast
+                + 0.10 * frequency_mean
+                + 0.08 * phase_order_2,
+                0.0,
+                1.0,
+            )
+        )
+        roughness = float(
+            np.clip(
+                0.45 * phase_spread
+                + 0.25 * metabolite_contrast
+                + 0.20 * trace_contrast
+                + 0.10 * frequency_spread
+                + 0.10 * phase_order_3,
                 0.0,
                 1.0,
             )
@@ -788,9 +1035,20 @@ class VoiceResponseSonificationRenderer:
             "synchrony": synchrony,
             "trace": trace,
             "metabolite_stress": metabolite_stress,
+            "metabolite_contrast": metabolite_contrast,
             "frequency_spread": frequency_spread,
+            "frequency_mean": frequency_mean,
             "mean_phase": float(np.angle(order)),
+            "phase_angle_2": float(np.angle(second_order)),
+            "phase_angle_3": float(np.angle(third_order)),
+            "phase_order_2": phase_order_2,
+            "phase_order_3": phase_order_3,
+            "phase_spread": phase_spread,
+            "trace_phase_lock": trace_phase_lock,
+            "metabolite_phase_lock": metabolite_phase_lock,
+            "trace_contrast": trace_contrast,
             "brightness": brightness,
+            "roughness": roughness,
         }
 
 

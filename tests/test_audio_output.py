@@ -375,12 +375,232 @@ def test_voice_response_sonification_changes_with_output_state() -> None:
     )
     renderer.render_frame(field.state, regions, response_score=0.02)
     before = renderer.render_frame(field.state, regions, response_score=0.02)
-    field.state.trace[regions.output] += 0.5
-    field.state.phase[regions.output] += np.pi / 3.0
+    changed_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    changed_state.trace[regions.output] += 0.5
+    changed_state.phase[regions.output] += np.pi / 3.0
 
-    after = renderer.render_frame(field.state, regions, response_score=0.02)
+    after = renderer.render_frame(changed_state, regions, response_score=0.02)
 
     assert not np.allclose(before, after)
+
+
+def test_voice_response_sonification_uses_output_field_contrast() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    baseline_renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+    )
+    textured_renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+    )
+    textured_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    output_indices = np.argwhere(regions.output)
+    alternating = np.arange(output_indices.shape[0]) % 2 == 0
+    for index, (row, column) in enumerate(output_indices):
+        if alternating[index]:
+            textured_state.phase[row, column] += np.pi
+            textured_state.trace[row, column] = 1.0
+            textured_state.metabolite[row, column] = 0.35
+
+    baseline = baseline_renderer.render_frame(
+        field.state,
+        regions,
+        response_score=0.02,
+    )
+    textured = textured_renderer.render_frame(
+        textured_state,
+        regions,
+        response_score=0.02,
+    )
+
+    assert not np.allclose(baseline, textured)
+    assert np.all((-1.0 <= textured) & (textured <= 1.0))
+
+
+def test_voice_response_sonification_uses_phase_texture_moments() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    bimodal_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    trimodal_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    output_indices = np.argwhere(regions.output)
+    for index, (row, column) in enumerate(output_indices):
+        bimodal_state.phase[row, column] = 0.0 if index % 2 == 0 else np.pi
+        trimodal_state.phase[row, column] = (index % 3) * 2.0 * np.pi / 3.0
+
+    bimodal_features = VoiceResponseSonificationRenderer._output_voice_features(
+        bimodal_state,
+        regions,
+    )
+    trimodal_features = VoiceResponseSonificationRenderer._output_voice_features(
+        trimodal_state,
+        regions,
+    )
+    bimodal_renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+    )
+    trimodal_renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+    )
+
+    bimodal = bimodal_renderer.render_frame(
+        bimodal_state,
+        regions,
+        response_score=0.02,
+    )
+    trimodal = trimodal_renderer.render_frame(
+        trimodal_state,
+        regions,
+        response_score=0.02,
+    )
+
+    assert bimodal_features["phase_order_2"] > trimodal_features["phase_order_2"]
+    assert trimodal_features["phase_order_3"] > bimodal_features["phase_order_3"]
+    assert not np.allclose(bimodal, trimodal)
+
+
+def test_voice_response_sonification_keeps_short_response_memory() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    memory_renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+        response_memory=0.6,
+        response_memory_decay=0.01,
+    )
+    stateless_renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+        response_memory=0.0,
+    )
+    textured_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    textured_state.phase[regions.output] += np.pi / 2.0
+    textured_state.trace[regions.output] = 1.0
+
+    memory_renderer.render_frame(textured_state, regions, response_score=0.02)
+    remembered = memory_renderer.render_frame(field.state, regions, response_score=0.02)
+    stateless_renderer.render_frame(textured_state, regions, response_score=0.02)
+    stateless = stateless_renderer.render_frame(
+        field.state,
+        regions,
+        response_score=0.02,
+    )
+
+    assert not np.allclose(remembered, stateless)
+
+
+def test_voice_response_sonification_articulates_response_events() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        release=0.5,
+        background_level=0.0,
+        background_response_level=0.0,
+        articulation_attack=1.0,
+        articulation_release=0.5,
+        articulation_hold_frames=0,
+        articulation_floor=0.0,
+        energy_normalization_rate=1.0,
+    )
+
+    active = renderer.render_frame(field.state, regions, response_score=0.02)
+    active_articulation = renderer.articulation
+    fading = renderer.render_frame(field.state, regions, response_score=0.0)
+
+    assert active_articulation > renderer.articulation
+    assert np.sqrt(np.mean(active * active)) > np.sqrt(np.mean(fading * fading))
+
+
+def test_voice_response_sonification_normalizes_response_energy() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.03,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        background_level=0.0,
+        background_response_level=0.0,
+        articulation_attack=1.0,
+        target_response_rms=0.08,
+        energy_normalization_rate=1.0,
+        max_energy_gain=3.0,
+    )
+
+    renderer.render_frame(field.state, regions, response_score=0.02)
+
+    assert renderer.energy_gain > 1.0
 
 
 def test_voice_response_sonification_rejects_invalid_response_threshold() -> None:
@@ -396,3 +616,15 @@ def test_voice_response_sonification_rejects_invalid_background_levels() -> None
             background_level=0.2,
             background_response_level=0.1,
         )
+
+
+def test_voice_response_sonification_rejects_invalid_articulation() -> None:
+    with pytest.raises(ValueError, match="articulation_hold_frames"):
+        VoiceResponseSonificationRenderer(articulation_hold_frames=-1)
+
+
+def test_voice_response_sonification_rejects_invalid_energy_normalization() -> None:
+    with pytest.raises(ValueError, match="target_response_rms"):
+        VoiceResponseSonificationRenderer(target_response_rms=0.0)
+    with pytest.raises(ValueError, match="max_energy_gain"):
+        VoiceResponseSonificationRenderer(min_energy_gain=2.0, max_energy_gain=1.0)

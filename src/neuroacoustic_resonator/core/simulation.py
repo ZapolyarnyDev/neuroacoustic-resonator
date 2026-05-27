@@ -39,10 +39,12 @@ class Simulation:
         self.field = (
             field if field is not None else OscillatorField(config or FieldConfig())
         )
+        regions = RegionMasks.from_size(self.field.config.size)
+        self._configure_memory_drive_regions(regions)
         input_config = synthetic_input or SyntheticInputConfig()
         self.input_drive = SyntheticInputDrive(
             input_config,
-            RegionMasks.from_size(self.field.config.size),
+            regions,
         )
         self.step_index = 0
         self.last_input_value = 0.0
@@ -57,6 +59,20 @@ class Simulation:
     @classmethod
     def from_config_file(cls, path: str | Path) -> Simulation:
         return cls.from_config(SimulationConfig.from_file(path))
+
+    def _configure_memory_drive_regions(self, regions: RegionMasks) -> None:
+        self.field.set_memory_drive_gain(
+            regions.input,
+            self.field.config.memory_drive_input_gain,
+        )
+        self.field.set_memory_drive_gain(
+            regions.assoc,
+            self.field.config.memory_drive_assoc_gain,
+        )
+        self.field.set_memory_drive_gain(
+            regions.output,
+            self.field.config.memory_drive_output_gain,
+        )
 
     def snapshot(self) -> SimulationFrame:
         return SimulationFrame(

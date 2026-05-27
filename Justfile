@@ -25,10 +25,13 @@ experiments-custom config output_dir propagation_horizon:
     uv run python scripts/run_experiments.py --config {{config}} --output-dir {{output_dir}} --propagation-horizon {{propagation_horizon}}
 
 propagation-probe:
-    uv run python scripts/probe_propagation.py --config configs/synthetic_input.yaml --warmup-steps 200 --horizon 512 --output-csv experiments/logs/propagation_probe.csv --output-summary experiments/logs/propagation_probe_summary.json
+    uv run python scripts/probe_propagation.py --config configs/synthetic_input.yaml --warmup-steps 200 --horizon 512 --output-csv experiments/logs/propagation_probe.csv --output-summary experiments/logs/propagation_probe_summary.json --output-plot experiments/logs/propagation_probe.png
+
+propagation-probe-long:
+    uv run python scripts/probe_propagation.py --config configs/synthetic_input.yaml --warmup-steps 200 --horizons 512 1024 4096 --output-csv experiments/logs/propagation_probe_long.csv --output-summary experiments/logs/propagation_probe_long_summary.json --output-plot experiments/logs/propagation_probe_long.png
 
 propagation-probe-responsive:
-    uv run python scripts/probe_propagation.py --config configs/responsive_audio.yaml --warmup-steps 200 --horizon 512 --output-csv experiments/logs/responsive_propagation_probe.csv --output-summary experiments/logs/responsive_propagation_probe_summary.json
+    uv run python scripts/probe_propagation.py --config configs/responsive_audio.yaml --warmup-steps 200 --horizon 512 --output-csv experiments/logs/responsive_propagation_probe.csv --output-summary experiments/logs/responsive_propagation_probe_summary.json --output-plot experiments/logs/responsive_propagation_probe.png
 
 propagation-probe-custom config warmup horizon output_csv output_summary:
     uv run python scripts/probe_propagation.py --config {{config}} --warmup-steps {{warmup}} --horizon {{horizon}} --output-csv {{output_csv}} --output-summary {{output_summary}}
@@ -93,6 +96,15 @@ voice-probe-propagated input:
 voice-memory-probe input:
     uv run python scripts/probe_voice_memory.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/voice_memory_probe.csv --output-summary experiments/logs/voice_memory_probe_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0
 
+voice-memory-probe-memory-drive input strength:
+    uv run python scripts/probe_voice_memory.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/voice_memory_probe_memory_drive.csv --output-summary experiments/logs/voice_memory_probe_memory_drive_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0 --compare-memory-drive-strength {{strength}}
+
+voice-memory-probe-region-memory input strength input_gain assoc_gain output_gain:
+    uv run python scripts/probe_voice_memory.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/voice_memory_probe_region_memory.csv --output-summary experiments/logs/voice_memory_probe_region_memory_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0 --compare-memory-drive-strength {{strength}} --compare-memory-drive-input-gain {{input_gain}} --compare-memory-drive-assoc-gain {{assoc_gain}} --compare-memory-drive-output-gain {{output_gain}}
+
+voice-memory-probe-control input:
+    uv run python scripts/probe_voice_memory.py --config configs/field_only.yaml --input {{input}} --output-csv experiments/logs/voice_memory_probe_control.csv --output-summary experiments/logs/voice_memory_probe_control_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0 --compare-silence-control
+
 voice-memory-probe-custom config input output_csv output_summary frame_size hop_size drive_strength pause_steps max_steps:
     uv run python scripts/probe_voice_memory.py --config {{config}} --input {{input}} --output-csv {{output_csv}} --output-summary {{output_summary}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}} --pause-steps {{pause_steps}} --max-steps {{max_steps}}
 
@@ -101,6 +113,30 @@ conversation input:
 
 conversation-custom config output summary +inputs:
     uv run python scripts/run_conversation.py --config {{config}} --inputs {{inputs}} --output {{output}} --summary {{summary}}
+
+live-conversation:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0
+
+live-conversation-test:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --max-turns 3
+
+live-conversation-record:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --record-dir experiments/audio/live-conversation
+
+live-conversation-levels:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --max-turns 1 --print-rms --idle-timeout-seconds 8
+
+audio-devices:
+    uv run python scripts/run_live_conversation.py --list-devices
+
+live-conversation-custom config max_turns start_rms stop_rms:
+    uv run python scripts/run_live_conversation.py --config {{config}} --max-turns {{max_turns}} --start-rms {{start_rms}} --stop-rms {{stop_rms}} --input-assoc-gain 0.8 --input-output-gain 0.0
+
+turn-detect input:
+    uv run python scripts/detect_turns.py --input {{input}} --output-dir experiments/audio/turns
+
+turn-detect-custom input output_dir threshold_ratio min_silence_ms:
+    uv run python scripts/detect_turns.py --input {{input}} --output-dir {{output_dir}} --threshold-ratio {{threshold_ratio}} --min-silence-ms {{min_silence_ms}}
 
 audio-steps steps:
     uv run python scripts/render_audio_demo.py --config configs/default.yaml --steps {{steps}} --output experiments/audio/default-{{steps}}-steps.wav

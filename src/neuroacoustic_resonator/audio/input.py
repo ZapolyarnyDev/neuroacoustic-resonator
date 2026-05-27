@@ -101,6 +101,33 @@ def extract_audio_input_features(
     onset_weight: float = 0.4,
     centroid_weight: float = 0.15,
 ) -> AudioInputFeatures:
+    sample_rate, samples = wavfile.read(wav_path)
+    return extract_audio_array_features(
+        samples,
+        sample_rate=int(sample_rate),
+        frame_size=frame_size,
+        hop_size=hop_size,
+        drive_strength=drive_strength,
+        rms_weight=rms_weight,
+        onset_weight=onset_weight,
+        centroid_weight=centroid_weight,
+    )
+
+
+def extract_audio_array_features(
+    samples: np.ndarray,
+    *,
+    sample_rate: int,
+    frame_size: int = 1024,
+    hop_size: int = 512,
+    drive_strength: float = 0.45,
+    rms_weight: float = 0.45,
+    onset_weight: float = 0.4,
+    centroid_weight: float = 0.15,
+) -> AudioInputFeatures:
+    if sample_rate < 1:
+        msg = "sample_rate must be positive"
+        raise ValueError(msg)
     if frame_size < 1:
         msg = "frame_size must be positive"
         raise ValueError(msg)
@@ -111,7 +138,6 @@ def extract_audio_input_features(
         msg = "drive_strength must be non-negative"
         raise ValueError(msg)
 
-    sample_rate, samples = wavfile.read(wav_path)
     audio = _to_mono_float(samples)
     frames = _frame_audio(audio, frame_size=frame_size, hop_size=hop_size)
     rms = _frame_rms(frames)
@@ -128,7 +154,7 @@ def extract_audio_input_features(
         centroid_weight=centroid_weight,
     )
     return AudioInputFeatures(
-        sample_rate=int(sample_rate),
+        sample_rate=sample_rate,
         frame_size=frame_size,
         hop_size=hop_size,
         rms=rms,

@@ -1,7 +1,12 @@
 import numpy as np
 import pytest
 
-from neuroacoustic_resonator import FieldConfig, FieldState, OscillatorField
+from neuroacoustic_resonator import (
+    FieldConfig,
+    FieldState,
+    OscillatorField,
+    RegionMasks,
+)
 
 
 def test_field_initializes_with_expected_shape() -> None:
@@ -33,10 +38,20 @@ def test_step_keeps_state_finite_and_bounded() -> None:
 def test_state_returns_copy() -> None:
     field = OscillatorField(FieldConfig(size=4, seed=1))
     state = field.state
+    original = field.state
 
     state.phase[0, 0] = -1.0
+    state.frequency[0, 0] = -1.0
+    state.metabolite[0, 0] = -1.0
+    state.coupling[0, 0] = -1.0
+    state.trace[0, 0] = -1.0
 
-    assert field.state.phase[0, 0] >= 0.0
+    current = field.state
+    assert current.phase[0, 0] == original.phase[0, 0]
+    assert current.frequency[0, 0] == original.frequency[0, 0]
+    assert current.metabolite[0, 0] == original.metabolite[0, 0]
+    assert current.coupling[0, 0] == original.coupling[0, 0]
+    assert current.trace[0, 0] == original.trace[0, 0]
 
 
 def test_config_rejects_invalid_size() -> None:
@@ -72,6 +87,34 @@ def test_synchrony_is_one_for_uniform_phase() -> None:
 
     assert np.allclose(field.local_synchrony(), 1.0)
     assert field.global_synchrony() == pytest.approx(1.0)
+
+
+def test_apply_region_plasticity_changes_masked_output_state() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    before = field.state
+    field._trace[regions.output] = np.linspace(0.0, 1.0, int(np.sum(regions.output)))
+
+    field.apply_region_plasticity(
+        regions.output,
+        0.5,
+        coupling_rate=0.1,
+        frequency_rate=0.1,
+    )
+    after = field.state
+
+    assert not np.allclose(
+        before.coupling[regions.output],
+        after.coupling[regions.output],
+    )
+    assert not np.allclose(
+        before.frequency[regions.output],
+        after.frequency[regions.output],
+    )
+    assert np.allclose(
+        before.coupling[~regions.output],
+        after.coupling[~regions.output],
+    )
 
 
 def test_from_state_rejects_wrong_shape() -> None:
@@ -188,6 +231,94 @@ def test_trace_decay_reduces_sustained_activity_memory() -> None:
     assert np.all(decaying_trace < base_trace)
 
 
+def test_centered_memory_drive_changes_phase_from_trace_contrast() -> None:
+    config = FieldConfig(
+        size=2,
+        dt=0.1,
+        base_frequency=0.0,
+        memory_drive_strength=1.0,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.0,
+        coupling_homeostasis_rate=0.0,
+    )
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.full(shape, 1.0),
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=np.asarray([[0.0, 1.0], [0.0, 1.0]], dtype=np.float64),
+        ),
+    )
+
+    memory_drive = field.memory_drive()
+    after = field.step().phase
+
+    assert np.mean(memory_drive) == pytest.approx(0.0)
+    assert memory_drive[0, 0] < 0.0
+    assert memory_drive[0, 1] > 0.0
+    assert after[0, 0] < 1.0
+    assert after[0, 1] > 1.0
+
+
+def test_uniform_trace_memory_drive_has_no_phase_bias() -> None:
+    config = FieldConfig(
+        size=2,
+        dt=0.1,
+        base_frequency=0.0,
+        memory_drive_strength=1.0,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.0,
+        coupling_homeostasis_rate=0.0,
+    )
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.full(shape, 1.0),
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=np.full(shape, 0.7),
+        ),
+    )
+
+    assert np.allclose(field.memory_drive(), 0.0)
+    assert np.allclose(field.step().phase, 1.0)
+
+
+def test_region_scoped_memory_drive_gain_weights_trace_contrast() -> None:
+    config = FieldConfig(
+        size=4,
+        memory_drive_strength=1.0,
+    )
+    shape = (config.size, config.size)
+    field = OscillatorField.from_state(
+        config,
+        FieldState(
+            phase=np.zeros(shape),
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.zeros(shape),
+            trace=np.tile(np.asarray([0.0, 1.0, 0.0, 1.0]), (4, 1)),
+        ),
+    )
+    left_mask = np.zeros(shape, dtype=np.bool_)
+    right_mask = np.zeros(shape, dtype=np.bool_)
+    left_mask[:, :2] = True
+    right_mask[:, 2:] = True
+
+    field.set_memory_drive_gain(left_mask, 0.0)
+    field.set_memory_drive_gain(right_mask, 2.0)
+    drive = field.memory_drive()
+
+    assert np.allclose(drive[left_mask], 0.0)
+    assert np.max(np.abs(drive[right_mask])) > 0.0
+    assert np.max(np.abs(drive[right_mask])) == pytest.approx(1.0)
+
+
 def test_config_rejects_invalid_trace_rate() -> None:
     with pytest.raises(ValueError, match="trace_rate"):
         FieldConfig(trace_rate=-0.1)
@@ -196,6 +327,20 @@ def test_config_rejects_invalid_trace_rate() -> None:
 def test_config_rejects_invalid_trace_decay() -> None:
     with pytest.raises(ValueError, match="trace_decay"):
         FieldConfig(trace_decay=-0.1)
+
+
+def test_config_rejects_invalid_memory_drive_strength() -> None:
+    with pytest.raises(ValueError, match="memory_drive_strength"):
+        FieldConfig(memory_drive_strength=-0.1)
+
+
+def test_config_rejects_invalid_memory_drive_region_gains() -> None:
+    with pytest.raises(ValueError, match="memory_drive_input_gain"):
+        FieldConfig(memory_drive_input_gain=-0.1)
+    with pytest.raises(ValueError, match="memory_drive_assoc_gain"):
+        FieldConfig(memory_drive_assoc_gain=-0.1)
+    with pytest.raises(ValueError, match="memory_drive_output_gain"):
+        FieldConfig(memory_drive_output_gain=-0.1)
 
 
 def test_config_rejects_invalid_metabolite_diffusion() -> None:
