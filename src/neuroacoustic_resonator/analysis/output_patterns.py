@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -23,6 +23,60 @@ class OutputPatternSignature:
         }
 
 
+@dataclass
+class OutputPatternHistory:
+    signatures: list[OutputPatternSignature] = field(default_factory=list)
+    activations: list[float] = field(default_factory=list)
+
+    def update(
+        self,
+        signature: OutputPatternSignature,
+        *,
+        activation: float = 0.0,
+    ) -> OutputPatternSignature:
+        self.signatures.append(signature)
+        self.activations.append(max(0.0, float(activation)))
+        return signature
+
+    def summary(self, *, active_threshold: float = 1e-6) -> dict[str, Any]:
+        if active_threshold < 0.0:
+            msg = "active_threshold must be non-negative"
+            raise ValueError(msg)
+        if not self.signatures:
+            return empty_pattern_history_summary()
+
+        labels = [signature.label for signature in self.signatures]
+        counts = label_counts(labels)
+        confidences = np.asarray(
+            [signature.confidence for signature in self.signatures],
+            dtype=np.float64,
+        )
+        activations = np.asarray(self.activations, dtype=np.float64)
+        active_indices = [
+            index
+            for index, activation in enumerate(self.activations)
+            if activation > active_threshold or self.signatures[index].label != "idle"
+        ]
+        active_labels = [labels[index] for index in active_indices]
+        active_counts = label_counts(active_labels)
+        peak_index = int(np.argmax(activations)) if activations.size else 0
+        peak_signature = self.signatures[peak_index]
+
+        return {
+            "frames": len(self.signatures),
+            "active_frames": len(active_indices),
+            "dominant_label": dominant_label(counts),
+            "active_dominant_label": dominant_label(active_counts),
+            "label_counts": counts,
+            "active_label_counts": active_counts,
+            "mean_confidence": float(np.mean(confidences)),
+            "peak_activation": float(np.max(activations)) if activations.size else 0.0,
+            "peak_activation_label": peak_signature.label,
+            "peak_activation_confidence": peak_signature.confidence,
+            "peak_activation_features": peak_signature.features,
+        }
+
+
 PATTERN_FEATURE_KEYS = (
     "synchrony",
     "phase_spread",
@@ -39,6 +93,35 @@ PATTERN_FEATURE_KEYS = (
     "brightness",
     "roughness",
 )
+
+
+def empty_pattern_history_summary() -> dict[str, Any]:
+    return {
+        "frames": 0,
+        "active_frames": 0,
+        "dominant_label": None,
+        "active_dominant_label": None,
+        "label_counts": {},
+        "active_label_counts": {},
+        "mean_confidence": 0.0,
+        "peak_activation": 0.0,
+        "peak_activation_label": None,
+        "peak_activation_confidence": 0.0,
+        "peak_activation_features": {key: 0.0 for key in PATTERN_FEATURE_KEYS},
+    }
+
+
+def label_counts(labels: list[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for label in labels:
+        counts[label] = counts.get(label, 0) + 1
+    return counts
+
+
+def dominant_label(counts: dict[str, int]) -> str | None:
+    if not counts:
+        return None
+    return max(counts, key=lambda label: counts[label])
 
 
 def output_pattern_signature(

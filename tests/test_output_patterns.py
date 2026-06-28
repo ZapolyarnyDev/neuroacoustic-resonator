@@ -5,6 +5,7 @@ import pytest
 
 from neuroacoustic_resonator import FieldConfig, OscillatorField, RegionMasks
 from neuroacoustic_resonator.analysis.output_patterns import (
+    OutputPatternHistory,
     compare_output_patterns,
     output_pattern_signature,
 )
@@ -65,6 +66,26 @@ def test_compare_output_patterns_reports_distance_and_label_match() -> None:
 
     assert comparison["pattern_feature_distance"] > 0.0
     assert comparison["pattern_label_match"] in {0.0, 1.0}
+
+
+def test_output_pattern_history_reports_active_dominant_label() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    state = copied_state(field)
+    output_indices = np.argwhere(regions.output)
+    for index, (row, column) in enumerate(output_indices):
+        state.phase[row, column] = 0.0 if index % 2 == 0 else np.pi
+        state.trace[row, column] = 0.8
+    history = OutputPatternHistory()
+    history.update(output_pattern_signature(field.state, regions), activation=0.0)
+    history.update(output_pattern_signature(state, regions), activation=0.3)
+
+    summary = history.summary()
+
+    assert summary["frames"] == 2
+    assert summary["active_frames"] == 1
+    assert summary["active_dominant_label"] == "split"
+    assert summary["peak_activation_label"] == "split"
 
 
 def test_output_pattern_signature_rejects_shape_mismatch() -> None:

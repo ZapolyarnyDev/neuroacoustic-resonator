@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +12,10 @@ from scipy.io import wavfile  # type: ignore[import-untyped]
 from scipy.signal import resample_poly  # type: ignore[import-untyped]
 
 from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
-from neuroacoustic_resonator.analysis.output_patterns import output_pattern_signature
+from neuroacoustic_resonator.analysis.output_patterns import (
+    OutputPatternHistory,
+    output_pattern_signature,
+)
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
     extract_audio_input_features,
@@ -34,6 +37,7 @@ class UtteranceDriveResult:
     input_values: np.ndarray
     fast_response_scores: np.ndarray
     event_scores: np.ndarray
+    output_pattern_summary: dict[str, Any] = field(default_factory=dict)
 
     @property
     def response_seed(self) -> float:
@@ -223,6 +227,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             sample_rate=config.sample_rate,
             frame_size=config.output_frame_size,
         )
+        response_pattern_history = OutputPatternHistory()
         response_audio, response_scores = render_field_response(
             simulation,
             tracker,
@@ -235,6 +240,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             sample_rate=config.sample_rate,
             output_plasticity_rate=config.output_plasticity_rate,
             output_frequency_plasticity_rate=config.output_frequency_plasticity_rate,
+            pattern_history=response_pattern_history,
         )
         response_end_pattern = output_pattern_signature(simulation.field.state, regions)
         if input_audio.size:
@@ -273,6 +279,8 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
                 ),
                 "peak_response_score": float(np.max(response_scores)),
                 "mean_response_score": float(np.mean(response_scores)),
+                "input_output_pattern_history": drive_result.output_pattern_summary,
+                "response_output_pattern_history": response_pattern_history.summary(),
                 "input_end_output_pattern": input_end_pattern.to_dict(),
                 "response_end_output_pattern": response_end_pattern.to_dict(),
             }
@@ -455,6 +463,7 @@ def drive_utterance(
     input_values: list[float] = []
     fast_response_scores: list[float] = []
     event_scores: list[float] = []
+    pattern_history = OutputPatternHistory()
     for input_step in range(features.frame_count):
         input_value = drive.apply(simulation.field, input_step)
         simulation.step_index += 1
@@ -466,6 +475,14 @@ def drive_utterance(
             local_synchrony=simulation.field.local_synchrony(),
         )
         metrics = tracker.update(frame, regions, input_value=input_value)
+        pattern_history.update(
+            output_pattern_signature(frame.state, regions),
+            activation=max(
+                metrics.output_fast_response_score,
+                metrics.output_event_score,
+                max(0.0, metrics.output_response_activity) * 0.05,
+            ),
+        )
         input_values.append(input_value)
         fast_response_scores.append(metrics.output_fast_response_score)
         event_scores.append(metrics.output_event_score)
@@ -473,6 +490,7 @@ def drive_utterance(
         input_values=np.asarray(input_values, dtype=np.float64),
         fast_response_scores=np.asarray(fast_response_scores, dtype=np.float64),
         event_scores=np.asarray(event_scores, dtype=np.float64),
+        output_pattern_summary=pattern_history.summary(),
     )
 
 
@@ -488,6 +506,7 @@ def render_field_response(
     sample_rate: int = 48_000,
     output_plasticity_rate: float = 0.0,
     output_frequency_plasticity_rate: float = 0.0,
+    pattern_history: OutputPatternHistory | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     frames: list[np.ndarray] = []
     response_scores: list[float] = []
@@ -509,6 +528,11 @@ def render_field_response(
             coupling_rate=output_plasticity_rate,
             frequency_rate=output_frequency_plasticity_rate,
         )
+        if pattern_history is not None:
+            pattern_history.update(
+                output_pattern_signature(frame.state, regions),
+                activation=response_score,
+            )
         frames.append(
             renderer.render_frame(
                 frame.state,

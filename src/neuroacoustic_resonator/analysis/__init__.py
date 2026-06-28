@@ -27,6 +27,7 @@ from neuroacoustic_resonator.analysis.metrics import (
     region_slow_activity,
 )
 from neuroacoustic_resonator.analysis.output_patterns import (
+    OutputPatternHistory,
     OutputPatternSignature,
     compare_output_patterns,
     output_pattern_signature,
@@ -51,6 +52,7 @@ __all__ = [
     "ExperimentRows",
     "ExperimentSummary",
     "MetricsHistory",
+    "OutputPatternHistory",
     "OutputPatternSignature",
     "PropagationProbeConfig",
     "RegionalActivityMetrics",

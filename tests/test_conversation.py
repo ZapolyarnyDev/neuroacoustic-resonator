@@ -69,6 +69,8 @@ steps: 8
     assert summary["utterances"][0]["peak_input_fast_response_score"] >= 0.0
     assert summary["utterances"][0]["peak_input_event_score"] >= 0.0
     assert summary["utterances"][0]["initial_response_seed"] >= 0.0
+    assert summary["utterances"][0]["input_output_pattern_history"]["frames"] > 0
+    assert summary["utterances"][0]["response_output_pattern_history"]["frames"] > 0
     assert "label" in summary["utterances"][0]["input_end_output_pattern"]
     assert "features" in summary["utterances"][0]["response_end_output_pattern"]
     assert summary["utterances"][0]["mixed_input_audio_seconds"] == 256 / 8_000

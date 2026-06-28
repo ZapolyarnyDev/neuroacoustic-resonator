@@ -12,6 +12,7 @@ import numpy as np
 
 from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
 from neuroacoustic_resonator.analysis.output_patterns import output_pattern_signature
+from neuroacoustic_resonator.analysis.output_patterns import OutputPatternHistory
 from neuroacoustic_resonator.audio.conversation import (
     drive_utterance,
     render_field_response,
@@ -259,6 +260,7 @@ class LiveConversationEngine:
             sample_rate=self.config.sample_rate,
             frame_size=self.config.output_frame_size,
         )
+        response_pattern_history = OutputPatternHistory()
         response_audio, response_scores = render_field_response(
             self.simulation,
             self.tracker,
@@ -271,6 +273,7 @@ class LiveConversationEngine:
             sample_rate=self.config.sample_rate,
             output_plasticity_rate=self.config.output_plasticity_rate,
             output_frequency_plasticity_rate=self.config.output_frequency_plasticity_rate,
+            pattern_history=response_pattern_history,
         )
         response_end_pattern = output_pattern_signature(
             self.simulation.field.state,
@@ -297,6 +300,8 @@ class LiveConversationEngine:
             ),
             "peak_response_score": float(np.max(response_scores)),
             "mean_response_score": float(np.mean(response_scores)),
+            "input_output_pattern_history": drive_result.output_pattern_summary,
+            "response_output_pattern_history": response_pattern_history.summary(),
             "input_end_output_pattern": input_end_pattern.to_dict(),
             "response_end_output_pattern": response_end_pattern.to_dict(),
         }
