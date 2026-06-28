@@ -106,6 +106,7 @@ class LiveConversationConfig:
     input_device: int | str | None = None
     output_device: int | str | None = None
     print_rms: bool = False
+    print_pattern_telemetry: bool = True
     rms_report_interval: float = 0.5
     idle_timeout_seconds: float | None = None
     record_dir: Path | None = None
@@ -327,6 +328,7 @@ class LiveConversationEngine:
             "input_end_output_pattern": input_end_pattern.to_dict(),
             "response_end_output_pattern": response_end_pattern.to_dict(),
         }
+        summary["pattern_telemetry"] = live_turn_pattern_telemetry(summary)
         if self.config.record_dir is not None:
             input_path = self.config.record_dir / f"turn_{index:03d}_input.wav"
             response_path = self.config.record_dir / f"turn_{index:03d}_response.wav"
@@ -483,6 +485,7 @@ def live_config_parameters(config: LiveConversationConfig) -> dict[str, Any]:
         "input_device": config.input_device,
         "output_device": config.output_device,
         "print_rms": config.print_rms,
+        "print_pattern_telemetry": config.print_pattern_telemetry,
         "idle_timeout_seconds": config.idle_timeout_seconds,
         "record_dir": str(config.record_dir) if config.record_dir is not None else None,
     }
@@ -493,6 +496,36 @@ def write_live_summary(path: str | Path, summary: dict[str, Any]) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return output
+
+
+def live_turn_pattern_telemetry(summary: dict[str, Any]) -> dict[str, Any]:
+    response_history = summary["response_output_pattern_history"]
+    diagnostics = summary["response_pattern_audio_diagnostics"]["overall"]
+    return {
+        "active_pattern_label": response_history["active_dominant_label"],
+        "dominant_pattern_label": response_history["dominant_label"],
+        "pattern_confidence": response_history["mean_confidence"],
+        "peak_activation": response_history["peak_activation"],
+        "peak_activation_label": response_history["peak_activation_label"],
+        "peak_response_score": summary["peak_response_score"],
+        "response_audio_rms": diagnostics["rms"],
+        "response_audio_spectral_centroid_hz": diagnostics["spectral_centroid_hz"],
+        "response_duration_seconds": summary["response_duration_seconds"],
+    }
+
+
+def format_live_pattern_telemetry(telemetry: dict[str, Any]) -> str:
+    label = telemetry["active_pattern_label"] or telemetry["dominant_pattern_label"]
+    if label is None:
+        label = "none"
+    return (
+        "pattern="
+        f"{label} "
+        f"confidence={telemetry['pattern_confidence']:.3f} "
+        f"peak={telemetry['peak_response_score']:.6f} "
+        f"rms={telemetry['response_audio_rms']:.4f} "
+        f"centroid={telemetry['response_audio_spectral_centroid_hz']:.1f}Hz"
+    )
 
 
 def make_sounddevice() -> SoundDeviceLike:
@@ -541,6 +574,10 @@ def run_live_conversation(
                 f"{result.summary['response_duration_seconds']:.2f}s "
                 f"seed={result.summary['initial_response_seed']:.6f}"
             )
+            if config.print_pattern_telemetry:
+                print(
+                    format_live_pattern_telemetry(result.summary["pattern_telemetry"])
+                )
             turn_index += 1
     except KeyboardInterrupt:
         pass
@@ -581,6 +618,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-device", default=None)
     parser.add_argument("--output-device", default=None)
     parser.add_argument("--print-rms", action="store_true")
+    parser.add_argument(
+        "--no-pattern-telemetry",
+        action="store_true",
+        help="Do not print per-turn active pattern telemetry.",
+    )
     parser.add_argument("--rms-report-interval", type=float, default=0.5)
     parser.add_argument("--idle-timeout-seconds", type=float, default=None)
     parser.add_argument("--record-dir", type=Path, default=None)
@@ -633,6 +675,7 @@ def main(argv: list[str] | None = None) -> int:
                 input_device=parse_device(args.input_device),
                 output_device=parse_device(args.output_device),
                 print_rms=args.print_rms,
+                print_pattern_telemetry=not args.no_pattern_telemetry,
                 rms_report_interval=args.rms_report_interval,
                 idle_timeout_seconds=args.idle_timeout_seconds,
                 record_dir=args.record_dir,

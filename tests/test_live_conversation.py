@@ -5,6 +5,7 @@ import numpy as np
 from neuroacoustic_resonator.audio.live_conversation import (
     LiveConversationConfig,
     LiveConversationEngine,
+    format_live_pattern_telemetry,
     record_utterance,
 )
 
@@ -135,6 +136,9 @@ steps: 8
     plasticity = result.summary["pattern_guided_plasticity"]
     assert plasticity["frames"] > 0
     assert plasticity["mean_output_signal"] >= 0.0
+    telemetry = result.summary["pattern_telemetry"]
+    assert "active_pattern_label" in telemetry
+    assert telemetry["response_audio_spectral_centroid_hz"] >= 0.0
     assert "label" in result.summary["input_end_output_pattern"]
     assert "features" in result.summary["response_end_output_pattern"]
     assert engine.session_summary()["turn_count"] == 1
@@ -176,3 +180,20 @@ steps: 4
     assert (record_dir / "turn_001_response.wav").exists()
     assert result.summary["input_wav"] == str(record_dir / "turn_001_input.wav")
     assert result.summary["response_wav"] == str(record_dir / "turn_001_response.wav")
+
+
+def test_format_live_pattern_telemetry_includes_user_facing_metrics() -> None:
+    text = format_live_pattern_telemetry(
+        {
+            "active_pattern_label": "split",
+            "dominant_pattern_label": "idle",
+            "pattern_confidence": 0.7,
+            "peak_response_score": 0.012345,
+            "response_audio_rms": 0.05,
+            "response_audio_spectral_centroid_hz": 440.0,
+        }
+    )
+
+    assert "pattern=split" in text
+    assert "confidence=0.700" in text
+    assert "centroid=440.0Hz" in text
