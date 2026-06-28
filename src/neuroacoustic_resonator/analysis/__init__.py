@@ -32,9 +32,20 @@ from neuroacoustic_resonator.analysis.output_patterns import (
     compare_output_patterns,
     output_pattern_signature,
 )
+from neuroacoustic_resonator.analysis.pattern_calibration import (
+    CalibrationStimulus,
+    PatternCalibrationConfig,
+    SyntheticStimulusSpec,
+    run_pattern_calibration,
+)
 from neuroacoustic_resonator.analysis.propagation_probe import (
     PropagationProbeConfig,
     run_propagation_probe,
+)
+from neuroacoustic_resonator.analysis.reinforcement import (
+    PatternReinforcementSignals,
+    PatternReinforcementWeights,
+    compute_pattern_reinforcement_signals,
 )
 from neuroacoustic_resonator.analysis.voice_probe import (
     VoiceVsSilenceProbeConfig,
@@ -54,14 +65,20 @@ __all__ = [
     "MetricsHistory",
     "OutputPatternHistory",
     "OutputPatternSignature",
+    "PatternCalibrationConfig",
+    "PatternReinforcementSignals",
+    "PatternReinforcementWeights",
     "PropagationProbeConfig",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
+    "CalibrationStimulus",
+    "SyntheticStimulusSpec",
     "VoiceVsSilenceProbeConfig",
     "VoiceMemoryProbeConfig",
     "benchmark_field_step",
     "benchmark_sizes",
     "compare_output_patterns",
+    "compute_pattern_reinforcement_signals",
     "compute_regional_activity_metrics",
     "export_diagnostics_artifacts",
     "region_activity",
@@ -69,6 +86,7 @@ __all__ = [
     "region_slow_activity",
     "output_pattern_signature",
     "run_audio_input_simulation",
+    "run_pattern_calibration",
     "run_propagation_probe",
     "run_voice_vs_silence_probe",
     "run_voice_memory_probe",

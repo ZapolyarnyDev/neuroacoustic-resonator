@@ -108,6 +108,12 @@ voice-memory-probe-control input:
 voice-memory-probe-custom config input output_csv output_summary frame_size hop_size drive_strength pause_steps max_steps:
     uv run python scripts/probe_voice_memory.py --config {{config}} --input {{input}} --output-csv {{output_csv}} --output-summary {{output_summary}} --frame-size {{frame_size}} --hop-size {{hop_size}} --drive-strength {{drive_strength}} --pause-steps {{pause_steps}} --max-steps {{max_steps}}
 
+pattern-calibration:
+    uv run python scripts/run_pattern_calibration.py --config configs/field_only.yaml --synthetic tone:tone:220:0.5 --synthetic pulse:pulse:330:0.5 --synthetic chirp:chirp:180:0.5 --output-dir experiments/pattern_calibration --output-csv experiments/logs/pattern_calibration.csv --output-summary experiments/logs/pattern_calibration_summary.json --repeats 2 --input-assoc-gain 0.8 --input-output-gain 0.0
+
+pattern-calibration-input input:
+    uv run python scripts/run_pattern_calibration.py --config configs/field_only.yaml --input {{input}} --output-dir experiments/pattern_calibration --output-csv experiments/logs/pattern_calibration.csv --output-summary experiments/logs/pattern_calibration_summary.json --repeats 2 --input-assoc-gain 0.8 --input-output-gain 0.0
+
 conversation input:
     uv run python scripts/run_conversation.py --config configs/field_only.yaml --inputs {{input}} --output experiments/audio/voice-conversation.wav --summary experiments/logs/voice_conversation_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0
 
