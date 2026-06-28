@@ -778,3 +778,7 @@ def parse_device(value: str | None) -> int | str | None:
         return int(stripped)
     except ValueError:
         return stripped
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

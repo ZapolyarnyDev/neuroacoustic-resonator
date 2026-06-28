@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+
 import numpy as np
 
 from neuroacoustic_resonator.audio.live_conversation import (
@@ -230,3 +233,19 @@ def test_format_live_pattern_telemetry_includes_user_facing_metrics() -> None:
     assert "pattern=split" in text
     assert "confidence=0.700" in text
     assert "centroid=440.0Hz" in text
+
+
+def test_live_conversation_module_runs_cli_help() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "neuroacoustic_resonator.audio.live_conversation",
+            "--help",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Run a turn-based live microphone conversation" in result.stdout
