@@ -15,8 +15,8 @@ from neuroacoustic_resonator.audio.output import (
     StimulusCoupledAudioRenderer,
     VoiceResponseSonificationRenderer,
     render_output_frame,
-    write_wav,
 )
+from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.realtime import (
     RealtimeAudioConfig,
     RealtimeAudioEngine,

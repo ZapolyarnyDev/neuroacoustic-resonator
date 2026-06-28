@@ -21,19 +21,19 @@ from neuroacoustic_resonator.analysis.pattern_plasticity import (
 from neuroacoustic_resonator.audio.conversation import (
     drive_utterance,
     render_field_response,
-    summarize_pattern_audio,
 )
 from neuroacoustic_resonator.audio.conversation_presets import (
     conversation_preset,
     preset_names,
 )
+from neuroacoustic_resonator.audio.diagnostics import summarize_pattern_audio
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
     extract_audio_array_features,
 )
+from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.output import (
     VoiceResponseSonificationRenderer,
-    write_wav,
 )
 from neuroacoustic_resonator.audio.render import steps_for_duration
 from neuroacoustic_resonator.core.config import SimulationConfig

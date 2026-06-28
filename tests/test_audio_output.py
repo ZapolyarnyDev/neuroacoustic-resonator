@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from neuroacoustic_resonator import FieldConfig, OscillatorField, RegionMasks
+from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,
     EventDrivenAudioRenderer,
@@ -12,7 +13,6 @@ from neuroacoustic_resonator.audio.output import (
     StimulusCoupledAudioRenderer,
     VoiceResponseSonificationRenderer,
     render_output_frame,
-    write_wav,
 )
 from neuroacoustic_resonator.audio.synthesis import PatternVoiceSynthesizer
 

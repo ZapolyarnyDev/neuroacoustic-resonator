@@ -6,7 +6,8 @@ from pathlib import Path
 
 import numpy as np
 
-from neuroacoustic_resonator.audio.output import ContinuousAudioRenderer, write_wav
+from neuroacoustic_resonator.audio.io import write_wav
+from neuroacoustic_resonator.audio.output import ContinuousAudioRenderer
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation

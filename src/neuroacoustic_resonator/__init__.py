@@ -13,8 +13,8 @@ from neuroacoustic_resonator.audio.output import (
     SlopeTriggeredAudioRenderer,
     StimulusCoupledAudioRenderer,
     render_output_frame,
-    write_wav,
 )
+from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.render import render_audio_demo
 from neuroacoustic_resonator.audio.conversation import (
     VoiceConversationConfig,
