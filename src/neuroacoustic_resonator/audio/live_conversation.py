@@ -11,8 +11,13 @@ from typing import Any, Protocol, cast
 import numpy as np
 
 from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
-from neuroacoustic_resonator.analysis.output_patterns import output_pattern_signature
 from neuroacoustic_resonator.analysis.output_patterns import OutputPatternHistory
+from neuroacoustic_resonator.analysis.output_patterns import output_pattern_signature
+from neuroacoustic_resonator.analysis.pattern_plasticity import (
+    PatternGuidedPlasticityConfig,
+    PatternPlasticityDecision,
+    summarize_plasticity_decisions,
+)
 from neuroacoustic_resonator.audio.conversation import (
     drive_utterance,
     render_field_response,
@@ -89,6 +94,9 @@ class LiveConversationConfig:
     frequency_scale: float = 1.0
     response_threshold: float = 0.0
     response_sensitivity: float = 900.0
+    pattern_guided_plasticity: PatternGuidedPlasticityConfig = (
+        PatternGuidedPlasticityConfig()
+    )
     start_rms: float = 0.015
     stop_rms: float = 0.008
     min_utterance_seconds: float = 0.2
@@ -262,6 +270,7 @@ class LiveConversationEngine:
             frame_size=self.config.output_frame_size,
         )
         response_pattern_history = OutputPatternHistory()
+        plasticity_decisions: list[PatternPlasticityDecision] = []
         response_audio, response_scores = render_field_response(
             self.simulation,
             self.tracker,
@@ -275,6 +284,8 @@ class LiveConversationEngine:
             output_plasticity_rate=self.config.output_plasticity_rate,
             output_frequency_plasticity_rate=self.config.output_frequency_plasticity_rate,
             pattern_history=response_pattern_history,
+            pattern_guided_plasticity=self.config.pattern_guided_plasticity,
+            plasticity_decisions=plasticity_decisions,
         )
         response_end_pattern = output_pattern_signature(
             self.simulation.field.state,
@@ -310,6 +321,9 @@ class LiveConversationEngine:
             "input_output_pattern_history": drive_result.output_pattern_summary,
             "response_output_pattern_history": response_pattern_history.summary(),
             "response_pattern_audio_diagnostics": response_audio_diagnostics,
+            "pattern_guided_plasticity": summarize_plasticity_decisions(
+                plasticity_decisions
+            ),
             "input_end_output_pattern": input_end_pattern.to_dict(),
             "response_end_output_pattern": response_end_pattern.to_dict(),
         }
@@ -458,6 +472,9 @@ def live_config_parameters(config: LiveConversationConfig) -> dict[str, Any]:
         "max_response_seconds": config.max_response_seconds,
         "output_plasticity_rate": config.output_plasticity_rate,
         "output_frequency_plasticity_rate": config.output_frequency_plasticity_rate,
+        "pattern_guided_plasticity": config.pattern_guided_plasticity.enabled,
+        "pattern_guided_output_gain": config.pattern_guided_plasticity.output_gain,
+        "pattern_guided_assoc_gain": config.pattern_guided_plasticity.assoc_gain,
         "start_rms": config.start_rms,
         "stop_rms": config.stop_rms,
         "silence_seconds": config.silence_seconds,

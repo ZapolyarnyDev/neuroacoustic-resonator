@@ -38,6 +38,12 @@ from neuroacoustic_resonator.analysis.pattern_calibration import (
     SyntheticStimulusSpec,
     run_pattern_calibration,
 )
+from neuroacoustic_resonator.analysis.pattern_plasticity import (
+    PatternGuidedPlasticityConfig,
+    PatternPlasticityDecision,
+    pattern_guided_plasticity_decision,
+    summarize_plasticity_decisions,
+)
 from neuroacoustic_resonator.analysis.propagation_probe import (
     PropagationProbeConfig,
     run_propagation_probe,
@@ -66,6 +72,8 @@ __all__ = [
     "OutputPatternHistory",
     "OutputPatternSignature",
     "PatternCalibrationConfig",
+    "PatternGuidedPlasticityConfig",
+    "PatternPlasticityDecision",
     "PatternReinforcementSignals",
     "PatternReinforcementWeights",
     "PropagationProbeConfig",
@@ -85,11 +93,13 @@ __all__ = [
     "region_fast_activity",
     "region_slow_activity",
     "output_pattern_signature",
+    "pattern_guided_plasticity_decision",
     "run_audio_input_simulation",
     "run_pattern_calibration",
     "run_propagation_probe",
     "run_voice_vs_silence_probe",
     "run_voice_memory_probe",
     "run_experiment_suite",
+    "summarize_plasticity_decisions",
     "write_benchmark_results",
 ]

@@ -132,6 +132,9 @@ steps: 8
     diagnostics = result.summary["response_pattern_audio_diagnostics"]
     assert diagnostics["frames"] > 0
     assert diagnostics["overall"]["spectral_centroid_hz"] >= 0.0
+    plasticity = result.summary["pattern_guided_plasticity"]
+    assert plasticity["frames"] > 0
+    assert plasticity["mean_output_signal"] >= 0.0
     assert "label" in result.summary["input_end_output_pattern"]
     assert "features" in result.summary["response_end_output_pattern"]
     assert engine.session_summary()["turn_count"] == 1

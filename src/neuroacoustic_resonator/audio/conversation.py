@@ -16,6 +16,12 @@ from neuroacoustic_resonator.analysis.output_patterns import (
     OutputPatternHistory,
     output_pattern_signature,
 )
+from neuroacoustic_resonator.analysis.pattern_plasticity import (
+    PatternGuidedPlasticityConfig,
+    PatternPlasticityDecision,
+    pattern_guided_plasticity_decision,
+    summarize_plasticity_decisions,
+)
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
     extract_audio_input_features,
@@ -86,6 +92,9 @@ class VoiceConversationConfig:
     frequency_scale: float = 1.0
     response_threshold: float = 0.0
     response_sensitivity: float = 900.0
+    pattern_guided_plasticity: PatternGuidedPlasticityConfig = field(
+        default_factory=PatternGuidedPlasticityConfig
+    )
 
     def __post_init__(self) -> None:
         if not self.input_wavs:
@@ -228,6 +237,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             frame_size=config.output_frame_size,
         )
         response_pattern_history = OutputPatternHistory()
+        plasticity_decisions: list[PatternPlasticityDecision] = []
         response_audio, response_scores = render_field_response(
             simulation,
             tracker,
@@ -241,6 +251,8 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             output_plasticity_rate=config.output_plasticity_rate,
             output_frequency_plasticity_rate=config.output_frequency_plasticity_rate,
             pattern_history=response_pattern_history,
+            pattern_guided_plasticity=config.pattern_guided_plasticity,
+            plasticity_decisions=plasticity_decisions,
         )
         response_end_pattern = output_pattern_signature(simulation.field.state, regions)
         response_audio_diagnostics = summarize_pattern_audio(
@@ -288,6 +300,9 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
                 "input_output_pattern_history": drive_result.output_pattern_summary,
                 "response_output_pattern_history": response_pattern_history.summary(),
                 "response_pattern_audio_diagnostics": response_audio_diagnostics,
+                "pattern_guided_plasticity": summarize_plasticity_decisions(
+                    plasticity_decisions
+                ),
                 "input_end_output_pattern": input_end_pattern.to_dict(),
                 "response_end_output_pattern": response_end_pattern.to_dict(),
             }
@@ -329,6 +344,9 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             "frequency_scale": config.frequency_scale,
             "response_threshold": config.response_threshold,
             "response_sensitivity": config.response_sensitivity,
+            "pattern_guided_plasticity": config.pattern_guided_plasticity.enabled,
+            "pattern_guided_output_gain": config.pattern_guided_plasticity.output_gain,
+            "pattern_guided_assoc_gain": config.pattern_guided_plasticity.assoc_gain,
         },
         "utterance_count": len(utterances),
         "duration_seconds": float(audio.size / config.sample_rate),
@@ -596,6 +614,8 @@ def render_field_response(
     output_plasticity_rate: float = 0.0,
     output_frequency_plasticity_rate: float = 0.0,
     pattern_history: OutputPatternHistory | None = None,
+    pattern_guided_plasticity: PatternGuidedPlasticityConfig | None = None,
+    plasticity_decisions: list[PatternPlasticityDecision] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     frames: list[np.ndarray] = []
     response_scores: list[float] = []
@@ -611,16 +631,28 @@ def render_field_response(
             max(0.0, metrics.output_response_activity) * 0.05,
             initial_response_score * math.exp(-response_step / decay_steps),
         )
+        pattern = output_pattern_signature(frame.state, regions)
+        if pattern_history is not None:
+            pattern_history.update(pattern, activation=response_score)
+        decision = pattern_guided_plasticity_decision(
+            pattern,
+            response_score=response_score,
+            config=pattern_guided_plasticity,
+        )
+        if plasticity_decisions is not None:
+            plasticity_decisions.append(decision)
         simulation.field.apply_region_plasticity(
             regions.output,
-            response_score,
+            decision.output_signal,
             coupling_rate=output_plasticity_rate,
             frequency_rate=output_frequency_plasticity_rate,
         )
-        if pattern_history is not None:
-            pattern_history.update(
-                output_pattern_signature(frame.state, regions),
-                activation=response_score,
+        if decision.assoc_signal > 0.0:
+            simulation.field.apply_region_plasticity(
+                regions.assoc,
+                decision.assoc_signal,
+                coupling_rate=output_plasticity_rate,
+                frequency_rate=output_frequency_plasticity_rate,
             )
         frames.append(
             renderer.render_frame(

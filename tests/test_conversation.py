@@ -75,6 +75,9 @@ steps: 8
     assert diagnostics["frames"] > 0
     assert diagnostics["overall"]["rms"] >= 0.0
     assert diagnostics["by_pattern"]
+    plasticity = summary["utterances"][0]["pattern_guided_plasticity"]
+    assert plasticity["frames"] > 0
+    assert plasticity["mean_output_signal"] >= 0.0
     assert "label" in summary["utterances"][0]["input_end_output_pattern"]
     assert "features" in summary["utterances"][0]["response_end_output_pattern"]
     assert summary["utterances"][0]["mixed_input_audio_seconds"] == 256 / 8_000
