@@ -97,6 +97,11 @@ class VoiceConversationConfig:
     response_threshold: float = 0.0
     response_sensitivity: float = 900.0
     pattern_voice_depth: float = 0.55
+    response_mix: float = 1.35
+    min_response_gain: float = 0.0
+    target_response_rms: float = 0.1
+    min_energy_gain: float = 0.65
+    max_energy_gain: float = 1.8
     preset_name: str | None = None
     pattern_guided_plasticity: PatternGuidedPlasticityConfig = field(
         default_factory=PatternGuidedPlasticityConfig
@@ -187,6 +192,21 @@ class VoiceConversationConfig:
         if self.pattern_voice_depth < 0.0:
             msg = "pattern_voice_depth must be non-negative"
             raise ValueError(msg)
+        if self.response_mix < 0.0:
+            msg = "response_mix must be non-negative"
+            raise ValueError(msg)
+        if not 0.0 <= self.min_response_gain <= 1.0:
+            msg = "min_response_gain must be between 0 and 1"
+            raise ValueError(msg)
+        if self.target_response_rms <= 0.0:
+            msg = "target_response_rms must be positive"
+            raise ValueError(msg)
+        if self.min_energy_gain <= 0.0:
+            msg = "min_energy_gain must be positive"
+            raise ValueError(msg)
+        if self.max_energy_gain < self.min_energy_gain:
+            msg = "max_energy_gain must be at least min_energy_gain"
+            raise ValueError(msg)
         if self.preset_name is not None:
             conversation_preset(self.preset_name)
 
@@ -206,6 +226,11 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         response_threshold=config.response_threshold,
         response_sensitivity=config.response_sensitivity,
         pattern_voice_depth=config.pattern_voice_depth,
+        response_mix=config.response_mix,
+        min_response_gain=config.min_response_gain,
+        target_response_rms=config.target_response_rms,
+        min_energy_gain=config.min_energy_gain,
+        max_energy_gain=config.max_energy_gain,
     )
 
     for _ in range(config.warmup_steps):
@@ -358,6 +383,11 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             "response_threshold": config.response_threshold,
             "response_sensitivity": config.response_sensitivity,
             "pattern_voice_depth": config.pattern_voice_depth,
+            "response_mix": config.response_mix,
+            "min_response_gain": config.min_response_gain,
+            "target_response_rms": config.target_response_rms,
+            "min_energy_gain": config.min_energy_gain,
+            "max_energy_gain": config.max_energy_gain,
             "preset_name": config.preset_name,
             "pattern_guided_plasticity": config.pattern_guided_plasticity.enabled,
             "pattern_guided_output_gain": config.pattern_guided_plasticity.output_gain,
@@ -391,9 +421,16 @@ def apply_voice_conversation_preset(
         response_seed_decay_seconds=preset.response_seed_decay_seconds,
         output_plasticity_rate=preset.output_plasticity_rate,
         output_frequency_plasticity_rate=preset.output_frequency_plasticity_rate,
+        carrier_frequency=preset.carrier_frequency,
+        frequency_scale=preset.frequency_scale,
         response_threshold=preset.response_threshold,
         response_sensitivity=preset.response_sensitivity,
         pattern_voice_depth=preset.pattern_voice_depth,
+        response_mix=preset.response_mix,
+        min_response_gain=preset.min_response_gain,
+        target_response_rms=preset.target_response_rms,
+        min_energy_gain=preset.min_energy_gain,
+        max_energy_gain=preset.max_energy_gain,
     )
 
 

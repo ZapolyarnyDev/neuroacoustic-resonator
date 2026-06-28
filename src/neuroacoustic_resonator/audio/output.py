@@ -7,6 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from neuroacoustic_resonator.analysis.output_patterns import classify_output_pattern
+from neuroacoustic_resonator.audio.synthesis import PatternVoiceSynthesizer
 from neuroacoustic_resonator.core.field import FieldState
 from neuroacoustic_resonator.core.regions import RegionMasks
 
@@ -629,6 +630,7 @@ class VoiceResponseSonificationRenderer:
         articulation_release: float = 0.2,
         articulation_hold_frames: int = 5,
         articulation_floor: float = 0.02,
+        min_response_gain: float = 0.0,
         target_response_rms: float = 0.1,
         energy_normalization_rate: float = 0.06,
         min_energy_gain: float = 0.65,
@@ -680,6 +682,9 @@ class VoiceResponseSonificationRenderer:
         if not 0.0 <= articulation_floor <= 1.0:
             msg = "articulation_floor must be between 0 and 1"
             raise ValueError(msg)
+        if not 0.0 <= min_response_gain <= 1.0:
+            msg = "min_response_gain must be between 0 and 1"
+            raise ValueError(msg)
         if target_response_rms <= 0.0:
             msg = "target_response_rms must be positive"
             raise ValueError(msg)
@@ -704,6 +709,17 @@ class VoiceResponseSonificationRenderer:
             gain=gain,
             smoothing=smoothing,
         )
+        self.synthesizer = PatternVoiceSynthesizer(
+            sample_rate=sample_rate,
+            frame_size=frame_size,
+            carrier_frequency=carrier_frequency,
+            frequency_scale=frequency_scale,
+            gain=gain,
+            smoothing=smoothing,
+            pitch_depth=pitch_depth,
+            timbre_depth=timbre_depth,
+            pattern_voice_depth=pattern_voice_depth,
+        )
         self.response_threshold = response_threshold
         self.response_sensitivity = response_sensitivity
         self.attack = attack
@@ -719,6 +735,7 @@ class VoiceResponseSonificationRenderer:
         self.articulation_release = articulation_release
         self.articulation_hold_frames = articulation_hold_frames
         self.articulation_floor = articulation_floor
+        self.min_response_gain = min_response_gain
         self.target_response_rms = target_response_rms
         self.energy_normalization_rate = energy_normalization_rate
         self.min_energy_gain = min_energy_gain
@@ -732,10 +749,6 @@ class VoiceResponseSonificationRenderer:
         self._articulation_hold_remaining = 0
         self._previous_response_score = 0.0
         self._energy_gain = 1.0
-        self._voice_phase = 0.0
-        self._brightness = 0.0
-        self._roughness = 0.0
-        self._vibrato_phase = 0.0
         self._memory = self._empty_voice_features()
         self._previous_activity: float | None = None
 
@@ -782,12 +795,6 @@ class VoiceResponseSonificationRenderer:
         pattern_label, pattern_confidence = classify_output_pattern(features)
         self.last_pattern_label = pattern_label
         self.last_pattern_confidence = pattern_confidence
-        self._brightness += self.continuous.smoothing * (
-            features["brightness"] - self._brightness
-        )
-        self._roughness += self.continuous.smoothing * (
-            features["roughness"] - self._roughness
-        )
         memory_features = self._update_response_memory(features)
 
         base = self.continuous.render_frame(state, regions)
@@ -804,6 +811,7 @@ class VoiceResponseSonificationRenderer:
             self.articulation_floor
             + (1.0 - self.articulation_floor) * self._articulation
         )
+        response_gain = max(response_gain, self.min_response_gain * self.envelope)
         response_layer = self.response_mix * response_gain * response
         self._update_energy_gain(response_layer, response_gain)
         mixed = background_gain * base + self._energy_gain * response_layer
@@ -857,159 +865,18 @@ class VoiceResponseSonificationRenderer:
         pattern_label: str = "mixed",
         pattern_confidence: float = 0.0,
     ) -> AudioArray:
-        samples = np.arange(self.frame_size, dtype=np.float64)
-        pattern = self._pattern_voice_profile(pattern_label, pattern_confidence)
-        phase_spread = features["phase_spread"]
-        trace_contrast = features["trace_contrast"]
-        metabolite_contrast = features["metabolite_contrast"]
-        phase_order_2 = features["phase_order_2"]
-        phase_order_3 = features["phase_order_3"]
-        trace_phase_lock = features["trace_phase_lock"]
-        metabolite_phase_lock = features["metabolite_phase_lock"]
-        base_pitch_shift = pattern["pitch"] * (
-            1.0
-            + self.pitch_depth
-            * (
-                0.25 * features["synchrony"]
-                + 0.30 * features["trace"]
-                + 0.20 * features["frequency_mean"]
-                + 0.15 * features["frequency_spread"]
-                - 0.10 * features["metabolite_stress"]
-                + 0.08 * phase_order_2
-                - 0.06 * phase_order_3
-            )
+        return self.synthesizer.render(
+            features,
+            pattern_label=pattern_label,
+            pattern_confidence=pattern_confidence,
         )
-        vibrato_rate = (
-            3.0 + 5.0 * phase_spread + 2.0 * trace_contrast + 2.5 * trace_phase_lock
-        )
-        vibrato_increment = TAU * vibrato_rate / float(self.continuous.sample_rate)
-        vibrato_phase = self._vibrato_phase + vibrato_increment * samples
-        self._vibrato_phase = float(
-            np.mod(self._vibrato_phase + vibrato_increment * self.frame_size, TAU)
-        )
-        vibrato_depth = 0.004 + 0.035 * phase_spread + 0.02 * metabolite_contrast
-        pitch_shift = base_pitch_shift * (1.0 + vibrato_depth * np.sin(vibrato_phase))
-        frequency = np.clip(
-            self.continuous.carrier_frequency
-            * self.continuous.frequency_scale
-            * pitch_shift,
-            20.0,
-            self.continuous.sample_rate / 2.0 - 1.0,
-        )
-        increment = TAU * frequency / float(self.continuous.sample_rate)
-        phase = self._voice_phase + np.cumsum(increment)
-        self._voice_phase = float(
-            np.mod(self._voice_phase + float(np.sum(increment)), TAU)
-        )
-
-        harmonic_mix = np.clip(
-            (self._brightness + 0.25 * phase_order_2 + pattern["harmonic_bias"])
-            * self.timbre_depth,
-            0.0,
-            1.0,
-        )
-        rough_mix = np.clip(
-            (
-                self._roughness
-                + 0.20 * phase_order_3
-                + 0.15 * metabolite_phase_lock
-                + pattern["rough_bias"]
-            )
-            * self.timbre_depth,
-            0.0,
-            1.0,
-        )
-        formant_phase = features["mean_phase"]
-        second_phase = features["phase_angle_2"]
-        third_phase = features["phase_angle_3"]
-        fundamental = np.sin(phase + formant_phase)
-        second = np.sin(2.0 * phase + 0.5 * formant_phase + second_phase)
-        third = np.sin(3.0 * phase - formant_phase + third_phase)
-        sub = np.sin(0.5 * phase + formant_phase - third_phase)
-        fourth = np.sin(4.0 * phase + 1.7 * formant_phase - second_phase)
-        ratio_a = 2.31 + 0.55 * phase_order_2 + 0.21 * trace_phase_lock
-        ratio_b = 4.63 + 0.71 * phase_order_3 + 0.33 * metabolite_phase_lock
-        inharmonic = np.sin(
-            ratio_a * phase + 0.7 * formant_phase + second_phase
-        ) * np.sin(ratio_b * phase - 0.3 * formant_phase + third_phase)
-        sparse_focus = np.clip(0.35 + 0.65 * phase_order_2, 0.0, 1.0)
-        rough_focus = np.clip(1.0 - 0.45 * sparse_focus, 0.0, 1.0)
-        voice = (
-            (1.0 - 0.32 * harmonic_mix) * fundamental
-            + (0.10 + 0.10 * trace_contrast + 0.08 * phase_order_2)
-            * harmonic_mix
-            * sparse_focus
-            * second
-            + (0.04 + 0.10 * metabolite_contrast + 0.08 * phase_order_3)
-            * harmonic_mix
-            * (0.65 + 0.35 * phase_spread)
-            * third
-            + 0.035 * rough_mix * rough_focus * fourth
-            + (0.045 + 0.065 * phase_spread) * rough_mix * rough_focus * inharmonic
-            + pattern["sub_mix"] * sub
-        )
-        pulse = 1.0 + pattern["pulse_depth"] * np.sin(
-            (1.0 + pattern["pulse_rate"]) * phase + second_phase
-        )
-        normalization = (
-            1.0 + 0.32 * harmonic_mix + 0.16 * rough_mix + pattern["sub_mix"]
-        )
-        voice = voice * pulse
-        return self.continuous.gain * voice / normalization
 
     def _pattern_voice_profile(
         self,
         label: str,
         confidence: float,
     ) -> dict[str, float]:
-        depth = self.pattern_voice_depth * float(np.clip(confidence, 0.0, 1.0))
-        base = {
-            "pitch": 1.0,
-            "harmonic_bias": 0.0,
-            "rough_bias": 0.0,
-            "sub_mix": 0.0,
-            "pulse_depth": 0.0,
-            "pulse_rate": 0.0,
-        }
-        profiles = {
-            "coherent": {
-                "pitch": 1.0 + 0.10 * depth,
-                "harmonic_bias": 0.12 * depth,
-                "rough_bias": -0.10 * depth,
-            },
-            "split": {
-                "pitch": 0.94 - 0.08 * depth,
-                "harmonic_bias": 0.22 * depth,
-                "sub_mix": 0.16 * depth,
-                "pulse_depth": 0.08 * depth,
-                "pulse_rate": 0.5,
-            },
-            "triadic": {
-                "pitch": 1.08 + 0.12 * depth,
-                "harmonic_bias": 0.12 * depth,
-                "rough_bias": 0.08 * depth,
-                "pulse_depth": 0.05 * depth,
-                "pulse_rate": 2.0,
-            },
-            "diffuse": {
-                "pitch": 0.98,
-                "rough_bias": 0.30 * depth,
-                "sub_mix": 0.04 * depth,
-                "pulse_depth": 0.12 * depth,
-                "pulse_rate": 3.0,
-            },
-            "imprinted": {
-                "pitch": 0.90 - 0.04 * depth,
-                "harmonic_bias": 0.06 * depth,
-                "rough_bias": 0.12 * depth,
-                "sub_mix": 0.11 * depth,
-                "pulse_depth": 0.04 * depth,
-                "pulse_rate": 1.0,
-            },
-        }
-        for key, value in profiles.get(label, {}).items():
-            base[key] = value
-        return base
+        return self.synthesizer.profile(label, confidence).__dict__.copy()
 
     def _soft_activation(self, response_score: float) -> float:
         scaled = max(0.0, response_score - self.response_threshold)

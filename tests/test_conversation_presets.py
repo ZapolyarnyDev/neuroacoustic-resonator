@@ -32,7 +32,12 @@ def test_apply_voice_conversation_preset_updates_response_profile(tmp_path) -> N
 
     assert effective.gain == preset.gain
     assert effective.response_seconds == preset.response_seconds
+    assert effective.carrier_frequency == preset.carrier_frequency
+    assert effective.frequency_scale == preset.frequency_scale
     assert effective.pattern_voice_depth == preset.pattern_voice_depth
+    assert effective.response_mix == preset.response_mix
+    assert effective.min_response_gain == preset.min_response_gain
+    assert effective.target_response_rms == preset.target_response_rms
     assert effective.output_plasticity_rate == preset.output_plasticity_rate
 
 
@@ -47,7 +52,10 @@ def test_apply_live_conversation_preset_updates_response_profile(tmp_path) -> No
 
     assert effective.gain == preset.gain
     assert effective.response_sensitivity == preset.response_sensitivity
+    assert effective.carrier_frequency == preset.carrier_frequency
     assert effective.pattern_voice_depth == preset.pattern_voice_depth
+    assert effective.response_mix == preset.response_mix
+    assert effective.min_energy_gain == preset.min_energy_gain
 
 
 def test_conversation_preset_rejects_unknown_name() -> None:

@@ -210,7 +210,9 @@ steps: 4
 
     assert engine.config.preset_name == "reactive"
     assert engine.config.gain == 0.38
-    assert engine.renderer.pattern_voice_depth == 0.65
+    assert engine.config.response_mix == 1.85
+    assert engine.renderer.pattern_voice_depth == 1.05
+    assert engine.renderer.min_response_gain == 0.16
 
 
 def test_format_live_pattern_telemetry_includes_user_facing_metrics() -> None:

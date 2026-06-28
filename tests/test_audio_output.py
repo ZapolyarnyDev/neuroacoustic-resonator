@@ -14,6 +14,7 @@ from neuroacoustic_resonator.audio.output import (
     render_output_frame,
     write_wav,
 )
+from neuroacoustic_resonator.audio.synthesis import PatternVoiceSynthesizer
 
 
 def test_render_output_frame_returns_bounded_audio() -> None:
@@ -578,6 +579,49 @@ def test_voice_response_sonification_pattern_voice_depth_changes_timbre() -> Non
     assert not np.allclose(plain_audio, patterned_audio)
 
 
+def test_pattern_voice_synthesizer_separates_pattern_waveforms() -> None:
+    features = VoiceResponseSonificationRenderer._empty_voice_features()
+    features.update(
+        {
+            "synchrony": 0.4,
+            "trace": 0.7,
+            "phase_order_2": 0.8,
+            "phase_order_3": 0.2,
+            "phase_spread": 0.6,
+            "brightness": 0.5,
+            "roughness": 0.4,
+        }
+    )
+    split = PatternVoiceSynthesizer(
+        sample_rate=8_000,
+        frame_size=256,
+        gain=0.5,
+        smoothing=1.0,
+        pattern_voice_depth=1.2,
+    )
+    diffuse = PatternVoiceSynthesizer(
+        sample_rate=8_000,
+        frame_size=256,
+        gain=0.5,
+        smoothing=1.0,
+        pattern_voice_depth=1.2,
+    )
+
+    split_audio = split.render(
+        features,
+        pattern_label="split",
+        pattern_confidence=0.9,
+    )
+    diffuse_audio = diffuse.render(
+        features,
+        pattern_label="diffuse",
+        pattern_confidence=0.9,
+    )
+
+    assert not np.allclose(split_audio, diffuse_audio)
+    assert abs(float(np.mean(split_audio)) - float(np.mean(diffuse_audio))) > 1e-4
+
+
 def test_voice_response_sonification_keeps_short_response_memory() -> None:
     field = OscillatorField(FieldConfig(size=8, seed=1))
     regions = RegionMasks.from_size(8)
@@ -652,6 +696,35 @@ def test_voice_response_sonification_articulates_response_events() -> None:
     assert np.sqrt(np.mean(active * active)) > np.sqrt(np.mean(fading * fading))
 
 
+def test_voice_response_sonification_min_response_gain_prevents_hard_fade() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        release=0.8,
+        background_level=0.0,
+        background_response_level=0.0,
+        articulation_attack=1.0,
+        articulation_release=1.0,
+        articulation_hold_frames=0,
+        articulation_floor=0.0,
+        min_response_gain=0.3,
+        energy_normalization_rate=1.0,
+    )
+
+    active = renderer.render_frame(field.state, regions, response_score=0.02)
+    fading = renderer.render_frame(field.state, regions, response_score=0.0)
+
+    active_rms = float(np.sqrt(np.mean(active * active)))
+    fading_rms = float(np.sqrt(np.mean(fading * fading)))
+    assert fading_rms > active_rms * 0.12
+
+
 def test_voice_response_sonification_normalizes_response_energy() -> None:
     field = OscillatorField(FieldConfig(size=8, seed=1))
     regions = RegionMasks.from_size(8)
@@ -698,6 +771,8 @@ def test_voice_response_sonification_rejects_invalid_articulation() -> None:
 def test_voice_response_sonification_rejects_invalid_energy_normalization() -> None:
     with pytest.raises(ValueError, match="target_response_rms"):
         VoiceResponseSonificationRenderer(target_response_rms=0.0)
+    with pytest.raises(ValueError, match="min_response_gain"):
+        VoiceResponseSonificationRenderer(min_response_gain=-0.1)
     with pytest.raises(ValueError, match="max_energy_gain"):
         VoiceResponseSonificationRenderer(min_energy_gain=2.0, max_energy_gain=1.0)
     with pytest.raises(ValueError, match="pattern_voice_depth"):
