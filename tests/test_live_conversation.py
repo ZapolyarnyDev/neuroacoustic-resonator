@@ -129,6 +129,9 @@ steps: 8
     assert result.summary["initial_response_seed"] >= 0.0
     assert result.summary["input_output_pattern_history"]["frames"] > 0
     assert result.summary["response_output_pattern_history"]["frames"] > 0
+    diagnostics = result.summary["response_pattern_audio_diagnostics"]
+    assert diagnostics["frames"] > 0
+    assert diagnostics["overall"]["spectral_centroid_hz"] >= 0.0
     assert "label" in result.summary["input_end_output_pattern"]
     assert "features" in result.summary["response_end_output_pattern"]
     assert engine.session_summary()["turn_count"] == 1

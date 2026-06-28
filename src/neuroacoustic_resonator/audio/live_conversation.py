@@ -16,6 +16,7 @@ from neuroacoustic_resonator.analysis.output_patterns import OutputPatternHistor
 from neuroacoustic_resonator.audio.conversation import (
     drive_utterance,
     render_field_response,
+    summarize_pattern_audio,
 )
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
@@ -279,6 +280,12 @@ class LiveConversationEngine:
             self.simulation.field.state,
             self.regions,
         )
+        response_audio_diagnostics = summarize_pattern_audio(
+            response_audio,
+            response_pattern_history,
+            sample_rate=self.config.sample_rate,
+            frame_size=self.config.output_frame_size,
+        )
         summary: dict[str, Any] = {
             "index": index,
             "input_samples": int(samples.size),
@@ -302,6 +309,7 @@ class LiveConversationEngine:
             "mean_response_score": float(np.mean(response_scores)),
             "input_output_pattern_history": drive_result.output_pattern_summary,
             "response_output_pattern_history": response_pattern_history.summary(),
+            "response_pattern_audio_diagnostics": response_audio_diagnostics,
             "input_end_output_pattern": input_end_pattern.to_dict(),
             "response_end_output_pattern": response_end_pattern.to_dict(),
         }
