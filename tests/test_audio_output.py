@@ -506,6 +506,78 @@ def test_voice_response_sonification_uses_phase_texture_moments() -> None:
     assert not np.allclose(bimodal, trimodal)
 
 
+def test_voice_response_sonification_tracks_active_pattern_label() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    split_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    output_indices = np.argwhere(regions.output)
+    for index, (row, column) in enumerate(output_indices):
+        split_state.phase[row, column] = 0.0 if index % 2 == 0 else np.pi
+        split_state.trace[row, column] = 0.9
+    renderer = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+    )
+
+    audio = renderer.render_frame(split_state, regions, response_score=0.02)
+
+    assert renderer.last_pattern_label == "split"
+    assert renderer.last_pattern_confidence > 0.0
+    assert np.max(np.abs(audio)) > 0.0
+
+
+def test_voice_response_sonification_pattern_voice_depth_changes_timbre() -> None:
+    field = OscillatorField(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    split_state = type(field.state)(
+        phase=field.state.phase.copy(),
+        frequency=field.state.frequency.copy(),
+        metabolite=field.state.metabolite.copy(),
+        coupling=field.state.coupling.copy(),
+        trace=field.state.trace.copy(),
+    )
+    output_indices = np.argwhere(regions.output)
+    for index, (row, column) in enumerate(output_indices):
+        split_state.phase[row, column] = 0.0 if index % 2 == 0 else np.pi
+        split_state.trace[row, column] = 0.9
+    plain = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+        pattern_voice_depth=0.0,
+    )
+    patterned = VoiceResponseSonificationRenderer(
+        sample_rate=8_000,
+        frame_size=128,
+        gain=0.5,
+        response_threshold=0.0,
+        response_sensitivity=100.0,
+        attack=1.0,
+        smoothing=1.0,
+        pattern_voice_depth=1.0,
+    )
+
+    plain_audio = plain.render_frame(split_state, regions, response_score=0.02)
+    patterned_audio = patterned.render_frame(split_state, regions, response_score=0.02)
+
+    assert not np.allclose(plain_audio, patterned_audio)
+
+
 def test_voice_response_sonification_keeps_short_response_memory() -> None:
     field = OscillatorField(FieldConfig(size=8, seed=1))
     regions = RegionMasks.from_size(8)
@@ -628,3 +700,5 @@ def test_voice_response_sonification_rejects_invalid_energy_normalization() -> N
         VoiceResponseSonificationRenderer(target_response_rms=0.0)
     with pytest.raises(ValueError, match="max_energy_gain"):
         VoiceResponseSonificationRenderer(min_energy_gain=2.0, max_energy_gain=1.0)
+    with pytest.raises(ValueError, match="pattern_voice_depth"):
+        VoiceResponseSonificationRenderer(pattern_voice_depth=-0.1)
