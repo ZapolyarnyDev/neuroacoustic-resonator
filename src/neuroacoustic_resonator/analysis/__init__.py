@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from neuroacoustic_resonator.analysis.benchmark import (
     BenchmarkResult,
     benchmark_field_step,
@@ -32,12 +34,6 @@ from neuroacoustic_resonator.analysis.output_patterns import (
     compare_output_patterns,
     output_pattern_signature,
 )
-from neuroacoustic_resonator.analysis.pattern_calibration import (
-    CalibrationStimulus,
-    PatternCalibrationConfig,
-    SyntheticStimulusSpec,
-    run_pattern_calibration,
-)
 from neuroacoustic_resonator.analysis.pattern_plasticity import (
     PatternGuidedPlasticityConfig,
     PatternPlasticityDecision,
@@ -61,6 +57,14 @@ from neuroacoustic_resonator.analysis.voice_memory_probe import (
     VoiceMemoryProbeConfig,
     run_voice_memory_probe,
 )
+
+if TYPE_CHECKING:
+    from neuroacoustic_resonator.analysis.pattern_calibration import (
+        CalibrationStimulus,
+        PatternCalibrationConfig,
+        SyntheticStimulusSpec,
+        run_pattern_calibration,
+    )
 
 __all__ = [
     "AudioInputRunConfig",
@@ -103,3 +107,16 @@ __all__ = [
     "summarize_plasticity_decisions",
     "write_benchmark_results",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name in {
+        "CalibrationStimulus",
+        "PatternCalibrationConfig",
+        "SyntheticStimulusSpec",
+        "run_pattern_calibration",
+    }:
+        from neuroacoustic_resonator.analysis import pattern_calibration
+
+        return getattr(pattern_calibration, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
