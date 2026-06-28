@@ -26,6 +26,11 @@ from neuroacoustic_resonator.analysis.metrics import (
     region_activity,
     region_slow_activity,
 )
+from neuroacoustic_resonator.analysis.output_patterns import (
+    OutputPatternSignature,
+    compare_output_patterns,
+    output_pattern_signature,
+)
 from neuroacoustic_resonator.analysis.propagation_probe import (
     PropagationProbeConfig,
     run_propagation_probe,
@@ -46,6 +51,7 @@ __all__ = [
     "ExperimentRows",
     "ExperimentSummary",
     "MetricsHistory",
+    "OutputPatternSignature",
     "PropagationProbeConfig",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
@@ -53,11 +59,13 @@ __all__ = [
     "VoiceMemoryProbeConfig",
     "benchmark_field_step",
     "benchmark_sizes",
+    "compare_output_patterns",
     "compute_regional_activity_metrics",
     "export_diagnostics_artifacts",
     "region_activity",
     "region_fast_activity",
     "region_slow_activity",
+    "output_pattern_signature",
     "run_audio_input_simulation",
     "run_propagation_probe",
     "run_voice_vs_silence_probe",

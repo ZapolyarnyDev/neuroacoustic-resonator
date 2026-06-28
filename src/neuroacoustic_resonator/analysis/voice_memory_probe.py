@@ -13,6 +13,12 @@ from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityMetrics,
     RegionalActivityTracker,
 )
+from neuroacoustic_resonator.analysis.output_patterns import (
+    OutputPatternSignature,
+    PATTERN_FEATURE_KEYS,
+    compare_output_patterns,
+    output_pattern_signature,
+)
 from neuroacoustic_resonator.audio.input import (
     AudioInputFeatures,
     WavInputDrive,
@@ -267,10 +273,12 @@ def run_voice_repeat(
             local_synchrony=simulation.field.local_synchrony(),
         )
         metrics = tracker.update(frame, regions, input_value=input_value)
+        pattern = output_pattern_signature(frame.state, regions)
         rows.append(
             voice_memory_row(
                 features,
                 metrics,
+                pattern=pattern,
                 repeat_index=repeat_index,
                 audio_step=audio_step,
             )
@@ -282,10 +290,11 @@ def voice_memory_row(
     features: AudioInputFeatures,
     metrics: RegionalActivityMetrics,
     *,
+    pattern: Any,
     repeat_index: int,
     audio_step: int,
 ) -> dict[str, Any]:
-    return {
+    row = {
         "repeat_index": repeat_index,
         "global_step": metrics.step,
         "audio_step": audio_step,
@@ -305,7 +314,16 @@ def voice_memory_row(
         "output_event_score": metrics.output_event_score,
         "output_fast_response_score": metrics.output_fast_response_score,
         "output_slow_drift_score": metrics.output_slow_drift_score,
+        "output_pattern_label": pattern.label,
+        "output_pattern_confidence": pattern.confidence,
     }
+    row.update(
+        {
+            f"output_pattern_{key}": float(pattern.features[key])
+            for key in PATTERN_FEATURE_KEYS
+        }
+    )
+    return row
 
 
 def summarize_voice_memory_rows(
@@ -374,11 +392,13 @@ def run_parameters(
     return parameters
 
 
-def summarize_repeat(rows: VoiceMemoryRows) -> dict[str, float | int]:
+def summarize_repeat(rows: VoiceMemoryRows) -> dict[str, Any]:
     output_response = column(rows, "output_response_activity")
     fast = column(rows, "output_fast_response_score")
     event = column(rows, "output_event_score")
     drift = column(rows, "output_slow_drift_score")
+    pattern_counts = pattern_label_counts(rows)
+    dominant_label = max(pattern_counts, key=lambda label: pattern_counts[label])
     return {
         "rows": len(rows),
         "start_global_step": int(rows[0]["global_step"]),
@@ -391,6 +411,11 @@ def summarize_repeat(rows: VoiceMemoryRows) -> dict[str, float | int]:
         "mean_output_event_score": float(np.mean(event)),
         "peak_output_slow_drift_score": float(np.max(drift)),
         "mean_output_slow_drift_score": float(np.mean(drift)),
+        "dominant_output_pattern_label": dominant_label,
+        "output_pattern_label_counts": pattern_counts,
+        "mean_output_pattern_confidence": float(
+            np.mean(column(rows, "output_pattern_confidence"))
+        ),
     }
 
 
@@ -420,6 +445,26 @@ def compare_repeats(
             float(np.max(second_values)),
             float(np.max(first_values)),
         )
+    label_matches = [
+        1.0 if left["output_pattern_label"] == right["output_pattern_label"] else 0.0
+        for left, right in zip(first[:length], second[:length], strict=False)
+    ]
+    comparison["output_pattern_label_match_rate"] = float(np.mean(label_matches))
+    comparison["output_pattern_feature_rmse"] = pattern_feature_rmse(
+        first[:length],
+        second[:length],
+    )
+    first_pattern = row_pattern_signature(first[-1])
+    second_pattern = row_pattern_signature(second[-1])
+    comparison.update(
+        {
+            f"final_{key}": value
+            for key, value in compare_output_patterns(
+                first_pattern,
+                second_pattern,
+            ).items()
+        }
+    )
     return comparison
 
 
@@ -456,6 +501,42 @@ def compare_probe_summaries(
 
 def column(rows: VoiceMemoryRows, key: str) -> np.ndarray:
     return np.asarray([row[key] for row in rows], dtype=np.float64)
+
+
+def pattern_label_counts(rows: VoiceMemoryRows) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        label = str(row["output_pattern_label"])
+        counts[label] = counts.get(label, 0) + 1
+    return counts
+
+
+def pattern_feature_rmse(left: VoiceMemoryRows, right: VoiceMemoryRows) -> float:
+    left_values = np.asarray(
+        [
+            [row[f"output_pattern_{key}"] for key in PATTERN_FEATURE_KEYS]
+            for row in left
+        ],
+        dtype=np.float64,
+    )
+    right_values = np.asarray(
+        [
+            [row[f"output_pattern_{key}"] for key in PATTERN_FEATURE_KEYS]
+            for row in right
+        ],
+        dtype=np.float64,
+    )
+    return rmse(left_values.reshape(-1), right_values.reshape(-1))
+
+
+def row_pattern_signature(row: dict[str, Any]) -> OutputPatternSignature:
+    return OutputPatternSignature(
+        label=str(row["output_pattern_label"]),
+        confidence=float(row["output_pattern_confidence"]),
+        features={
+            key: float(row[f"output_pattern_{key}"]) for key in PATTERN_FEATURE_KEYS
+        },
+    )
 
 
 def safe_correlation(left: np.ndarray, right: np.ndarray) -> float:

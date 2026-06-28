@@ -12,6 +12,7 @@ from scipy.io import wavfile  # type: ignore[import-untyped]
 from scipy.signal import resample_poly  # type: ignore[import-untyped]
 
 from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
+from neuroacoustic_resonator.analysis.output_patterns import output_pattern_signature
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
     extract_audio_input_features,
@@ -212,6 +213,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             output_gain=config.input_output_gain,
         )
         drive_result = drive_utterance(simulation, tracker, regions, features, drive)
+        input_end_pattern = output_pattern_signature(simulation.field.state, regions)
         planned_response_seconds = response_duration_for_input(
             drive_result,
             config=config,
@@ -234,6 +236,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             output_plasticity_rate=config.output_plasticity_rate,
             output_frequency_plasticity_rate=config.output_frequency_plasticity_rate,
         )
+        response_end_pattern = output_pattern_signature(simulation.field.state, regions)
         if input_audio.size:
             audio_frames.append(input_audio)
             if pause_samples:
@@ -270,6 +273,8 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
                 ),
                 "peak_response_score": float(np.max(response_scores)),
                 "mean_response_score": float(np.mean(response_scores)),
+                "input_end_output_pattern": input_end_pattern.to_dict(),
+                "response_end_output_pattern": response_end_pattern.to_dict(),
             }
         )
 

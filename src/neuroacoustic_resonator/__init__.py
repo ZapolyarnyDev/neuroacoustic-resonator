@@ -44,6 +44,11 @@ from neuroacoustic_resonator.analysis.metrics import (
     region_fast_activity,
     region_slow_activity,
 )
+from neuroacoustic_resonator.analysis.output_patterns import (
+    OutputPatternSignature,
+    compare_output_patterns,
+    output_pattern_signature,
+)
 from neuroacoustic_resonator.analysis.diagnostics_export import (
     export_diagnostics_artifacts,
 )
@@ -83,6 +88,7 @@ __all__ = [
     "LiveVisualizationConfig",
     "MetricsHistory",
     "OscillatorField",
+    "OutputPatternSignature",
     "RegionMasks",
     "RealtimeAudioConfig",
     "RealtimeAudioEngine",
@@ -98,6 +104,7 @@ __all__ = [
     "VisualizationFrame",
     "VoiceConversationConfig",
     "WavInputDrive",
+    "compare_output_patterns",
     "compute_regional_activity_metrics",
     "export_diagnostics_artifacts",
     "extract_audio_input_features",
@@ -108,6 +115,7 @@ __all__ = [
     "region_activity",
     "region_fast_activity",
     "region_slow_activity",
+    "output_pattern_signature",
     "render_audio_demo",
     "render_voice_conversation",
     "render_output_frame",

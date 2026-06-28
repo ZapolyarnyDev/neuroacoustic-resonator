@@ -58,8 +58,13 @@ steps: 8
     assert summary["first"]["rows"] == 5
     assert summary["second"]["rows"] == 5
     assert summary["parameters"]["input_assoc_gain"] == 0.5
+    assert "output_pattern_label" in rows[0]
+    assert "output_pattern_phase_order_2" in rows[0]
+    assert "dominant_output_pattern_label" in summary["first"]
     assert "output_fast_response_score_corr" in summary["comparison"]
     assert "output_fast_response_score_repeatability_rmse" in summary["comparison"]
+    assert "output_pattern_label_match_rate" in summary["comparison"]
+    assert "output_pattern_feature_rmse" in summary["comparison"]
     assert "output_event_score_second_to_first_peak" in loaded["comparison"]
 
 

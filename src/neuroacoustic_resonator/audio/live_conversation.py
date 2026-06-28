@@ -11,6 +11,7 @@ from typing import Any, Protocol, cast
 import numpy as np
 
 from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
+from neuroacoustic_resonator.analysis.output_patterns import output_pattern_signature
 from neuroacoustic_resonator.audio.conversation import (
     drive_utterance,
     render_field_response,
@@ -245,6 +246,10 @@ class LiveConversationEngine:
             features,
             drive,
         )
+        input_end_pattern = output_pattern_signature(
+            self.simulation.field.state,
+            self.regions,
+        )
         planned_response_seconds = response_duration_for_live_input(
             drive_result,
             config=self.config,
@@ -267,6 +272,10 @@ class LiveConversationEngine:
             output_plasticity_rate=self.config.output_plasticity_rate,
             output_frequency_plasticity_rate=self.config.output_frequency_plasticity_rate,
         )
+        response_end_pattern = output_pattern_signature(
+            self.simulation.field.state,
+            self.regions,
+        )
         summary: dict[str, Any] = {
             "index": index,
             "input_samples": int(samples.size),
@@ -288,6 +297,8 @@ class LiveConversationEngine:
             ),
             "peak_response_score": float(np.max(response_scores)),
             "mean_response_score": float(np.mean(response_scores)),
+            "input_end_output_pattern": input_end_pattern.to_dict(),
+            "response_end_output_pattern": response_end_pattern.to_dict(),
         }
         if self.config.record_dir is not None:
             input_path = self.config.record_dir / f"turn_{index:03d}_input.wav"
