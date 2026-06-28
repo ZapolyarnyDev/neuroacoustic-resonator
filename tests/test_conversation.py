@@ -84,6 +84,7 @@ steps: 8
     assert summary["parameters"]["include_input_audio"] is True
     assert summary["parameters"]["response_seed_gain"] == 0.65
     assert summary["parameters"]["output_plasticity_rate"] == 0.02
+    assert summary["parameters"]["pattern_voice_depth"] == 0.55
     assert loaded["output_wav"] == str(output)
     assert "session" in loaded
 
@@ -128,6 +129,43 @@ steps: 4
         assert stream.getnframes() == 800
     assert summary["utterances"][0]["mixed_input_audio_seconds"] == 0.0
     assert summary["parameters"]["include_input_audio"] is False
+
+
+def test_render_voice_conversation_applies_preset(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+field:
+  size: 6
+  seed: 1
+synthetic_input:
+  enabled: false
+steps: 4
+""",
+        encoding="utf-8",
+    )
+    wav_path = tmp_path / "voice.wav"
+    wavfile.write(wav_path, 8_000, np.ones(256, dtype=np.float32))
+    output = tmp_path / "conversation.wav"
+    summary_path = tmp_path / "conversation.json"
+
+    summary = render_voice_conversation(
+        VoiceConversationConfig(
+            config_path=config_path,
+            input_wavs=(wav_path,),
+            output_wav=output,
+            output_summary=summary_path,
+            sample_rate=8_000,
+            output_frame_size=80,
+            input_frame_size=128,
+            input_hop_size=64,
+            warmup_steps=1,
+            preset_name="quiet",
+        )
+    )
+
+    assert summary["parameters"]["preset_name"] == "quiet"
+    assert summary["parameters"]["gain"] == 0.22
 
 
 def test_render_voice_conversation_produces_audible_response(tmp_path) -> None:

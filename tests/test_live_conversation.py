@@ -182,6 +182,37 @@ steps: 4
     assert result.summary["response_wav"] == str(record_dir / "turn_001_response.wav")
 
 
+def test_live_conversation_engine_applies_preset(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+field:
+  size: 6
+  seed: 1
+synthetic_input:
+  enabled: false
+steps: 4
+""",
+        encoding="utf-8",
+    )
+
+    engine = LiveConversationEngine(
+        LiveConversationConfig(
+            config_path=config_path,
+            sample_rate=8_000,
+            output_frame_size=80,
+            input_frame_size=128,
+            input_hop_size=64,
+            warmup_steps=1,
+            preset_name="reactive",
+        )
+    )
+
+    assert engine.config.preset_name == "reactive"
+    assert engine.config.gain == 0.38
+    assert engine.renderer.pattern_voice_depth == 0.65
+
+
 def test_format_live_pattern_telemetry_includes_user_facing_metrics() -> None:
     text = format_live_pattern_telemetry(
         {

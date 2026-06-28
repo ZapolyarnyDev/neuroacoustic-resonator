@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,10 @@ from neuroacoustic_resonator.audio.input import (
 from neuroacoustic_resonator.audio.output import (
     VoiceResponseSonificationRenderer,
     write_wav,
+)
+from neuroacoustic_resonator.audio.conversation_presets import (
+    conversation_preset,
+    preset_names,
 )
 from neuroacoustic_resonator.audio.render import steps_for_duration
 from neuroacoustic_resonator.core.config import SimulationConfig
@@ -92,6 +96,8 @@ class VoiceConversationConfig:
     frequency_scale: float = 1.0
     response_threshold: float = 0.0
     response_sensitivity: float = 900.0
+    pattern_voice_depth: float = 0.55
+    preset_name: str | None = None
     pattern_guided_plasticity: PatternGuidedPlasticityConfig = field(
         default_factory=PatternGuidedPlasticityConfig
     )
@@ -178,9 +184,15 @@ class VoiceConversationConfig:
         if self.response_sensitivity <= 0.0:
             msg = "response_sensitivity must be positive"
             raise ValueError(msg)
+        if self.pattern_voice_depth < 0.0:
+            msg = "pattern_voice_depth must be non-negative"
+            raise ValueError(msg)
+        if self.preset_name is not None:
+            conversation_preset(self.preset_name)
 
 
 def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSummary:
+    config = apply_voice_conversation_preset(config)
     sim_config = SimulationConfig.from_file(config.config_path)
     simulation = Simulation.from_config(sim_config)
     regions = RegionMasks.from_size(sim_config.field.size)
@@ -193,6 +205,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         gain=config.gain,
         response_threshold=config.response_threshold,
         response_sensitivity=config.response_sensitivity,
+        pattern_voice_depth=config.pattern_voice_depth,
     )
 
     for _ in range(config.warmup_steps):
@@ -344,6 +357,8 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             "frequency_scale": config.frequency_scale,
             "response_threshold": config.response_threshold,
             "response_sensitivity": config.response_sensitivity,
+            "pattern_voice_depth": config.pattern_voice_depth,
+            "preset_name": config.preset_name,
             "pattern_guided_plasticity": config.pattern_guided_plasticity.enabled,
             "pattern_guided_output_gain": config.pattern_guided_plasticity.output_gain,
             "pattern_guided_assoc_gain": config.pattern_guided_plasticity.assoc_gain,
@@ -358,6 +373,28 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     }
     write_conversation_summary(config.output_summary, summary)
     return summary
+
+
+def apply_voice_conversation_preset(
+    config: VoiceConversationConfig,
+) -> VoiceConversationConfig:
+    if config.preset_name is None:
+        return config
+    preset = conversation_preset(config.preset_name)
+    return replace(
+        config,
+        gain=preset.gain,
+        response_seconds=preset.response_seconds,
+        min_response_seconds=preset.min_response_seconds,
+        max_response_seconds=preset.max_response_seconds,
+        response_seed_gain=preset.response_seed_gain,
+        response_seed_decay_seconds=preset.response_seed_decay_seconds,
+        output_plasticity_rate=preset.output_plasticity_rate,
+        output_frequency_plasticity_rate=preset.output_frequency_plasticity_rate,
+        response_threshold=preset.response_threshold,
+        response_sensitivity=preset.response_sensitivity,
+        pattern_voice_depth=preset.pattern_voice_depth,
+    )
 
 
 def summarize_conversation_session(
@@ -735,6 +772,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--frequency-scale", type=float, default=1.0)
     parser.add_argument("--response-threshold", type=float, default=0.0)
     parser.add_argument("--response-sensitivity", type=float, default=900.0)
+    parser.add_argument("--pattern-voice-depth", type=float, default=0.55)
+    parser.add_argument("--preset", choices=preset_names(), default=None)
     return parser
 
 
@@ -774,6 +813,8 @@ def main(argv: list[str] | None = None) -> int:
             frequency_scale=args.frequency_scale,
             response_threshold=args.response_threshold,
             response_sensitivity=args.response_sensitivity,
+            pattern_voice_depth=args.pattern_voice_depth,
+            preset_name=args.preset,
         )
     )
     print(

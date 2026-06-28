@@ -123,6 +123,9 @@ conversation-custom config output summary +inputs:
 live-conversation:
     uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0
 
+live-conversation-preset preset:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --preset {{preset}} --input-assoc-gain 0.8 --input-output-gain 0.0
+
 live-conversation-test:
     uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --max-turns 3
 

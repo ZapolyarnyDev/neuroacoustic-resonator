@@ -20,6 +20,11 @@ from neuroacoustic_resonator.audio.conversation import (
     VoiceConversationConfig,
     render_voice_conversation,
 )
+from neuroacoustic_resonator.audio.conversation_presets import (
+    ResponsiveConversationPreset,
+    conversation_preset,
+    preset_names,
+)
 from neuroacoustic_resonator.core.config import FieldConfigModel, SimulationConfig
 from neuroacoustic_resonator.core.field import (
     FieldConfig,
@@ -119,6 +124,7 @@ __all__ = [
     "RealtimeAudioEngine",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
+    "ResponsiveConversationPreset",
     "Simulation",
     "SimulationConfig",
     "SimulationFrame",
@@ -133,6 +139,7 @@ __all__ = [
     "compare_output_patterns",
     "compute_pattern_reinforcement_signals",
     "compute_regional_activity_metrics",
+    "conversation_preset",
     "export_diagnostics_artifacts",
     "extract_audio_input_features",
     "frame_to_visualization",
@@ -143,6 +150,7 @@ __all__ = [
     "region_fast_activity",
     "region_slow_activity",
     "output_pattern_signature",
+    "preset_names",
     "pattern_guided_plasticity_decision",
     "render_audio_demo",
     "render_voice_conversation",
