@@ -249,7 +249,7 @@ def write_synthetic_stimulus(path: Path, spec: SyntheticStimulusSpec) -> Path:
 
 
 def synthetic_stimulus_audio(spec: SyntheticStimulusSpec) -> np.ndarray:
-    sample_count = max(1, int(round(spec.duration_seconds * spec.sample_rate)))
+    sample_count = max(1, round(spec.duration_seconds * spec.sample_rate))
     time = np.arange(sample_count, dtype=np.float64) / spec.sample_rate
     envelope = raised_cosine_envelope(sample_count)
     if spec.kind == "tone":

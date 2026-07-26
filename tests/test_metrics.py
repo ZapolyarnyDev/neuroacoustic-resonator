@@ -6,8 +6,8 @@ import pytest
 from neuroacoustic_resonator import (
     FieldConfig,
     MetricsHistory,
-    RegionMasks,
     RegionalActivityTracker,
+    RegionMasks,
     Simulation,
     compute_regional_activity_metrics,
 )

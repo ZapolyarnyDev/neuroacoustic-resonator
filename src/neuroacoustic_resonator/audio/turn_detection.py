@@ -70,17 +70,17 @@ def detect_voice_turns(
     if audio.size == 0:
         return []
 
-    frame_size = max(1, int(round(config.frame_ms * sample_rate / 1000.0)))
-    hop_size = max(1, int(round(config.hop_ms * sample_rate / 1000.0)))
+    frame_size = max(1, round(config.frame_ms * sample_rate / 1000.0))
+    hop_size = max(1, round(config.hop_ms * sample_rate / 1000.0))
     rms = frame_rms(audio, frame_size=frame_size, hop_size=hop_size)
     if rms.size == 0:
         return []
 
     threshold = float(np.max(rms)) * config.threshold_ratio
     active = rms >= threshold
-    min_voice_frames = max(1, int(round(config.min_voice_ms / config.hop_ms)))
-    min_silence_frames = max(1, int(round(config.min_silence_ms / config.hop_ms)))
-    padding_samples = int(round(config.padding_ms * sample_rate / 1000.0))
+    min_voice_frames = max(1, round(config.min_voice_ms / config.hop_ms))
+    min_silence_frames = max(1, round(config.min_silence_ms / config.hop_ms))
+    padding_samples = round(config.padding_ms * sample_rate / 1000.0)
 
     turns: list[tuple[int, int]] = []
     start_frame: int | None = None

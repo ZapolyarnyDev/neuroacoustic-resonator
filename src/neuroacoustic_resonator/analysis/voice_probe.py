@@ -11,8 +11,8 @@ import numpy as np
 from scipy.io import wavfile  # type: ignore[import-untyped]
 
 from neuroacoustic_resonator.analysis.audio_input_run import (
-    AudioInputRunConfig,
     AudioInputRows,
+    AudioInputRunConfig,
     run_audio_input_simulation,
 )
 

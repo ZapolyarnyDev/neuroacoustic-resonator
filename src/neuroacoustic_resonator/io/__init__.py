@@ -15,7 +15,7 @@ __all__ = [
     "load_checkpoint_metadata",
     "load_field_state",
     "load_simulation_checkpoint",
+    "resume_simulation_checkpoint",
     "save_field_state",
     "save_simulation_checkpoint",
-    "resume_simulation_checkpoint",
 ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import importlib
 import threading
@@ -13,13 +14,13 @@ from typing import Any, cast
 import numpy as np
 from numpy.typing import NDArray
 
+from neuroacoustic_resonator.analysis.diagnostics_export import (
+    export_diagnostics_artifacts,
+)
 from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityMetrics,
     RegionalActivityTracker,
     compute_regional_activity_metrics,
-)
-from neuroacoustic_resonator.analysis.diagnostics_export import (
-    export_diagnostics_artifacts,
 )
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
@@ -479,10 +480,8 @@ def run_live_visualizer(config: LiveVisualizationConfig) -> int:
     visualizer.show()
     exit_code = int(app.exec())
     if config.diagnostics_output_path is not None:
-        try:
+        with contextlib.suppress(ValueError):
             export_diagnostics_artifacts(config.diagnostics_output_path)
-        except ValueError:
-            pass
     return exit_code
 
 

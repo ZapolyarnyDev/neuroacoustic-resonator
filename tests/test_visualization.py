@@ -3,8 +3,8 @@ import pytest
 
 from neuroacoustic_resonator import (
     FieldConfig,
-    RegionMasks,
     RegionalActivityTracker,
+    RegionMasks,
     Simulation,
 )
 from neuroacoustic_resonator.audio.input import AudioInputFeatures, WavInputDrive

@@ -41,7 +41,7 @@ def test_parse_sizes_accepts_spaces_and_commas() -> None:
 def test_write_results_rejects_unknown_suffix(tmp_path) -> None:
     result = benchmark_field_step(size=4, steps=1, warmup_steps=0)
 
-    with pytest.raises(ValueError, match="csv or .jsonl"):
+    with pytest.raises(ValueError, match=r"csv or \.jsonl"):
         write_benchmark_results([result], tmp_path / "benchmark.txt")
 
 

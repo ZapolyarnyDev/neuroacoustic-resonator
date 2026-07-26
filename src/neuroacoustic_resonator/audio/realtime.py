@@ -3,13 +3,13 @@ from __future__ import annotations
 import argparse
 import importlib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Protocol, cast
-
-from numpy.typing import NDArray
+from typing import Any, Protocol, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
 from neuroacoustic_resonator.audio.output import (
     ContinuousAudioRenderer,

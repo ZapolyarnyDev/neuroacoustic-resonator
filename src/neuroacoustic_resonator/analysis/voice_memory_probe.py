@@ -14,8 +14,8 @@ from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityTracker,
 )
 from neuroacoustic_resonator.analysis.output_patterns import (
-    OutputPatternSignature,
     PATTERN_FEATURE_KEYS,
+    OutputPatternSignature,
     compare_output_patterns,
     output_pattern_signature,
 )

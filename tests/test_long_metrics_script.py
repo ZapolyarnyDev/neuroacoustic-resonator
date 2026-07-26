@@ -48,7 +48,7 @@ def test_write_history_rejects_unknown_suffix(tmp_path) -> None:
     config_path.write_text("field:\n  size: 4\nsteps: 1\n", encoding="utf-8")
     history = collect_metrics(config_path)
 
-    with pytest.raises(ValueError, match="csv or .jsonl"):
+    with pytest.raises(ValueError, match=r"csv or \.jsonl"):
         write_metrics_history(history, tmp_path / "metrics.txt")
 
 

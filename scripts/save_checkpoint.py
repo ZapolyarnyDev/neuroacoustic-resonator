@@ -29,8 +29,8 @@ def _main() -> int:
     import argparse
 
     from neuroacoustic_resonator.core.config import SimulationConfig
-    from neuroacoustic_resonator.io.persistence import save_simulation_checkpoint
     from neuroacoustic_resonator.core.simulation import Simulation
+    from neuroacoustic_resonator.io.persistence import save_simulation_checkpoint
 
     parser = argparse.ArgumentParser(
         description="Run a simulation and save a checkpoint as NPZ + YAML.",

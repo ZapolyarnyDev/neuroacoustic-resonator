@@ -30,8 +30,8 @@ def test_step_keeps_state_finite_and_bounded() -> None:
     assert np.all(np.isfinite(state.frequency))
     assert np.all(np.isfinite(state.metabolite))
     assert np.all(np.isfinite(state.trace))
-    assert np.all((0.0 <= state.phase) & (state.phase < 2.0 * np.pi))
-    assert np.all((0.0 <= state.metabolite) & (state.metabolite <= 1.0))
+    assert np.all((state.phase >= 0.0) & (state.phase < 2.0 * np.pi))
+    assert np.all((state.metabolite >= 0.0) & (state.metabolite <= 1.0))
     assert np.all(state.trace >= 0.0)
 
 
@@ -67,7 +67,7 @@ def test_synchrony_metrics_are_bounded() -> None:
 
     assert local.shape == (8, 8)
     assert np.all(np.isfinite(local))
-    assert np.all((0.0 <= local) & (local <= 1.0))
+    assert np.all((local >= 0.0) & (local <= 1.0))
     assert 0.0 <= global_value <= 1.0
 
 

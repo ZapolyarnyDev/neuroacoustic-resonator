@@ -22,18 +22,18 @@ from neuroacoustic_resonator.analysis.pattern_plasticity import (
     pattern_guided_plasticity_decision,
     summarize_plasticity_decisions,
 )
+from neuroacoustic_resonator.audio.conversation_presets import (
+    conversation_preset,
+    preset_names,
+)
+from neuroacoustic_resonator.audio.diagnostics import summarize_pattern_audio
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
     extract_audio_input_features,
 )
-from neuroacoustic_resonator.audio.diagnostics import summarize_pattern_audio
 from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.output import (
     VoiceResponseSonificationRenderer,
-)
-from neuroacoustic_resonator.audio.conversation_presets import (
-    conversation_preset,
-    preset_names,
 )
 from neuroacoustic_resonator.audio.render import steps_for_duration
 from neuroacoustic_resonator.core.config import SimulationConfig
@@ -238,7 +238,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         frame = simulation.step()
         tracker.update(frame, regions, input_value=simulation.last_input_value)
 
-    pause_samples = int(round(config.pause_seconds * config.sample_rate))
+    pause_samples = round(config.pause_seconds * config.sample_rate)
     audio_frames: list[np.ndarray] = []
     utterances: list[dict[str, Any]] = []
 

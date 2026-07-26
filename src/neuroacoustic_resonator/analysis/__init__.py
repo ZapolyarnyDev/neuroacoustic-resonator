@@ -1,14 +1,14 @@
 from typing import TYPE_CHECKING
 
+from neuroacoustic_resonator.analysis.audio_input_run import (
+    AudioInputRunConfig,
+    run_audio_input_simulation,
+)
 from neuroacoustic_resonator.analysis.benchmark import (
     BenchmarkResult,
     benchmark_field_step,
     benchmark_sizes,
     write_benchmark_results,
-)
-from neuroacoustic_resonator.analysis.audio_input_run import (
-    AudioInputRunConfig,
-    run_audio_input_simulation,
 )
 from neuroacoustic_resonator.analysis.diagnostics_export import (
     export_diagnostics_artifacts,
@@ -24,8 +24,8 @@ from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityMetrics,
     RegionalActivityTracker,
     compute_regional_activity_metrics,
-    region_fast_activity,
     region_activity,
+    region_fast_activity,
     region_slow_activity,
 )
 from neuroacoustic_resonator.analysis.output_patterns import (
@@ -49,13 +49,13 @@ from neuroacoustic_resonator.analysis.reinforcement import (
     PatternReinforcementWeights,
     compute_pattern_reinforcement_signals,
 )
-from neuroacoustic_resonator.analysis.voice_probe import (
-    VoiceVsSilenceProbeConfig,
-    run_voice_vs_silence_probe,
-)
 from neuroacoustic_resonator.analysis.voice_memory_probe import (
     VoiceMemoryProbeConfig,
     run_voice_memory_probe,
+)
+from neuroacoustic_resonator.analysis.voice_probe import (
+    VoiceVsSilenceProbeConfig,
+    run_voice_vs_silence_probe,
 )
 
 if TYPE_CHECKING:
@@ -69,6 +69,7 @@ if TYPE_CHECKING:
 __all__ = [
     "AudioInputRunConfig",
     "BenchmarkResult",
+    "CalibrationStimulus",
     "ExperimentAnalysisConfig",
     "ExperimentRows",
     "ExperimentSummary",
@@ -83,27 +84,26 @@ __all__ = [
     "PropagationProbeConfig",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
-    "CalibrationStimulus",
     "SyntheticStimulusSpec",
-    "VoiceVsSilenceProbeConfig",
     "VoiceMemoryProbeConfig",
+    "VoiceVsSilenceProbeConfig",
     "benchmark_field_step",
     "benchmark_sizes",
     "compare_output_patterns",
     "compute_pattern_reinforcement_signals",
     "compute_regional_activity_metrics",
     "export_diagnostics_artifacts",
+    "output_pattern_signature",
+    "pattern_guided_plasticity_decision",
     "region_activity",
     "region_fast_activity",
     "region_slow_activity",
-    "output_pattern_signature",
-    "pattern_guided_plasticity_decision",
     "run_audio_input_simulation",
+    "run_experiment_suite",
     "run_pattern_calibration",
     "run_propagation_probe",
-    "run_voice_vs_silence_probe",
     "run_voice_memory_probe",
-    "run_experiment_suite",
+    "run_voice_vs_silence_probe",
     "summarize_plasticity_decisions",
     "write_benchmark_results",
 ]

@@ -18,7 +18,6 @@ from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation
 
-
 ExperimentRows = list[dict[str, Any]]
 ExperimentSummary = dict[str, Any]
 

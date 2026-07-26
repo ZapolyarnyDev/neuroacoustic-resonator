@@ -26,7 +26,7 @@ def test_render_output_frame_returns_bounded_audio() -> None:
     assert audio.shape == (128,)
     assert audio.dtype == np.float64
     assert np.all(np.isfinite(audio))
-    assert np.all((-1.0 <= audio) & (audio <= 1.0))
+    assert np.all((audio >= -1.0) & (audio <= 1.0))
 
 
 def test_render_output_frame_depends_on_output_region_phase() -> None:
@@ -82,8 +82,8 @@ def test_continuous_audio_renderer_returns_bounded_frames() -> None:
     assert second.shape == (64,)
     assert np.all(np.isfinite(first))
     assert np.all(np.isfinite(second))
-    assert np.all((-1.0 <= first) & (first <= 1.0))
-    assert np.all((-1.0 <= second) & (second <= 1.0))
+    assert np.all((first >= -1.0) & (first <= 1.0))
+    assert np.all((second >= -1.0) & (second <= 1.0))
 
 
 def test_continuous_audio_renderer_maintains_phase_between_frames() -> None:
@@ -319,7 +319,7 @@ def test_voice_response_sonification_uses_response_score() -> None:
     assert renderer.last_activation > 0.0
     assert renderer.envelope > 0.0
     assert np.max(np.abs(active)) > np.max(np.abs(quiet))
-    assert np.all((-1.0 <= active) & (active <= 1.0))
+    assert np.all((active >= -1.0) & (active <= 1.0))
 
 
 def test_voice_response_sonification_softens_activation_before_ceiling() -> None:
@@ -439,7 +439,7 @@ def test_voice_response_sonification_uses_output_field_contrast() -> None:
     )
 
     assert not np.allclose(baseline, textured)
-    assert np.all((-1.0 <= textured) & (textured <= 1.0))
+    assert np.all((textured >= -1.0) & (textured <= 1.0))
 
 
 def test_voice_response_sonification_uses_phase_texture_moments() -> None:

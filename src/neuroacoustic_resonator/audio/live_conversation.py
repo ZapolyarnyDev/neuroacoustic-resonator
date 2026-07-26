@@ -4,15 +4,17 @@ import argparse
 import importlib
 import json
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 import numpy as np
 
 from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
-from neuroacoustic_resonator.analysis.output_patterns import OutputPatternHistory
-from neuroacoustic_resonator.analysis.output_patterns import output_pattern_signature
+from neuroacoustic_resonator.analysis.output_patterns import (
+    OutputPatternHistory,
+    output_pattern_signature,
+)
 from neuroacoustic_resonator.analysis.pattern_plasticity import (
     PatternGuidedPlasticityConfig,
     PatternPlasticityDecision,
@@ -105,8 +107,8 @@ class LiveConversationConfig:
     min_energy_gain: float = 0.65
     max_energy_gain: float = 1.8
     preset_name: str | None = None
-    pattern_guided_plasticity: PatternGuidedPlasticityConfig = (
-        PatternGuidedPlasticityConfig()
+    pattern_guided_plasticity: PatternGuidedPlasticityConfig = field(
+        default_factory=PatternGuidedPlasticityConfig
     )
     start_rms: float = 0.015
     stop_rms: float = 0.008

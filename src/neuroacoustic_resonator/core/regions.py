@@ -58,7 +58,7 @@ class RegionMasks:
             msg = "edge_fraction must be between 0 and 0.5"
             raise ValueError(msg)
 
-        edge_width = max(1, int(round(size * edge_fraction)))
+        edge_width = max(1, round(size * edge_fraction))
         if size - 2 * edge_width < 1:
             msg = "edge_fraction leaves no association region"
             raise ValueError(msg)

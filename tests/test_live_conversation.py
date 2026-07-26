@@ -26,7 +26,7 @@ class FakeSoundDevice:
         channels: int,
         dtype: str,
         device: int | str | None = None,
-    ) -> "FakeInputStream":
+    ) -> FakeInputStream:
         del samplerate, dtype, device
         return FakeInputStream(self.blocks, blocksize=blocksize, channels=channels)
 
@@ -55,7 +55,7 @@ class FakeInputStream:
         self.channels = channels
         self.index = 0
 
-    def __enter__(self) -> "FakeInputStream":
+    def __enter__(self) -> FakeInputStream:
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
