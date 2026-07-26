@@ -11,15 +11,22 @@ lint:
     uv run ruff check .
 
 fmt:
+    uv run ruff check . --fix
     uv run ruff format .
 
+format-check:
+    uv run ruff format --check .
+
 typecheck:
-    uv run mypy src tests
+    uv run mypy
 
 test:
     uv run pytest
 
-check: lint typecheck test
+build:
+    uv build
+
+check: lint format-check typecheck test
 
 hooks-install:
     uv run pre-commit install
