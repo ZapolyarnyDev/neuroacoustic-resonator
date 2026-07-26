@@ -8,6 +8,25 @@ updates:
       cronjob: "0 9 * * 2,5"
       timezone: "Europe/Moscow"
     open-pull-requests-limit: 5
+    groups:
+      python-tooling:
+        patterns:
+          - "mypy"
+          - "pre-commit"
+          - "pytest"
+          - "ruff"
+          - "types-*"
+      python-runtime-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "mypy"
+          - "pre-commit"
+          - "pytest"
+          - "ruff"
+          - "types-*"
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -30,6 +49,9 @@ updates:
       cronjob: "20 9 * * 2,5"
       timezone: "Europe/Moscow"
     open-pull-requests-limit: 5
+    groups:
+      pre-commit-hooks:
+        patterns: ["*"]
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -41,6 +63,9 @@ updates:
       cronjob: "30 9 * * 2,5"
       timezone: "Europe/Moscow"
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
     commit-message:
       prefix: "chore"
       include: "scope"
