@@ -8,21 +8,7 @@ from neuroacoustic_resonator.audio.input import (
     write_audio_input_features_csv,
 )
 from neuroacoustic_resonator.audio.io import write_wav
-from neuroacoustic_resonator.audio.output import (
-    ContinuousAudioRenderer,
-    EventDrivenAudioRenderer,
-    GatedAudioRenderer,
-    SlopeTriggeredAudioRenderer,
-    StimulusCoupledAudioRenderer,
-    VoiceResponseSonificationRenderer,
-    render_output_frame,
-)
-from neuroacoustic_resonator.audio.realtime import (
-    RealtimeAudioConfig,
-    RealtimeAudioEngine,
-    play_realtime_audio,
-)
-from neuroacoustic_resonator.audio.render import render_audio_demo
+from neuroacoustic_resonator.audio.output import VoiceResponseSonificationRenderer
 from neuroacoustic_resonator.audio.turn_detection import (
     TurnDetectionConfig,
     detect_and_write_turns,
@@ -42,15 +28,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AudioInputFeatures",
-    "ContinuousAudioRenderer",
-    "EventDrivenAudioRenderer",
-    "GatedAudioRenderer",
     "LiveConversationConfig",
     "LiveConversationEngine",
-    "RealtimeAudioConfig",
-    "RealtimeAudioEngine",
-    "SlopeTriggeredAudioRenderer",
-    "StimulusCoupledAudioRenderer",
     "TurnDetectionConfig",
     "VoiceConversationConfig",
     "VoiceResponseSonificationRenderer",
@@ -59,9 +38,6 @@ __all__ = [
     "detect_voice_turns",
     "extract_audio_array_features",
     "extract_audio_input_features",
-    "play_realtime_audio",
-    "render_audio_demo",
-    "render_output_frame",
     "render_voice_conversation",
     "run_live_conversation",
     "write_audio_input_features_csv",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +22,6 @@ from neuroacoustic_resonator.analysis.pattern_plasticity import (
     pattern_guided_plasticity_decision,
     summarize_plasticity_decisions,
 )
-from neuroacoustic_resonator.audio.conversation_presets import (
-    conversation_preset,
-    preset_names,
-)
 from neuroacoustic_resonator.audio.diagnostics import summarize_pattern_audio
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
@@ -35,7 +31,7 @@ from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.output import (
     VoiceResponseSonificationRenderer,
 )
-from neuroacoustic_resonator.audio.render import steps_for_duration
+from neuroacoustic_resonator.audio.timing import steps_for_duration
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
@@ -103,7 +99,6 @@ class VoiceConversationConfig:
     target_response_rms: float = 0.1
     min_energy_gain: float = 0.65
     max_energy_gain: float = 1.8
-    preset_name: str | None = None
     pattern_guided_plasticity: PatternGuidedPlasticityConfig = field(
         default_factory=PatternGuidedPlasticityConfig
     )
@@ -208,12 +203,9 @@ class VoiceConversationConfig:
         if self.max_energy_gain < self.min_energy_gain:
             msg = "max_energy_gain must be at least min_energy_gain"
             raise ValueError(msg)
-        if self.preset_name is not None:
-            conversation_preset(self.preset_name)
 
 
 def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSummary:
-    config = apply_voice_conversation_preset(config)
     sim_config = SimulationConfig.from_file(config.config_path)
     simulation = Simulation.from_config(sim_config)
     regions = RegionMasks.from_size(sim_config.field.size)
@@ -389,7 +381,6 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             "target_response_rms": config.target_response_rms,
             "min_energy_gain": config.min_energy_gain,
             "max_energy_gain": config.max_energy_gain,
-            "preset_name": config.preset_name,
             "pattern_guided_plasticity": config.pattern_guided_plasticity.enabled,
             "pattern_guided_output_gain": config.pattern_guided_plasticity.output_gain,
             "pattern_guided_assoc_gain": config.pattern_guided_plasticity.assoc_gain,
@@ -404,35 +395,6 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     }
     write_conversation_summary(config.output_summary, summary)
     return summary
-
-
-def apply_voice_conversation_preset(
-    config: VoiceConversationConfig,
-) -> VoiceConversationConfig:
-    if config.preset_name is None:
-        return config
-    preset = conversation_preset(config.preset_name)
-    return replace(
-        config,
-        gain=preset.gain,
-        response_seconds=preset.response_seconds,
-        min_response_seconds=preset.min_response_seconds,
-        max_response_seconds=preset.max_response_seconds,
-        response_seed_gain=preset.response_seed_gain,
-        response_seed_decay_seconds=preset.response_seed_decay_seconds,
-        output_plasticity_rate=preset.output_plasticity_rate,
-        output_frequency_plasticity_rate=preset.output_frequency_plasticity_rate,
-        carrier_frequency=preset.carrier_frequency,
-        frequency_scale=preset.frequency_scale,
-        response_threshold=preset.response_threshold,
-        response_sensitivity=preset.response_sensitivity,
-        pattern_voice_depth=preset.pattern_voice_depth,
-        response_mix=preset.response_mix,
-        min_response_gain=preset.min_response_gain,
-        target_response_rms=preset.target_response_rms,
-        min_energy_gain=preset.min_energy_gain,
-        max_energy_gain=preset.max_energy_gain,
-    )
 
 
 def summarize_conversation_session(
@@ -729,7 +691,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--response-threshold", type=float, default=0.0)
     parser.add_argument("--response-sensitivity", type=float, default=900.0)
     parser.add_argument("--pattern-voice-depth", type=float, default=0.55)
-    parser.add_argument("--preset", choices=preset_names(), default=None)
     return parser
 
 
@@ -770,7 +731,6 @@ def main(argv: list[str] | None = None) -> int:
             response_threshold=args.response_threshold,
             response_sensitivity=args.response_sensitivity,
             pattern_voice_depth=args.pattern_voice_depth,
-            preset_name=args.preset,
         )
     )
     print(

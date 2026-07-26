@@ -72,14 +72,14 @@ voice-memory-probe-control input:
 audio-devices:
     uv run python scripts/run_live_conversation.py --list-devices
 
-live-conversation preset="textured":
-    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --preset {{preset}} --input-assoc-gain 0.8 --input-output-gain 0.0 --print-rms --record-dir experiments/audio/live-{{preset}}
+live-conversation:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --print-rms --record-dir experiments/audio/live
 
 live-conversation-levels:
     uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --max-turns 1 --print-rms --idle-timeout-seconds 8
 
-live-conversation-custom preset start_rms stop_rms:
-    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --preset {{preset}} --start-rms {{start_rms}} --stop-rms {{stop_rms}} --input-assoc-gain 0.8 --input-output-gain 0.0 --print-rms --record-dir experiments/audio/live-{{preset}}
+live-conversation-custom start_rms stop_rms:
+    uv run python scripts/run_live_conversation.py --config configs/field_only.yaml --start-rms {{start_rms}} --stop-rms {{stop_rms}} --input-assoc-gain 0.8 --input-output-gain 0.0 --print-rms --record-dir experiments/audio/live
 
 conversation input:
     uv run python scripts/run_conversation.py --config configs/field_only.yaml --inputs {{input}} --output experiments/audio/voice-conversation.wav --summary experiments/logs/voice_conversation_summary.json --input-assoc-gain 0.8 --input-output-gain 0.0
@@ -102,16 +102,3 @@ benchmark:
 
 diagnostics-export input:
     uv run python scripts/export_diagnostics.py --input {{input}}
-
-# Legacy audio demos: useful for regression checks, not the target user path.
-legacy-audio-demo:
-    uv run python scripts/render_audio_demo.py --config configs/audio_demo.yaml --duration-seconds 10 --output experiments/audio/audio-demo.wav
-
-legacy-audio-live mode="slope":
-    uv run python scripts/play_audio_demo.py --config configs/responsive_audio.yaml --audio-mode {{mode}}
-
-legacy-live-field:
-    uv run python scripts/live_field.py --config configs/field_only.yaml --interval-ms 30 --steps-per-update 2
-
-legacy-live-wav input:
-    uv run python scripts/live_field.py --config configs/field_only.yaml --input-wav {{input}} --interval-ms 30 --steps-per-update 2

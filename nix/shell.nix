@@ -4,19 +4,8 @@ let
   runtimeLibs = with pkgs; [
     stdenv.cc.cc.lib
     zlib
-    libGL
-    libxkbcommon
-    wayland
     portaudio
     alsa-lib
-    xorg.libX11
-    xorg.libXext
-    xorg.libxcb
-    xorg.libXrender
-    xorg.libXrandr
-    xorg.libXi
-    xorg.libXcursor
-    xorg.libXfixes
   ];
 in
 pkgs.mkShell {

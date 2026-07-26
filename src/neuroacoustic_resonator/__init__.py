@@ -43,11 +43,6 @@ from neuroacoustic_resonator.audio.conversation import (
     VoiceConversationConfig,
     render_voice_conversation,
 )
-from neuroacoustic_resonator.audio.conversation_presets import (
-    ResponsiveConversationPreset,
-    conversation_preset,
-    preset_names,
-)
 from neuroacoustic_resonator.audio.input import (
     AudioInputFeatures,
     WavInputDrive,
@@ -55,20 +50,6 @@ from neuroacoustic_resonator.audio.input import (
     write_audio_input_features_csv,
 )
 from neuroacoustic_resonator.audio.io import write_wav
-from neuroacoustic_resonator.audio.output import (
-    ContinuousAudioRenderer,
-    EventDrivenAudioRenderer,
-    GatedAudioRenderer,
-    SlopeTriggeredAudioRenderer,
-    StimulusCoupledAudioRenderer,
-    render_output_frame,
-)
-from neuroacoustic_resonator.audio.realtime import (
-    RealtimeAudioConfig,
-    RealtimeAudioEngine,
-    play_realtime_audio,
-)
-from neuroacoustic_resonator.audio.render import render_audio_demo
 from neuroacoustic_resonator.core.config import FieldConfigModel, SimulationConfig
 from neuroacoustic_resonator.core.field import (
     FieldConfig,
@@ -90,11 +71,6 @@ from neuroacoustic_resonator.io.persistence import (
     save_field_state,
     save_simulation_checkpoint,
 )
-from neuroacoustic_resonator.viz.live import (
-    LiveVisualizationConfig,
-    VisualizationFrame,
-    frame_to_visualization,
-)
 from neuroacoustic_resonator.viz.preview import save_field_preview, save_phase_preview
 
 __all__ = [
@@ -102,14 +78,10 @@ __all__ = [
     "AudioInputRunConfig",
     "CalibrationStimulus",
     "CheckpointPaths",
-    "ContinuousAudioRenderer",
-    "EventDrivenAudioRenderer",
     "FieldConfig",
     "FieldConfigModel",
     "FieldMetrics",
     "FieldState",
-    "GatedAudioRenderer",
-    "LiveVisualizationConfig",
     "MetricsHistory",
     "OscillatorField",
     "OutputPatternHistory",
@@ -119,42 +91,30 @@ __all__ = [
     "PatternPlasticityDecision",
     "PatternReinforcementSignals",
     "PatternReinforcementWeights",
-    "RealtimeAudioConfig",
-    "RealtimeAudioEngine",
     "RegionMasks",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
-    "ResponsiveConversationPreset",
     "Simulation",
     "SimulationConfig",
     "SimulationFrame",
-    "SlopeTriggeredAudioRenderer",
-    "StimulusCoupledAudioRenderer",
     "SyntheticInputConfig",
     "SyntheticInputDrive",
     "SyntheticStimulusSpec",
-    "VisualizationFrame",
     "VoiceConversationConfig",
     "WavInputDrive",
     "checkpoint_paths",
     "compare_output_patterns",
     "compute_pattern_reinforcement_signals",
     "compute_regional_activity_metrics",
-    "conversation_preset",
     "export_diagnostics_artifacts",
     "extract_audio_input_features",
-    "frame_to_visualization",
     "load_field_state",
     "load_simulation_checkpoint",
     "output_pattern_signature",
     "pattern_guided_plasticity_decision",
-    "play_realtime_audio",
-    "preset_names",
     "region_activity",
     "region_fast_activity",
     "region_slow_activity",
-    "render_audio_demo",
-    "render_output_frame",
     "render_voice_conversation",
     "run_audio_input_simulation",
     "run_pattern_calibration",

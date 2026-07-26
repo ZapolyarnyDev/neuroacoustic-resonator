@@ -4,7 +4,7 @@ import argparse
 import importlib
 import json
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -24,10 +24,6 @@ from neuroacoustic_resonator.audio.conversation import (
     drive_utterance,
     render_field_response,
 )
-from neuroacoustic_resonator.audio.conversation_presets import (
-    conversation_preset,
-    preset_names,
-)
 from neuroacoustic_resonator.audio.diagnostics import summarize_pattern_audio
 from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
@@ -37,7 +33,7 @@ from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.output import (
     VoiceResponseSonificationRenderer,
 )
-from neuroacoustic_resonator.audio.render import steps_for_duration
+from neuroacoustic_resonator.audio.timing import steps_for_duration
 from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation
@@ -106,7 +102,6 @@ class LiveConversationConfig:
     target_response_rms: float = 0.1
     min_energy_gain: float = 0.65
     max_energy_gain: float = 1.8
-    preset_name: str | None = None
     pattern_guided_plasticity: PatternGuidedPlasticityConfig = field(
         default_factory=PatternGuidedPlasticityConfig
     )
@@ -204,8 +199,6 @@ class LiveConversationConfig:
         if self.max_energy_gain < self.min_energy_gain:
             msg = "max_energy_gain must be at least min_energy_gain"
             raise ValueError(msg)
-        if self.preset_name is not None:
-            conversation_preset(self.preset_name)
         if self.start_rms < 0.0:
             msg = "start_rms must be non-negative"
             raise ValueError(msg)
@@ -242,7 +235,7 @@ class LiveTurnResult:
 
 class LiveConversationEngine:
     def __init__(self, config: LiveConversationConfig) -> None:
-        self.config = apply_live_conversation_preset(config)
+        self.config = config
         config = self.config
         sim_config = SimulationConfig.from_file(config.config_path)
         self.simulation = Simulation.from_config(sim_config)
@@ -420,35 +413,6 @@ def response_duration_for_live_input(
     )
 
 
-def apply_live_conversation_preset(
-    config: LiveConversationConfig,
-) -> LiveConversationConfig:
-    if config.preset_name is None:
-        return config
-    preset = conversation_preset(config.preset_name)
-    return replace(
-        config,
-        gain=preset.gain,
-        response_seconds=preset.response_seconds,
-        min_response_seconds=preset.min_response_seconds,
-        max_response_seconds=preset.max_response_seconds,
-        response_seed_gain=preset.response_seed_gain,
-        response_seed_decay_seconds=preset.response_seed_decay_seconds,
-        output_plasticity_rate=preset.output_plasticity_rate,
-        output_frequency_plasticity_rate=preset.output_frequency_plasticity_rate,
-        carrier_frequency=preset.carrier_frequency,
-        frequency_scale=preset.frequency_scale,
-        response_threshold=preset.response_threshold,
-        response_sensitivity=preset.response_sensitivity,
-        pattern_voice_depth=preset.pattern_voice_depth,
-        response_mix=preset.response_mix,
-        min_response_gain=preset.min_response_gain,
-        target_response_rms=preset.target_response_rms,
-        min_energy_gain=preset.min_energy_gain,
-        max_energy_gain=preset.max_energy_gain,
-    )
-
-
 def record_utterance(
     config: LiveConversationConfig,
     sounddevice: SoundDeviceLike,
@@ -543,7 +507,6 @@ def live_config_parameters(config: LiveConversationConfig) -> dict[str, Any]:
         "max_response_seconds": config.max_response_seconds,
         "output_plasticity_rate": config.output_plasticity_rate,
         "output_frequency_plasticity_rate": config.output_frequency_plasticity_rate,
-        "preset_name": config.preset_name,
         "carrier_frequency": config.carrier_frequency,
         "frequency_scale": config.frequency_scale,
         "pattern_voice_depth": config.pattern_voice_depth,
@@ -688,7 +651,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-plasticity-rate", type=float, default=0.02)
     parser.add_argument("--output-frequency-plasticity-rate", type=float, default=0.004)
     parser.add_argument("--gain", type=float, default=0.35)
-    parser.add_argument("--preset", choices=preset_names(), default=None)
     parser.add_argument("--pattern-voice-depth", type=float, default=0.55)
     parser.add_argument("--start-rms", type=float, default=0.015)
     parser.add_argument("--stop-rms", type=float, default=0.008)
@@ -747,7 +709,6 @@ def main(argv: list[str] | None = None) -> int:
                 output_plasticity_rate=args.output_plasticity_rate,
                 output_frequency_plasticity_rate=args.output_frequency_plasticity_rate,
                 gain=args.gain,
-                preset_name=args.preset,
                 pattern_voice_depth=args.pattern_voice_depth,
                 start_rms=args.start_rms,
                 stop_rms=args.stop_rms,

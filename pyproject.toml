@@ -9,8 +9,6 @@ dependencies = [
     "numba>=0.66.0",
     "numpy>=2.4.6",
     "pydantic>=2.13.4",
-    "pyqtgraph>=0.14.0",
-    "pyside6>=6.11.1",
     "pyyaml>=6.0.3",
     "scipy>=1.18.0",
     "sounddevice>=0.5.5",
@@ -53,7 +51,6 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "src/neuroacoustic_resonator/audio/live_conversation.py" = ["BLE001"]
-"src/neuroacoustic_resonator/viz/live.py" = ["BLE001"]
 
 [tool.mypy]
 python_version = "3.13"
