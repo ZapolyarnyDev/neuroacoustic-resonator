@@ -1,7 +1,7 @@
 [project]
 name = "neuroacoustic-resonator"
 version = "0.1.0"
-description = "Self-organizing neuroacoustic system that transforms live sound into evolving oscillator-field dynamics"
+description = "A self-organizing neuroacoustic system that transforms live sound into evolving oscillator-field dynamics and responds through emergent synchronization"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
