@@ -10,6 +10,11 @@ from neuroacoustic_resonator.protocol.codec import (
     read_protocol_jsonl,
     write_protocol_jsonl,
 )
+from neuroacoustic_resonator.protocol.consumer import (
+    CaptureConsumer,
+    ProtocolConsumer,
+    ProtocolPipeline,
+)
 from neuroacoustic_resonator.protocol.model import (
     PROTOCOL_VERSION,
     ActivePattern,
@@ -25,13 +30,16 @@ from neuroacoustic_resonator.protocol.model import (
 __all__ = [
     "PROTOCOL_VERSION",
     "ActivePattern",
+    "CaptureConsumer",
     "FieldSnapshot",
     "PatternSnapshot",
     "PatternTransition",
     "PatternTransitionKind",
+    "ProtocolConsumer",
     "ProtocolDecodeError",
     "ProtocolJsonlReader",
     "ProtocolJsonlWriter",
+    "ProtocolPipeline",
     "ProtocolReplay",
     "RegionName",
     "RegionSnapshot",

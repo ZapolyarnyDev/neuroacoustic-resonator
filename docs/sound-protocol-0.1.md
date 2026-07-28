@@ -71,3 +71,10 @@ invalid.
 JSONL recordings contain exactly one complete protocol frame per line. Blank
 lines are invalid. A recording can be replayed repeatedly without constructing
 or advancing a field simulation.
+
+## Consumers
+
+A protocol consumer receives complete frames through a single `consume`
+operation. `ProtocolPipeline` sends each frame to every attached consumer in
+registration order. It accepts any iterable of frames, so live encoding and
+JSONL replay follow the same path.

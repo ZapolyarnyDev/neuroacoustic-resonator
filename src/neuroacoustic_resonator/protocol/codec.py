@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import TextIO, cast
 
@@ -171,7 +171,7 @@ class ProtocolReplay:
 
 def write_protocol_jsonl(
     path: str | Path,
-    frames: Iterator[SoundProtocolFrame],
+    frames: Iterable[SoundProtocolFrame],
 ) -> Path:
     destination = Path(path)
     with destination.open("w", encoding="utf-8", newline="\n") as stream:
