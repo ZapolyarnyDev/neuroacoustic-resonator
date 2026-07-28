@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 
+from neuroacoustic_resonator.analysis.protocol_features import pattern_snapshot
 from neuroacoustic_resonator.core.field import FieldState
 from neuroacoustic_resonator.core.regions import RegionMasks
 
@@ -145,28 +146,19 @@ def output_pattern_features(
     state: FieldState,
     regions: RegionMasks,
 ) -> dict[str, float]:
-    mask = regions.output
-    if not np.any(mask):
-        return {key: 0.0 for key in PATTERN_FEATURE_KEYS}
-
-    phase = state.phase[mask]
-    order = np.mean(np.exp(1j * phase))
-    second_order = np.mean(np.exp(2j * phase))
-    third_order = np.mean(np.exp(3j * phase))
-    synchrony = float(np.abs(order))
-    phase_order_2 = float(np.abs(second_order))
-    phase_order_3 = float(np.abs(third_order))
+    snapshot = pattern_snapshot(state, regions.output)
+    synchrony = snapshot.phase_order_1
+    phase_order_2 = snapshot.phase_order_2
+    phase_order_3 = snapshot.phase_order_3
     phase_spread = float(np.clip(1.0 - synchrony, 0.0, 1.0))
-    trace_values = state.trace[mask]
-    metabolite_stress_values = 1.0 - state.metabolite[mask]
-    trace = float(np.clip(np.mean(trace_values), 0.0, 1.0))
-    trace_contrast = float(np.clip(np.std(trace_values), 0.0, 1.0))
-    metabolite_stress = float(np.clip(np.mean(metabolite_stress_values), 0.0, 1.0))
-    metabolite_contrast = float(np.clip(np.std(metabolite_stress_values), 0.0, 1.0))
-    frequency_spread = float(np.clip(np.std(state.frequency[mask]), 0.0, 1.0))
-    frequency_mean = float(np.clip(np.mean(state.frequency[mask]), 0.0, 2.0) / 2.0)
-    trace_phase_lock = weighted_phase_lock(phase, trace_values)
-    metabolite_phase_lock = weighted_phase_lock(phase, metabolite_stress_values)
+    trace = float(np.clip(snapshot.trace_mean, 0.0, 1.0))
+    trace_contrast = float(np.clip(snapshot.trace_contrast, 0.0, 1.0))
+    metabolite_stress = snapshot.metabolite_stress
+    metabolite_contrast = snapshot.metabolite_contrast
+    frequency_spread = float(np.clip(snapshot.frequency_spread, 0.0, 1.0))
+    frequency_mean = float(np.clip(snapshot.frequency_mean, 0.0, 2.0) / 2.0)
+    trace_phase_lock = snapshot.trace_phase_lock
+    metabolite_phase_lock = snapshot.metabolite_phase_lock
     brightness = float(
         np.clip(
             0.28 * synchrony
@@ -206,14 +198,6 @@ def output_pattern_features(
         "brightness": brightness,
         "roughness": roughness,
     }
-
-
-def weighted_phase_lock(phase: np.ndarray, weights: np.ndarray) -> float:
-    clipped = np.clip(weights, 0.0, None)
-    weight_sum = float(np.sum(clipped))
-    if weight_sum <= 1e-12:
-        return 0.0
-    return float(np.abs(np.sum(clipped * np.exp(1j * phase)) / weight_sum))
 
 
 def classify_output_pattern(features: dict[str, float]) -> tuple[str, float]:
