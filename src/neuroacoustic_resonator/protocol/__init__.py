@@ -1,3 +1,15 @@
+from neuroacoustic_resonator.protocol.codec import (
+    ProtocolDecodeError,
+    ProtocolJsonlReader,
+    ProtocolJsonlWriter,
+    ProtocolReplay,
+    decode_frame,
+    encode_frame,
+    frame_from_dict,
+    frame_to_dict,
+    read_protocol_jsonl,
+    write_protocol_jsonl,
+)
 from neuroacoustic_resonator.protocol.model import (
     PROTOCOL_VERSION,
     ActivePattern,
@@ -17,7 +29,17 @@ __all__ = [
     "PatternSnapshot",
     "PatternTransition",
     "PatternTransitionKind",
+    "ProtocolDecodeError",
+    "ProtocolJsonlReader",
+    "ProtocolJsonlWriter",
+    "ProtocolReplay",
     "RegionName",
     "RegionSnapshot",
     "SoundProtocolFrame",
+    "decode_frame",
+    "encode_frame",
+    "frame_from_dict",
+    "frame_to_dict",
+    "read_protocol_jsonl",
+    "write_protocol_jsonl",
 ]

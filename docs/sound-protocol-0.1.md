@@ -60,3 +60,14 @@ in the normalized pattern vector.
 The protocol does not contain the input stimulus label or any ground-truth
 classification. Brightness, roughness, pitch, gain, rhythm, and other acoustic
 controls belong to protocol consumers.
+
+## JSON and replay
+
+The JSON representation uses the field names from the data model and rejects
+missing or unknown fields. Every document must declare version `0.1`. Numbers
+must be finite JSON numbers; `NaN`, positive infinity, and negative infinity are
+invalid.
+
+JSONL recordings contain exactly one complete protocol frame per line. Blank
+lines are invalid. A recording can be replayed repeatedly without constructing
+or advancing a field simulation.
