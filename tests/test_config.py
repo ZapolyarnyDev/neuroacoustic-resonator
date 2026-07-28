@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from neuroacoustic_resonator import Simulation, SimulationConfig
+from neuroacoustic_resonator import SimulationConfig
 
 
 def test_simulation_config_loads_from_yaml(tmp_path) -> None:
@@ -27,6 +27,8 @@ preview_path: outputs/test-preview.png
     assert config.field.memory_drive_assoc_gain == 1.5
     assert config.field.metabolite_diffusion == 0.0
     assert not config.synthetic_input.enabled
+    assert config.protocol.frame_interval_steps == 1
+    assert config.protocol.confirmation_frames == 3
     assert config.steps == 5
     assert config.preview_path.parts == ("outputs", "test-preview.png")
 
@@ -50,7 +52,7 @@ steps: 2
         encoding="utf-8",
     )
 
-    simulation = Simulation.from_config_file(config_path)
+    simulation = SimulationConfig.from_file(config_path).create_simulation()
     frame = simulation.run(2)[-1]
 
     assert frame.metrics.step == 2
@@ -70,4 +72,48 @@ def test_project_configs_load(config_name) -> None:
     config = SimulationConfig.from_file(f"configs/{config_name}")
 
     assert config.field.size > 1
+    assert config.protocol.frame_interval_steps >= 1
     assert config.steps >= 1
+
+
+def test_protocol_config_creates_runtime_configs(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+protocol:
+  frame_interval_steps: 4
+  activity_threshold: 0.1
+  confidence_threshold: 0.5
+  confirmation_frames: 5
+  minimum_active_frames: 6
+  hysteresis_margin: 0.2
+  novelty_threshold: 0.3
+""",
+        encoding="utf-8",
+    )
+
+    protocol = SimulationConfig.from_file(config_path).protocol
+    encoder = protocol.to_encoder_config()
+    detector = protocol.to_detector_config()
+
+    assert encoder.frame_interval_steps == 4
+    assert detector.activity_threshold == 0.1
+    assert detector.confidence_threshold == 0.5
+    assert detector.confirmation_frames == 5
+    assert detector.minimum_active_frames == 6
+    assert detector.hysteresis_margin == 0.2
+    assert detector.novelty_threshold == 0.3
+
+
+def test_protocol_config_rejects_invalid_values(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+protocol:
+  frame_interval_steps: 0
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        SimulationConfig.from_file(config_path)

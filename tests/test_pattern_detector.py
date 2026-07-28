@@ -2,6 +2,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from neuroacoustic_resonator.analysis.pattern_detector import (
+    PatternDetectorConfig,
     TemporalPatternDetector,
     pattern_novelty,
 )
@@ -46,11 +47,13 @@ def detector(**overrides: float | int) -> TemporalPatternDetector:
     }
     values.update(overrides)
     return TemporalPatternDetector(
-        confidence_threshold=float(values["confidence_threshold"]),
-        confirmation_frames=int(values["confirmation_frames"]),
-        minimum_active_frames=int(values["minimum_active_frames"]),
-        hysteresis_margin=float(values["hysteresis_margin"]),
-        novelty_threshold=float(values["novelty_threshold"]),
+        PatternDetectorConfig(
+            confidence_threshold=float(values["confidence_threshold"]),
+            confirmation_frames=int(values["confirmation_frames"]),
+            minimum_active_frames=int(values["minimum_active_frames"]),
+            hysteresis_margin=float(values["hysteresis_margin"]),
+            novelty_threshold=float(values["novelty_threshold"]),
+        )
     )
 
 

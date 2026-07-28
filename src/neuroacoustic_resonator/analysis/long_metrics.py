@@ -4,8 +4,7 @@ import argparse
 from pathlib import Path
 
 from neuroacoustic_resonator.analysis.metrics import MetricsHistory
-from neuroacoustic_resonator.core.config import SimulationConfig
-from neuroacoustic_resonator.core.simulation import Simulation
+from neuroacoustic_resonator.configuration import SimulationConfig
 
 
 def default_metrics_output_path(
@@ -35,7 +34,7 @@ def collect_metrics(
 
     config = SimulationConfig.from_file(config_path)
     total_steps = steps or config.steps
-    simulation = Simulation.from_config(config)
+    simulation = config.create_simulation()
     history = MetricsHistory([simulation.snapshot().metrics])
 
     for _ in range(total_steps):

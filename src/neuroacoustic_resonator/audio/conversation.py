@@ -32,7 +32,7 @@ from neuroacoustic_resonator.audio.output import (
     VoiceResponseSonificationRenderer,
 )
 from neuroacoustic_resonator.audio.timing import steps_for_duration
-from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
 
@@ -207,7 +207,7 @@ class VoiceConversationConfig:
 
 def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSummary:
     sim_config = SimulationConfig.from_file(config.config_path)
-    simulation = Simulation.from_config(sim_config)
+    simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
     tracker = RegionalActivityTracker()
     renderer = VoiceResponseSonificationRenderer(

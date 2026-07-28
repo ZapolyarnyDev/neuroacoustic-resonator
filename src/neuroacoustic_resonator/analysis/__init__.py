@@ -36,6 +36,7 @@ from neuroacoustic_resonator.analysis.output_patterns import (
 )
 from neuroacoustic_resonator.analysis.pattern_detector import (
     PatternClassification,
+    PatternDetectorConfig,
     TemporalPatternDetector,
     classify_pattern,
     pattern_novelty,
@@ -84,6 +85,7 @@ __all__ = [
     "OutputPatternSignature",
     "PatternCalibrationConfig",
     "PatternClassification",
+    "PatternDetectorConfig",
     "PatternGuidedPlasticityConfig",
     "PatternPlasticityDecision",
     "PatternReinforcementSignals",

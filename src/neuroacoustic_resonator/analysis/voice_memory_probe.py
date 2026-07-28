@@ -24,7 +24,7 @@ from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
     extract_audio_input_features,
 )
-from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
 
@@ -186,7 +186,7 @@ def collect_voice_memory_rows(
     *,
     features: AudioInputFeatures,
 ) -> VoiceMemoryRows:
-    simulation = Simulation.from_config(sim_config)
+    simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
     tracker = RegionalActivityTracker()
     drive = WavInputDrive(

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
-from neuroacoustic_resonator.core.config import SimulationConfig
 from neuroacoustic_resonator.core.field import (
     FieldConfig,
     FieldMetrics,
@@ -48,17 +46,6 @@ class Simulation:
         )
         self.step_index = 0
         self.last_input_value = 0.0
-
-    @classmethod
-    def from_config(cls, config: SimulationConfig) -> Simulation:
-        return cls(
-            config=config.to_field_config(),
-            synthetic_input=config.to_synthetic_input_config(),
-        )
-
-    @classmethod
-    def from_config_file(cls, path: str | Path) -> Simulation:
-        return cls.from_config(SimulationConfig.from_file(path))
 
     def _configure_memory_drive_regions(self, regions: RegionMasks) -> None:
         self.field.set_memory_drive_gain(

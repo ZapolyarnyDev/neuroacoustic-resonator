@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from neuroacoustic_resonator.analysis.metrics import compute_regional_activity_metrics
-from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation
 
@@ -50,7 +50,7 @@ class ExperimentAnalysisConfig:
 def run_experiment_suite(config: ExperimentAnalysisConfig) -> ExperimentSummary:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     sim_config = SimulationConfig.from_file(config.config_path)
-    field_config = sim_config.to_field_config()
+    field_config = sim_config.field.to_runtime()
     regions = RegionMasks.from_size(field_config.size)
 
     response_rows, response_summary = run_response_stability(

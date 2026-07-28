@@ -43,6 +43,18 @@ frames.
 `PatternTransition` is present only when the accepted pattern starts, changes,
 or ends. Continuous pattern state is carried separately in `active_pattern`.
 
+## Cadence and detection
+
+`frame_interval_steps` selects frames by absolute simulation step modulo the
+configured interval. Pattern age and confirmation durations are measured in
+emitted protocol frames.
+
+`activity_threshold` and `confidence_threshold` decide whether an observation
+can become a candidate. `confirmation_frames` controls temporal confirmation,
+`minimum_active_frames` prevents premature replacement, `hysteresis_margin`
+suppresses weak label changes, and `novelty_threshold` marks substantial changes
+in the normalized pattern vector.
+
 ## Boundaries
 
 The protocol does not contain the input stimulus label or any ground-truth

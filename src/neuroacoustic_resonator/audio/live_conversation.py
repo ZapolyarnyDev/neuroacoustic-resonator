@@ -34,9 +34,8 @@ from neuroacoustic_resonator.audio.output import (
     VoiceResponseSonificationRenderer,
 )
 from neuroacoustic_resonator.audio.timing import steps_for_duration
-from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
-from neuroacoustic_resonator.core.simulation import Simulation
 
 
 class InputStreamLike(Protocol):
@@ -238,7 +237,7 @@ class LiveConversationEngine:
         self.config = config
         config = self.config
         sim_config = SimulationConfig.from_file(config.config_path)
-        self.simulation = Simulation.from_config(sim_config)
+        self.simulation = sim_config.create_simulation()
         self.regions = RegionMasks.from_size(sim_config.field.size)
         self.tracker = RegionalActivityTracker()
         self.renderer = VoiceResponseSonificationRenderer(

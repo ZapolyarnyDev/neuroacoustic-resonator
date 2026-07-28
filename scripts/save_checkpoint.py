@@ -28,8 +28,7 @@ def _main() -> int:
 
     import argparse
 
-    from neuroacoustic_resonator.core.config import SimulationConfig
-    from neuroacoustic_resonator.core.simulation import Simulation
+    from neuroacoustic_resonator.configuration import SimulationConfig
     from neuroacoustic_resonator.io.persistence import save_simulation_checkpoint
 
     parser = argparse.ArgumentParser(
@@ -49,7 +48,7 @@ def _main() -> int:
         raise ValueError(msg)
 
     config = SimulationConfig.from_file(args.config)
-    simulation = Simulation.from_config(config)
+    simulation = config.create_simulation()
     simulation.run(args.steps)
     paths = save_simulation_checkpoint(
         args.output,

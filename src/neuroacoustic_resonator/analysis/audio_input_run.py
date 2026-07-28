@@ -18,9 +18,9 @@ from neuroacoustic_resonator.audio.input import (
     WavInputDrive,
     extract_audio_input_features,
 )
-from neuroacoustic_resonator.core.config import SimulationConfig
+from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
-from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
+from neuroacoustic_resonator.core.simulation import SimulationFrame
 
 AudioInputRows = list[dict[str, Any]]
 AudioInputSummary = dict[str, Any]
@@ -66,7 +66,7 @@ class AudioInputRunConfig:
 
 def run_audio_input_simulation(config: AudioInputRunConfig) -> AudioInputSummary:
     sim_config = SimulationConfig.from_file(config.config_path)
-    simulation = Simulation.from_config(sim_config)
+    simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
     tracker = RegionalActivityTracker()
     features = extract_audio_input_features(

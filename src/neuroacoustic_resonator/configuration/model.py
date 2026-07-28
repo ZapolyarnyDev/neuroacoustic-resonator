@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from neuroacoustic_resonator.core.field import FieldConfig
 from neuroacoustic_resonator.core.input_drive import InputMode, SyntheticInputConfig
+from neuroacoustic_resonator.core.simulation import Simulation
+
+if TYPE_CHECKING:
+    from neuroacoustic_resonator.analysis.pattern_detector import (
+        PatternDetectorConfig,
+    )
+    from neuroacoustic_resonator.encoding import ProtocolEncoderConfig
 
 
 class FieldConfigModel(BaseModel):
@@ -52,7 +59,7 @@ class FieldConfigModel(BaseModel):
             raise ValueError(msg)
         return self
 
-    def to_field_config(self) -> FieldConfig:
+    def to_runtime(self) -> FieldConfig:
         return FieldConfig(**self.model_dump())
 
 
@@ -66,8 +73,41 @@ class SyntheticInputConfigModel(BaseModel):
     duty_cycle: float = Field(default=0.25, gt=0.0, le=1.0)
     seed: int | None = None
 
-    def to_input_config(self) -> SyntheticInputConfig:
+    def to_runtime(self) -> SyntheticInputConfig:
         return SyntheticInputConfig(**self.model_dump())
+
+
+class ProtocolConfigModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    frame_interval_steps: int = Field(default=1, ge=1)
+    activity_threshold: float = Field(default=0.025, gt=0.0, le=1.0)
+    confidence_threshold: float = Field(default=0.35, ge=0.0, le=1.0)
+    confirmation_frames: int = Field(default=3, ge=1)
+    minimum_active_frames: int = Field(default=3, ge=1)
+    hysteresis_margin: float = Field(default=0.08, ge=0.0, le=1.0)
+    novelty_threshold: float = Field(default=0.15, ge=0.0, le=1.0)
+
+    def to_encoder_config(self) -> ProtocolEncoderConfig:
+        from neuroacoustic_resonator.encoding import ProtocolEncoderConfig
+
+        return ProtocolEncoderConfig(
+            frame_interval_steps=self.frame_interval_steps,
+        )
+
+    def to_detector_config(self) -> PatternDetectorConfig:
+        from neuroacoustic_resonator.analysis.pattern_detector import (
+            PatternDetectorConfig,
+        )
+
+        return PatternDetectorConfig(
+            activity_threshold=self.activity_threshold,
+            confidence_threshold=self.confidence_threshold,
+            confirmation_frames=self.confirmation_frames,
+            minimum_active_frames=self.minimum_active_frames,
+            hysteresis_margin=self.hysteresis_margin,
+            novelty_threshold=self.novelty_threshold,
+        )
 
 
 class SimulationConfig(BaseModel):
@@ -77,14 +117,15 @@ class SimulationConfig(BaseModel):
     synthetic_input: SyntheticInputConfigModel = Field(
         default_factory=lambda: SyntheticInputConfigModel(enabled=False)
     )
+    protocol: ProtocolConfigModel = Field(default_factory=ProtocolConfigModel)
     steps: int = Field(default=32, ge=1)
     preview_path: Path = Path("outputs/field-preview.png")
 
-    def to_field_config(self) -> FieldConfig:
-        return self.field.to_field_config()
-
-    def to_synthetic_input_config(self) -> SyntheticInputConfig:
-        return self.synthetic_input.to_input_config()
+    def create_simulation(self) -> Simulation:
+        return Simulation(
+            config=self.field.to_runtime(),
+            synthetic_input=self.synthetic_input.to_runtime(),
+        )
 
     @classmethod
     def from_file(cls, path: str | Path) -> SimulationConfig:

@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from neuroacoustic_resonator import Simulation, SimulationConfig, save_field_preview
+from neuroacoustic_resonator import SimulationConfig, save_field_preview
 
 
 def main():
     config = SimulationConfig.from_file(Path("configs") / "default.yaml")
-    simulation = Simulation.from_config(config)
+    simulation = config.create_simulation()
     frame = simulation.run(config.steps)[-1]
     preview_path = save_field_preview(frame, config.preview_path)
     print(

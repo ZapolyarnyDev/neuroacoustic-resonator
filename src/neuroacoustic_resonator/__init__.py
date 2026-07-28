@@ -50,7 +50,7 @@ from neuroacoustic_resonator.audio.input import (
     write_audio_input_features_csv,
 )
 from neuroacoustic_resonator.audio.io import write_wav
-from neuroacoustic_resonator.core.config import FieldConfigModel, SimulationConfig
+from neuroacoustic_resonator.configuration import FieldConfigModel, SimulationConfig
 from neuroacoustic_resonator.core.field import (
     FieldConfig,
     FieldMetrics,

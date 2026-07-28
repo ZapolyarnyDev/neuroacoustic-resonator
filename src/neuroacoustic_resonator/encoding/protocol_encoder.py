@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from math import isfinite
 from typing import Protocol
 
 from neuroacoustic_resonator.analysis.protocol_features import (
@@ -26,22 +28,29 @@ class PatternDetector(Protocol):
     def reset(self) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class ProtocolEncoderConfig:
+    frame_interval_steps: int = 1
+
+    def __post_init__(self) -> None:
+        if self.frame_interval_steps < 1:
+            msg = "frame_interval_steps must be positive"
+            raise ValueError(msg)
+
+
 class ProtocolEncoder:
     def __init__(
         self,
         *,
         dt: float,
-        frame_interval_steps: int = 1,
+        config: ProtocolEncoderConfig | None = None,
         detector: PatternDetector | None = None,
     ) -> None:
-        if dt <= 0.0:
+        if not isfinite(dt) or dt <= 0.0:
             msg = "dt must be positive"
             raise ValueError(msg)
-        if frame_interval_steps < 1:
-            msg = "frame_interval_steps must be positive"
-            raise ValueError(msg)
         self.dt = dt
-        self.frame_interval_steps = frame_interval_steps
+        self.config = config or ProtocolEncoderConfig()
         self.detector = detector
         self._last_seen_step: int | None = None
         self._next_sequence = 0
@@ -60,7 +69,7 @@ class ProtocolEncoder:
             raise ValueError(msg)
         self._last_seen_step = step
 
-        if step % self.frame_interval_steps != 0:
+        if step % self.config.frame_interval_steps != 0:
             return None
 
         observed_pattern = pattern_snapshot(frame.state, regions.output)

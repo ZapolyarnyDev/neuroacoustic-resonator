@@ -27,5 +27,13 @@ synthetic_input:
   period_steps: 48
   duty_cycle: 0.25
   seed: 67
+protocol:
+  frame_interval_steps: 1
+  activity_threshold: 0.025
+  confidence_threshold: 0.35
+  confirmation_frames: 3
+  minimum_active_frames: 3
+  hysteresis_margin: 0.08
+  novelty_threshold: 0.15
 steps: 512
 preview_path: outputs/synthetic-input-preview.png

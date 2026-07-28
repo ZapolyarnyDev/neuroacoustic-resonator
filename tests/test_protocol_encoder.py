@@ -6,7 +6,7 @@ import pytest
 from neuroacoustic_resonator.core.field import FieldConfig, OscillatorField
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import SimulationFrame
-from neuroacoustic_resonator.encoding import ProtocolEncoder
+from neuroacoustic_resonator.encoding import ProtocolEncoder, ProtocolEncoderConfig
 from neuroacoustic_resonator.protocol import (
     ActivePattern,
     PatternSnapshot,
@@ -56,7 +56,10 @@ def test_protocol_encoder_produces_deterministic_identity_and_time() -> None:
 
 
 def test_protocol_encoder_uses_absolute_modulo_cadence() -> None:
-    encoder = ProtocolEncoder(dt=0.02, frame_interval_steps=4)
+    encoder = ProtocolEncoder(
+        dt=0.02,
+        config=ProtocolEncoderConfig(frame_interval_steps=4),
+    )
     regions = RegionMasks.from_size(8)
 
     skipped = encoder.encode(frame_at_step(3), regions)
@@ -69,7 +72,10 @@ def test_protocol_encoder_uses_absolute_modulo_cadence() -> None:
 
 
 def test_protocol_encoder_rejects_backwards_skipped_steps() -> None:
-    encoder = ProtocolEncoder(dt=0.02, frame_interval_steps=4)
+    encoder = ProtocolEncoder(
+        dt=0.02,
+        config=ProtocolEncoderConfig(frame_interval_steps=4),
+    )
     regions = RegionMasks.from_size(8)
     encoder.encode(frame_at_step(4), regions)
     encoder.encode(frame_at_step(7), regions)

@@ -19,39 +19,41 @@ class PatternClassification:
     scores: dict[str, float]
 
 
-class TemporalPatternDetector:
-    def __init__(
-        self,
-        *,
-        activity_threshold: float = 0.025,
-        confidence_threshold: float = 0.35,
-        confirmation_frames: int = 3,
-        minimum_active_frames: int = 3,
-        hysteresis_margin: float = 0.08,
-        novelty_threshold: float = 0.15,
-    ) -> None:
+@dataclass(frozen=True, slots=True)
+class PatternDetectorConfig:
+    activity_threshold: float = 0.025
+    confidence_threshold: float = 0.35
+    confirmation_frames: int = 3
+    minimum_active_frames: int = 3
+    hysteresis_margin: float = 0.08
+    novelty_threshold: float = 0.15
+
+    def __post_init__(self) -> None:
+        if not 0.0 < self.activity_threshold <= 1.0:
+            msg = "activity_threshold must be in (0, 1]"
+            raise ValueError(msg)
         for name, value in (
-            ("activity_threshold", activity_threshold),
-            ("confidence_threshold", confidence_threshold),
-            ("hysteresis_margin", hysteresis_margin),
-            ("novelty_threshold", novelty_threshold),
+            ("confidence_threshold", self.confidence_threshold),
+            ("hysteresis_margin", self.hysteresis_margin),
+            ("novelty_threshold", self.novelty_threshold),
         ):
             if not 0.0 <= value <= 1.0:
                 msg = f"{name} must be in [0, 1]"
                 raise ValueError(msg)
-        if confirmation_frames < 1:
+        if self.confirmation_frames < 1:
             msg = "confirmation_frames must be positive"
             raise ValueError(msg)
-        if minimum_active_frames < 1:
+        if self.minimum_active_frames < 1:
             msg = "minimum_active_frames must be positive"
             raise ValueError(msg)
 
-        self.activity_threshold = activity_threshold
-        self.confidence_threshold = confidence_threshold
-        self.confirmation_frames = confirmation_frames
-        self.minimum_active_frames = minimum_active_frames
-        self.hysteresis_margin = hysteresis_margin
-        self.novelty_threshold = novelty_threshold
+
+class TemporalPatternDetector:
+    def __init__(
+        self,
+        config: PatternDetectorConfig | None = None,
+    ) -> None:
+        self.config = config or PatternDetectorConfig()
         self._active_label: str | None = None
         self._active_age = 0
         self._candidate_label: str | None = None
@@ -68,12 +70,12 @@ class TemporalPatternDetector:
         self._previous_snapshot = snapshot
         classification = classify_pattern(
             snapshot,
-            activity_threshold=self.activity_threshold,
+            activity_threshold=self.config.activity_threshold,
         )
         candidate_label = (
             classification.label
             if classification.label != "idle"
-            and classification.confidence >= self.confidence_threshold
+            and classification.confidence >= self.config.confidence_threshold
             else None
         )
 
@@ -108,7 +110,7 @@ class TemporalPatternDetector:
             return None, None
 
         self._advance_candidate(candidate_label)
-        if self._candidate_age < self.confirmation_frames:
+        if self._candidate_age < self.config.confirmation_frames:
             return None, None
 
         self._active_label = candidate_label
@@ -129,8 +131,8 @@ class TemporalPatternDetector:
             self._inactive_age += 1
             self._clear_candidate()
             if (
-                self._inactive_age >= self.confirmation_frames
-                and self._active_age >= self.minimum_active_frames
+                self._inactive_age >= self.config.confirmation_frames
+                and self._active_age >= self.config.minimum_active_frames
             ):
                 ended_label = self._active_label
                 self._clear_active()
@@ -151,14 +153,14 @@ class TemporalPatternDetector:
             candidate_label,
             classification.confidence,
         )
-        if candidate_score < active_score + self.hysteresis_margin:
+        if candidate_score < active_score + self.config.hysteresis_margin:
             self._clear_candidate()
             return self._active_pattern(classification, novelty), None
 
         self._advance_candidate(candidate_label)
         if (
-            self._candidate_age < self.confirmation_frames
-            or self._active_age < self.minimum_active_frames
+            self._candidate_age < self.config.confirmation_frames
+            or self._active_age < self.config.minimum_active_frames
         ):
             return self._active_pattern(classification, novelty), None
 
@@ -187,7 +189,7 @@ class TemporalPatternDetector:
             confidence=float(np.clip(confidence, 0.0, 1.0)),
             intensity=classification.intensity,
             novelty=novelty,
-            is_novel=novelty >= self.novelty_threshold,
+            is_novel=novelty >= self.config.novelty_threshold,
             age_frames=self._active_age,
         )
 
