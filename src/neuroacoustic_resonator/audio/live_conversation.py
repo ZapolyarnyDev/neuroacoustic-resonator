@@ -15,6 +15,7 @@ from neuroacoustic_resonator.analysis.output_patterns import (
     OutputPatternHistory,
     output_pattern_signature,
 )
+from neuroacoustic_resonator.analysis.pattern_detector import TemporalPatternDetector
 from neuroacoustic_resonator.analysis.pattern_plasticity import (
     PatternGuidedPlasticityConfig,
     PatternPlasticityDecision,
@@ -31,11 +32,12 @@ from neuroacoustic_resonator.audio.input import (
 )
 from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.output import (
-    VoiceResponseSonificationRenderer,
+    ProtocolReferenceRenderer,
 )
 from neuroacoustic_resonator.audio.timing import steps_for_duration
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.encoding import ProtocolEncoder
 
 
 class InputStreamLike(Protocol):
@@ -240,7 +242,7 @@ class LiveConversationEngine:
         self.simulation = sim_config.create_simulation()
         self.regions = RegionMasks.from_size(sim_config.field.size)
         self.tracker = RegionalActivityTracker()
-        self.renderer = VoiceResponseSonificationRenderer(
+        self.renderer = ProtocolReferenceRenderer(
             sample_rate=config.sample_rate,
             frame_size=config.output_frame_size,
             carrier_frequency=config.carrier_frequency,
@@ -255,6 +257,11 @@ class LiveConversationEngine:
             min_energy_gain=config.min_energy_gain,
             max_energy_gain=config.max_energy_gain,
         )
+        self.protocol_encoder = ProtocolEncoder(
+            dt=sim_config.field.dt,
+            config=sim_config.protocol.to_encoder_config(),
+            detector=TemporalPatternDetector(sim_config.protocol.to_detector_config()),
+        )
         self.turns: list[dict[str, Any]] = []
         if config.record_dir is not None:
             config.record_dir.mkdir(parents=True, exist_ok=True)
@@ -266,6 +273,7 @@ class LiveConversationEngine:
                 self.regions,
                 input_value=self.simulation.last_input_value,
             )
+            self.protocol_encoder.encode(frame, self.regions)
 
     def process_utterance(self, audio: np.ndarray, *, index: int) -> LiveTurnResult:
         samples = np.asarray(audio, dtype=np.float64).reshape(-1)
@@ -309,6 +317,7 @@ class LiveConversationEngine:
             self.tracker,
             self.regions,
             self.renderer,
+            self.protocol_encoder,
             response_steps=response_steps,
             initial_response_score=drive_result.response_seed
             * self.config.response_seed_gain,

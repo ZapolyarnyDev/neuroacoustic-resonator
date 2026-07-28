@@ -16,6 +16,7 @@ from neuroacoustic_resonator.analysis.output_patterns import (
     OutputPatternHistory,
     output_pattern_signature,
 )
+from neuroacoustic_resonator.analysis.pattern_detector import TemporalPatternDetector
 from neuroacoustic_resonator.analysis.pattern_plasticity import (
     PatternGuidedPlasticityConfig,
     PatternPlasticityDecision,
@@ -29,12 +30,13 @@ from neuroacoustic_resonator.audio.input import (
 )
 from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.audio.output import (
-    VoiceResponseSonificationRenderer,
+    ProtocolReferenceRenderer,
 )
 from neuroacoustic_resonator.audio.timing import steps_for_duration
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
+from neuroacoustic_resonator.encoding import ProtocolEncoder
 
 ConversationSummary = dict[str, Any]
 
@@ -210,7 +212,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
     tracker = RegionalActivityTracker()
-    renderer = VoiceResponseSonificationRenderer(
+    renderer = ProtocolReferenceRenderer(
         sample_rate=config.sample_rate,
         frame_size=config.output_frame_size,
         carrier_frequency=config.carrier_frequency,
@@ -225,10 +227,16 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         min_energy_gain=config.min_energy_gain,
         max_energy_gain=config.max_energy_gain,
     )
+    protocol_encoder = ProtocolEncoder(
+        dt=sim_config.field.dt,
+        config=sim_config.protocol.to_encoder_config(),
+        detector=TemporalPatternDetector(sim_config.protocol.to_detector_config()),
+    )
 
     for _ in range(config.warmup_steps):
         frame = simulation.step()
         tracker.update(frame, regions, input_value=simulation.last_input_value)
+        protocol_encoder.encode(frame, regions)
 
     pause_samples = round(config.pause_seconds * config.sample_rate)
     audio_frames: list[np.ndarray] = []
@@ -274,6 +282,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             tracker,
             regions,
             renderer,
+            protocol_encoder,
             response_steps=response_steps,
             initial_response_score=drive_result.response_seed
             * config.response_seed_gain,
@@ -560,7 +569,8 @@ def render_field_response(
     simulation: Simulation,
     tracker: RegionalActivityTracker,
     regions: RegionMasks,
-    renderer: VoiceResponseSonificationRenderer,
+    renderer: ProtocolReferenceRenderer,
+    protocol_encoder: ProtocolEncoder,
     *,
     response_steps: int,
     initial_response_score: float = 0.0,
@@ -609,12 +619,11 @@ def render_field_response(
                 coupling_rate=output_plasticity_rate,
                 frequency_rate=output_frequency_plasticity_rate,
             )
+        protocol_frame = protocol_encoder.encode(frame, regions)
         frames.append(
-            renderer.render_frame(
-                frame.state,
-                regions,
-                response_score=response_score,
-            )
+            np.zeros(renderer.frame_size, dtype=np.float64)
+            if protocol_frame is None
+            else renderer.render_frame(protocol_frame)
         )
         response_scores.append(response_score)
     audio = np.concatenate(frames) if frames else np.zeros(0, dtype=np.float64)

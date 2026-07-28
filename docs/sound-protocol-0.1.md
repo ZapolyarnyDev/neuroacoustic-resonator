@@ -78,3 +78,9 @@ A protocol consumer receives complete frames through a single `consume`
 operation. `ProtocolPipeline` sends each frame to every attached consumer in
 registration order. It accepts any iterable of frames, so live encoding and
 JSONL replay follow the same path.
+
+`ProtocolReferenceRenderer` is the current diagnostic audio consumer. It derives
+brightness, roughness, pitch controls, activation, and articulation from
+protocol frames without reading field arrays or region masks. It is a reference
+instrument for experiments, not one of the planned sound modes. A fresh
+renderer produces the same samples for the same live or replayed frame stream.

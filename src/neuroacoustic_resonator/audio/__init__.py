@@ -8,7 +8,7 @@ from neuroacoustic_resonator.audio.input import (
     write_audio_input_features_csv,
 )
 from neuroacoustic_resonator.audio.io import write_wav
-from neuroacoustic_resonator.audio.output import VoiceResponseSonificationRenderer
+from neuroacoustic_resonator.audio.output import ProtocolReferenceRenderer
 from neuroacoustic_resonator.audio.turn_detection import (
     TurnDetectionConfig,
     detect_and_write_turns,
@@ -30,9 +30,9 @@ __all__ = [
     "AudioInputFeatures",
     "LiveConversationConfig",
     "LiveConversationEngine",
+    "ProtocolReferenceRenderer",
     "TurnDetectionConfig",
     "VoiceConversationConfig",
-    "VoiceResponseSonificationRenderer",
     "WavInputDrive",
     "detect_and_write_turns",
     "detect_voice_turns",
