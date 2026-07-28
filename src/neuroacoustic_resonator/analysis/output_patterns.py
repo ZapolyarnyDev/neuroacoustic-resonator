@@ -5,9 +5,11 @@ from typing import Any
 
 import numpy as np
 
+from neuroacoustic_resonator.analysis.pattern_detector import classify_pattern
 from neuroacoustic_resonator.analysis.protocol_features import pattern_snapshot
 from neuroacoustic_resonator.core.field import FieldState
 from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.protocol import PatternSnapshot
 
 
 @dataclass(frozen=True)
@@ -201,27 +203,21 @@ def output_pattern_features(
 
 
 def classify_output_pattern(features: dict[str, float]) -> tuple[str, float]:
-    active = max(features["trace"], features["metabolite_stress"])
-    if active < 0.025:
-        return "idle", float(np.clip(1.0 - active / 0.025, 0.0, 1.0))
-
-    scores = {
-        "coherent": features["synchrony"],
-        "split": features["phase_order_2"] * (1.0 - 0.35 * features["synchrony"]),
-        "triadic": features["phase_order_3"] * (1.0 - 0.25 * features["synchrony"]),
-        "diffuse": 0.6 * features["roughness"] + 0.4 * features["phase_spread"],
-        "imprinted": max(
-            features["trace_phase_lock"],
-            features["metabolite_phase_lock"],
-        )
-        * (0.5 + 0.5 * active),
-    }
-    label, best = max(scores.items(), key=lambda item: item[1])
-    if best < 0.35:
-        return "mixed", float(np.clip(best / 0.35, 0.0, 1.0))
-    runner_up = max(value for key, value in scores.items() if key != label)
-    confidence = 0.35 + 0.65 * np.clip(best - runner_up, 0.0, 1.0)
-    return label, float(confidence)
+    snapshot = PatternSnapshot(
+        phase_order_1=features["synchrony"],
+        phase_order_2=features["phase_order_2"],
+        phase_order_3=features["phase_order_3"],
+        trace_mean=features["trace"],
+        trace_contrast=features["trace_contrast"],
+        metabolite_stress=features["metabolite_stress"],
+        metabolite_contrast=features["metabolite_contrast"],
+        trace_phase_lock=features["trace_phase_lock"],
+        metabolite_phase_lock=features["metabolite_phase_lock"],
+        frequency_mean=2.0 * features["frequency_mean"],
+        frequency_spread=features["frequency_spread"],
+    )
+    classification = classify_pattern(snapshot)
+    return classification.label, classification.confidence
 
 
 def compare_output_patterns(
