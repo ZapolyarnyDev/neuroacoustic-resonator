@@ -10,10 +10,9 @@ from typing import Any, Protocol, cast
 
 import numpy as np
 
-from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
 from neuroacoustic_resonator.analysis.output_patterns import (
     OutputPatternHistory,
-    output_pattern_signature,
+    protocol_pattern_signature,
 )
 from neuroacoustic_resonator.analysis.pattern_detector import TemporalPatternDetector
 from neuroacoustic_resonator.analysis.pattern_plasticity import (
@@ -22,6 +21,7 @@ from neuroacoustic_resonator.analysis.pattern_plasticity import (
     summarize_plasticity_decisions,
 )
 from neuroacoustic_resonator.audio.conversation import (
+    ConversationProtocolStream,
     drive_utterance,
     render_field_response,
 )
@@ -241,7 +241,6 @@ class LiveConversationEngine:
         sim_config = SimulationConfig.from_file(config.config_path)
         self.simulation = sim_config.create_simulation()
         self.regions = RegionMasks.from_size(sim_config.field.size)
-        self.tracker = RegionalActivityTracker()
         self.renderer = ProtocolReferenceRenderer(
             sample_rate=config.sample_rate,
             frame_size=config.output_frame_size,
@@ -257,10 +256,14 @@ class LiveConversationEngine:
             min_energy_gain=config.min_energy_gain,
             max_energy_gain=config.max_energy_gain,
         )
-        self.protocol_encoder = ProtocolEncoder(
-            dt=sim_config.field.dt,
-            config=sim_config.protocol.to_encoder_config(),
-            detector=TemporalPatternDetector(sim_config.protocol.to_detector_config()),
+        self.protocol_stream = ConversationProtocolStream(
+            ProtocolEncoder(
+                dt=sim_config.field.dt,
+                config=sim_config.protocol.to_encoder_config(),
+                detector=TemporalPatternDetector(
+                    sim_config.protocol.to_detector_config()
+                ),
+            )
         )
         self.turns: list[dict[str, Any]] = []
         if config.record_dir is not None:
@@ -268,12 +271,11 @@ class LiveConversationEngine:
 
         for _ in range(config.warmup_steps):
             frame = self.simulation.step()
-            self.tracker.update(
+            self.protocol_stream.observe(
                 frame,
                 self.regions,
                 input_value=self.simulation.last_input_value,
             )
-            self.protocol_encoder.encode(frame, self.regions)
 
     def process_utterance(self, audio: np.ndarray, *, index: int) -> LiveTurnResult:
         samples = np.asarray(audio, dtype=np.float64).reshape(-1)
@@ -292,15 +294,20 @@ class LiveConversationEngine:
         )
         drive_result = drive_utterance(
             self.simulation,
-            self.tracker,
+            self.protocol_stream,
             self.regions,
             features,
             drive,
         )
-        input_end_pattern = output_pattern_signature(
-            self.simulation.field.state,
-            self.regions,
+        input_frame = (
+            drive_result.protocol_frames[-1]
+            if drive_result.protocol_frames
+            else self.protocol_stream.last_frame
         )
+        if input_frame is None:
+            msg = "live conversation protocol stream has no frames"
+            raise RuntimeError(msg)
+        input_end_pattern = protocol_pattern_signature(input_frame)
         planned_response_seconds = response_duration_for_live_input(
             drive_result,
             config=self.config,
@@ -312,30 +319,36 @@ class LiveConversationEngine:
         )
         response_pattern_history = OutputPatternHistory()
         plasticity_decisions: list[PatternPlasticityDecision] = []
-        response_audio, response_scores = render_field_response(
-            self.simulation,
-            self.tracker,
-            self.regions,
-            self.renderer,
-            self.protocol_encoder,
-            response_steps=response_steps,
-            initial_response_score=drive_result.response_seed
-            * self.config.response_seed_gain,
-            seed_decay_seconds=self.config.response_seed_decay_seconds,
-            sample_rate=self.config.sample_rate,
-            output_plasticity_rate=self.config.output_plasticity_rate,
-            output_frequency_plasticity_rate=self.config.output_frequency_plasticity_rate,
-            pattern_history=response_pattern_history,
-            pattern_guided_plasticity=self.config.pattern_guided_plasticity,
-            plasticity_decisions=plasticity_decisions,
+        response_audio, response_scores, response_protocol_frames = (
+            render_field_response(
+                self.simulation,
+                self.protocol_stream,
+                self.regions,
+                self.renderer,
+                response_steps=response_steps,
+                initial_response_score=drive_result.response_seed
+                * self.config.response_seed_gain,
+                seed_decay_seconds=self.config.response_seed_decay_seconds,
+                sample_rate=self.config.sample_rate,
+                output_plasticity_rate=self.config.output_plasticity_rate,
+                output_frequency_plasticity_rate=self.config.output_frequency_plasticity_rate,
+                pattern_history=response_pattern_history,
+                pattern_guided_plasticity=self.config.pattern_guided_plasticity,
+                plasticity_decisions=plasticity_decisions,
+            )
         )
-        response_end_pattern = output_pattern_signature(
-            self.simulation.field.state,
-            self.regions,
+        response_frame = (
+            response_protocol_frames[-1]
+            if response_protocol_frames
+            else self.protocol_stream.last_frame
         )
+        if response_frame is None:
+            msg = "live conversation protocol stream has no response frames"
+            raise RuntimeError(msg)
+        response_end_pattern = protocol_pattern_signature(response_frame)
         response_audio_diagnostics = summarize_pattern_audio(
             response_audio,
-            response_pattern_history,
+            response_protocol_frames,
             sample_rate=self.config.sample_rate,
             frame_size=self.config.output_frame_size,
         )

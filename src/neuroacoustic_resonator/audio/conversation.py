@@ -11,10 +11,13 @@ import numpy as np
 from scipy.io import wavfile  # type: ignore[import-untyped]
 from scipy.signal import resample_poly  # type: ignore[import-untyped]
 
-from neuroacoustic_resonator.analysis.metrics import RegionalActivityTracker
+from neuroacoustic_resonator.analysis.metrics import (
+    ProtocolActivityTracker,
+    RegionalActivityMetrics,
+)
 from neuroacoustic_resonator.analysis.output_patterns import (
     OutputPatternHistory,
-    output_pattern_signature,
+    protocol_pattern_signature,
 )
 from neuroacoustic_resonator.analysis.pattern_detector import TemporalPatternDetector
 from neuroacoustic_resonator.analysis.pattern_plasticity import (
@@ -37,8 +40,41 @@ from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
 from neuroacoustic_resonator.encoding import ProtocolEncoder
+from neuroacoustic_resonator.protocol import SoundProtocolFrame
 
 ConversationSummary = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ConversationProtocolObservation:
+    frame: SoundProtocolFrame
+    activity: RegionalActivityMetrics
+
+
+class ConversationProtocolStream:
+    def __init__(self, encoder: ProtocolEncoder) -> None:
+        self.encoder = encoder
+        self.activity = ProtocolActivityTracker()
+        self.last_frame: SoundProtocolFrame | None = None
+
+    def observe(
+        self,
+        frame: SimulationFrame,
+        regions: RegionMasks,
+        *,
+        input_value: float = 0.0,
+    ) -> ConversationProtocolObservation | None:
+        protocol_frame = self.encoder.encode(frame, regions)
+        if protocol_frame is None:
+            return None
+        self.last_frame = protocol_frame
+        return ConversationProtocolObservation(
+            frame=protocol_frame,
+            activity=self.activity.update(
+                protocol_frame,
+                input_value=input_value,
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -47,6 +83,7 @@ class UtteranceDriveResult:
     fast_response_scores: np.ndarray
     event_scores: np.ndarray
     output_pattern_summary: dict[str, Any] = field(default_factory=dict)
+    protocol_frames: tuple[SoundProtocolFrame, ...] = ()
 
     @property
     def response_seed(self) -> float:
@@ -211,7 +248,6 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     sim_config = SimulationConfig.from_file(config.config_path)
     simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
-    tracker = RegionalActivityTracker()
     renderer = ProtocolReferenceRenderer(
         sample_rate=config.sample_rate,
         frame_size=config.output_frame_size,
@@ -227,16 +263,21 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         min_energy_gain=config.min_energy_gain,
         max_energy_gain=config.max_energy_gain,
     )
-    protocol_encoder = ProtocolEncoder(
-        dt=sim_config.field.dt,
-        config=sim_config.protocol.to_encoder_config(),
-        detector=TemporalPatternDetector(sim_config.protocol.to_detector_config()),
+    protocol_stream = ConversationProtocolStream(
+        ProtocolEncoder(
+            dt=sim_config.field.dt,
+            config=sim_config.protocol.to_encoder_config(),
+            detector=TemporalPatternDetector(sim_config.protocol.to_detector_config()),
+        )
     )
 
     for _ in range(config.warmup_steps):
         frame = simulation.step()
-        tracker.update(frame, regions, input_value=simulation.last_input_value)
-        protocol_encoder.encode(frame, regions)
+        protocol_stream.observe(
+            frame,
+            regions,
+            input_value=simulation.last_input_value,
+        )
 
     pause_samples = round(config.pause_seconds * config.sample_rate)
     audio_frames: list[np.ndarray] = []
@@ -264,8 +305,16 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             assoc_gain=config.input_assoc_gain,
             output_gain=config.input_output_gain,
         )
-        drive_result = drive_utterance(simulation, tracker, regions, features, drive)
-        input_end_pattern = output_pattern_signature(simulation.field.state, regions)
+        drive_result = drive_utterance(
+            simulation,
+            protocol_stream,
+            regions,
+            features,
+            drive,
+        )
+        input_end_pattern = protocol_pattern_signature(
+            _latest_protocol_frame(drive_result.protocol_frames, protocol_stream)
+        )
         planned_response_seconds = response_duration_for_input(
             drive_result,
             config=config,
@@ -277,27 +326,30 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         )
         response_pattern_history = OutputPatternHistory()
         plasticity_decisions: list[PatternPlasticityDecision] = []
-        response_audio, response_scores = render_field_response(
-            simulation,
-            tracker,
-            regions,
-            renderer,
-            protocol_encoder,
-            response_steps=response_steps,
-            initial_response_score=drive_result.response_seed
-            * config.response_seed_gain,
-            seed_decay_seconds=config.response_seed_decay_seconds,
-            sample_rate=config.sample_rate,
-            output_plasticity_rate=config.output_plasticity_rate,
-            output_frequency_plasticity_rate=config.output_frequency_plasticity_rate,
-            pattern_history=response_pattern_history,
-            pattern_guided_plasticity=config.pattern_guided_plasticity,
-            plasticity_decisions=plasticity_decisions,
+        response_audio, response_scores, response_protocol_frames = (
+            render_field_response(
+                simulation,
+                protocol_stream,
+                regions,
+                renderer,
+                response_steps=response_steps,
+                initial_response_score=drive_result.response_seed
+                * config.response_seed_gain,
+                seed_decay_seconds=config.response_seed_decay_seconds,
+                sample_rate=config.sample_rate,
+                output_plasticity_rate=config.output_plasticity_rate,
+                output_frequency_plasticity_rate=config.output_frequency_plasticity_rate,
+                pattern_history=response_pattern_history,
+                pattern_guided_plasticity=config.pattern_guided_plasticity,
+                plasticity_decisions=plasticity_decisions,
+            )
         )
-        response_end_pattern = output_pattern_signature(simulation.field.state, regions)
+        response_end_pattern = protocol_pattern_signature(
+            _latest_protocol_frame(response_protocol_frames, protocol_stream)
+        )
         response_audio_diagnostics = summarize_pattern_audio(
             response_audio,
-            response_pattern_history,
+            response_protocol_frames,
             sample_rate=config.sample_rate,
             frame_size=config.output_frame_size,
         )
@@ -526,7 +578,7 @@ def to_mono_float(samples: np.ndarray) -> np.ndarray:
 
 def drive_utterance(
     simulation: Simulation,
-    tracker: RegionalActivityTracker,
+    protocol_stream: ConversationProtocolStream,
     regions: RegionMasks,
     features: Any,
     drive: WavInputDrive,
@@ -534,6 +586,7 @@ def drive_utterance(
     input_values: list[float] = []
     fast_response_scores: list[float] = []
     event_scores: list[float] = []
+    protocol_frames: list[SoundProtocolFrame] = []
     pattern_history = OutputPatternHistory()
     for input_step in range(features.frame_count):
         input_value = drive.apply(simulation.field, input_step)
@@ -545,9 +598,17 @@ def drive_utterance(
             metrics=simulation.field.metrics(step=simulation.step_index),
             local_synchrony=simulation.field.local_synchrony(),
         )
-        metrics = tracker.update(frame, regions, input_value=input_value)
+        observation = protocol_stream.observe(
+            frame,
+            regions,
+            input_value=input_value,
+        )
+        if observation is None:
+            continue
+        metrics = observation.activity
+        protocol_frames.append(observation.frame)
         pattern_history.update(
-            output_pattern_signature(frame.state, regions),
+            protocol_pattern_signature(observation.frame),
             activation=max(
                 metrics.output_fast_response_score,
                 metrics.output_event_score,
@@ -562,15 +623,15 @@ def drive_utterance(
         fast_response_scores=np.asarray(fast_response_scores, dtype=np.float64),
         event_scores=np.asarray(event_scores, dtype=np.float64),
         output_pattern_summary=pattern_history.summary(),
+        protocol_frames=tuple(protocol_frames),
     )
 
 
 def render_field_response(
     simulation: Simulation,
-    tracker: RegionalActivityTracker,
+    protocol_stream: ConversationProtocolStream,
     regions: RegionMasks,
     renderer: ProtocolReferenceRenderer,
-    protocol_encoder: ProtocolEncoder,
     *,
     response_steps: int,
     initial_response_score: float = 0.0,
@@ -581,22 +642,31 @@ def render_field_response(
     pattern_history: OutputPatternHistory | None = None,
     pattern_guided_plasticity: PatternGuidedPlasticityConfig | None = None,
     plasticity_decisions: list[PatternPlasticityDecision] | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, tuple[SoundProtocolFrame, ...]]:
     frames: list[np.ndarray] = []
     response_scores: list[float] = []
+    protocol_frames: list[SoundProtocolFrame] = []
     decay_steps = max(1.0, seed_decay_seconds * sample_rate / renderer.frame_size)
     for response_step in range(response_steps):
         frame = simulation.step()
-        metrics = tracker.update(
-            frame, regions, input_value=simulation.last_input_value
+        observation = protocol_stream.observe(
+            frame,
+            regions,
+            input_value=simulation.last_input_value,
         )
+        seed_score = initial_response_score * math.exp(-response_step / decay_steps)
+        if observation is None:
+            frames.append(np.zeros(renderer.frame_size, dtype=np.float64))
+            response_scores.append(seed_score)
+            continue
+        metrics = observation.activity
         response_score = max(
             metrics.output_fast_response_score,
             metrics.output_event_score,
             max(0.0, metrics.output_response_activity) * 0.05,
-            initial_response_score * math.exp(-response_step / decay_steps),
+            seed_score,
         )
-        pattern = output_pattern_signature(frame.state, regions)
+        pattern = protocol_pattern_signature(observation.frame)
         if pattern_history is not None:
             pattern_history.update(pattern, activation=response_score)
         decision = pattern_guided_plasticity_decision(
@@ -619,16 +689,24 @@ def render_field_response(
                 coupling_rate=output_plasticity_rate,
                 frequency_rate=output_frequency_plasticity_rate,
             )
-        protocol_frame = protocol_encoder.encode(frame, regions)
-        frames.append(
-            np.zeros(renderer.frame_size, dtype=np.float64)
-            if protocol_frame is None
-            else renderer.render_frame(protocol_frame)
-        )
+        protocol_frames.append(observation.frame)
+        frames.append(renderer.render_frame(observation.frame))
         response_scores.append(response_score)
     audio = np.concatenate(frames) if frames else np.zeros(0, dtype=np.float64)
     scores = np.asarray(response_scores, dtype=np.float64)
-    return audio, scores
+    return audio, scores, tuple(protocol_frames)
+
+
+def _latest_protocol_frame(
+    frames: tuple[SoundProtocolFrame, ...],
+    stream: ConversationProtocolStream,
+) -> SoundProtocolFrame:
+    if frames:
+        return frames[-1]
+    if stream.last_frame is not None:
+        return stream.last_frame
+    msg = "conversation protocol stream has no frames"
+    raise RuntimeError(msg)
 
 
 def write_conversation_summary(

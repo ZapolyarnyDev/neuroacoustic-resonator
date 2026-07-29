@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
 
-from neuroacoustic_resonator.analysis.output_patterns import OutputPatternHistory
+from neuroacoustic_resonator.protocol import SoundProtocolFrame
 
 
 def summarize_pattern_audio(
     audio: np.ndarray,
-    pattern_history: OutputPatternHistory,
+    protocol_frames: Iterable[SoundProtocolFrame],
     *,
     sample_rate: int,
     frame_size: int,
@@ -21,7 +22,8 @@ def summarize_pattern_audio(
         msg = "frame_size must be positive"
         raise ValueError(msg)
     samples = np.asarray(audio, dtype=np.float64).reshape(-1)
-    frame_count = min(samples.size // frame_size, len(pattern_history.signatures))
+    frames = list(protocol_frames)
+    frame_count = min(samples.size // frame_size, len(frames))
     if frame_count == 0:
         return {
             "frames": 0,
@@ -35,7 +37,8 @@ def summarize_pattern_audio(
 
     by_pattern_frames: dict[str, list[np.ndarray]] = {}
     for frame_index in range(frame_count):
-        label = pattern_history.signatures[frame_index].label
+        active = frames[frame_index].active_pattern
+        label = "idle" if active is None else active.label
         start = frame_index * frame_size
         frame = samples[start : start + frame_size]
         by_pattern_frames.setdefault(label, []).append(frame)

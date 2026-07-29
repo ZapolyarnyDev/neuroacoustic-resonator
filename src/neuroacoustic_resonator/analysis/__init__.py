@@ -21,8 +21,10 @@ from neuroacoustic_resonator.analysis.experiments import (
 )
 from neuroacoustic_resonator.analysis.metrics import (
     MetricsHistory,
+    ProtocolActivityTracker,
     RegionalActivityMetrics,
     RegionalActivityTracker,
+    compute_protocol_activity_metrics,
     compute_regional_activity_metrics,
     region_activity,
     region_fast_activity,
@@ -33,6 +35,8 @@ from neuroacoustic_resonator.analysis.output_patterns import (
     OutputPatternSignature,
     compare_output_patterns,
     output_pattern_signature,
+    pattern_features,
+    protocol_pattern_signature,
 )
 from neuroacoustic_resonator.analysis.pattern_detector import (
     PatternClassification,
@@ -91,6 +95,7 @@ __all__ = [
     "PatternReinforcementSignals",
     "PatternReinforcementWeights",
     "PropagationProbeConfig",
+    "ProtocolActivityTracker",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
     "SyntheticStimulusSpec",
@@ -102,11 +107,14 @@ __all__ = [
     "classify_pattern",
     "compare_output_patterns",
     "compute_pattern_reinforcement_signals",
+    "compute_protocol_activity_metrics",
     "compute_regional_activity_metrics",
     "export_diagnostics_artifacts",
     "output_pattern_signature",
+    "pattern_features",
     "pattern_guided_plasticity_decision",
     "pattern_novelty",
+    "protocol_pattern_signature",
     "region_activity",
     "region_fast_activity",
     "region_slow_activity",

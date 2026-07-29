@@ -1,16 +1,20 @@
 import csv
 import json
+from dataclasses import asdict
 
 import pytest
 
 from neuroacoustic_resonator import (
     FieldConfig,
     MetricsHistory,
+    ProtocolActivityTracker,
     RegionalActivityTracker,
     RegionMasks,
     Simulation,
+    compute_protocol_activity_metrics,
     compute_regional_activity_metrics,
 )
+from neuroacoustic_resonator.encoding import ProtocolEncoder
 
 
 def test_metrics_history_records_metrics() -> None:
@@ -135,3 +139,37 @@ def test_compute_regional_activity_metrics_rejects_shape_mismatch() -> None:
 
     with pytest.raises(ValueError, match="matching shapes"):
         compute_regional_activity_metrics(simulation.snapshot(), regions)
+
+
+def test_protocol_activity_matches_field_derived_activity() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    frame = simulation.step()
+    protocol_frame = ProtocolEncoder(dt=simulation.field.config.dt).encode(
+        frame,
+        regions,
+    )
+    assert protocol_frame is not None
+
+    legacy = compute_regional_activity_metrics(frame, regions, input_value=0.4)
+    protocol = compute_protocol_activity_metrics(protocol_frame, input_value=0.4)
+
+    assert asdict(protocol) == pytest.approx(asdict(legacy))
+
+
+def test_protocol_activity_tracker_reports_temporal_changes() -> None:
+    simulation = Simulation(FieldConfig(size=6, seed=1))
+    regions = RegionMasks.from_size(6)
+    encoder = ProtocolEncoder(dt=simulation.field.config.dt)
+    tracker = ProtocolActivityTracker()
+    first = encoder.encode(simulation.step(), regions)
+    assert first is not None
+    tracker.update(first)
+    simulation.field.apply_phase_impulse(regions.output, 0.5)
+    second = encoder.encode(simulation.step(), regions)
+    assert second is not None
+
+    changed = tracker.update(second)
+
+    assert changed.output_event_score > 0.0
+    assert changed.output_fast_response_score > 0.0

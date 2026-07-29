@@ -12,6 +12,7 @@ import numpy as np
 from neuroacoustic_resonator.core.field import FieldMetrics
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import SimulationFrame
+from neuroacoustic_resonator.protocol import RegionSnapshot, SoundProtocolFrame
 
 MetricsRow = dict[str, Any]
 
@@ -126,6 +127,117 @@ class RegionalActivityTracker:
             * (metrics.output_activity - self._output_activity_baseline)
         )
         return metrics
+
+
+class ProtocolActivityTracker:
+    def __init__(self, *, baseline_smoothing: float = 0.02) -> None:
+        if not 0.0 < baseline_smoothing <= 1.0:
+            msg = "baseline_smoothing must be in (0, 1]"
+            raise ValueError(msg)
+        self._previous: RegionalActivityMetrics | None = None
+        self._output_activity_baseline: float | None = None
+        self.baseline_smoothing = baseline_smoothing
+
+    def update(
+        self,
+        frame: SoundProtocolFrame,
+        *,
+        input_value: float = 0.0,
+    ) -> RegionalActivityMetrics:
+        metrics = compute_protocol_activity_metrics(
+            frame,
+            input_value=input_value,
+            previous=self._previous,
+            output_activity_baseline=self._output_activity_baseline,
+        )
+        self._previous = metrics
+        self._output_activity_baseline = (
+            metrics.output_activity
+            if self._output_activity_baseline is None
+            else self._output_activity_baseline
+            + self.baseline_smoothing
+            * (metrics.output_activity - self._output_activity_baseline)
+        )
+        return metrics
+
+
+def compute_protocol_activity_metrics(
+    frame: SoundProtocolFrame,
+    *,
+    input_value: float = 0.0,
+    previous: RegionalActivityMetrics | None = None,
+    output_activity_baseline: float | None = None,
+) -> RegionalActivityMetrics:
+    input_fast_activity, input_slow_activity, input_activity = (
+        _protocol_region_activity(frame.input_region)
+    )
+    assoc_fast_activity, assoc_slow_activity, assoc_activity = (
+        _protocol_region_activity(frame.assoc_region)
+    )
+    output_fast_activity, output_slow_activity, output_activity = (
+        _protocol_region_activity(frame.output_region)
+    )
+    output_activity_baseline = (
+        output_activity
+        if output_activity_baseline is None
+        else output_activity_baseline
+    )
+    output_response_activity = output_activity - output_activity_baseline
+    output_trace = frame.output_region.mean_trace
+    output_synchrony = frame.output_region.mean_local_synchrony
+
+    if previous is None:
+        output_fast_delta = 0.0
+        output_slow_delta = 0.0
+        output_trace_delta = 0.0
+        output_synchrony_delta = 0.0
+        output_activity_delta = 0.0
+    else:
+        output_fast_delta = output_fast_activity - previous.output_fast_activity
+        output_slow_delta = output_slow_activity - previous.output_slow_activity
+        output_trace_delta = output_trace - previous.output_trace
+        output_synchrony_delta = output_synchrony - previous.output_synchrony
+        output_activity_delta = output_activity - previous.output_activity
+
+    output_event_score = (
+        abs(output_activity_delta)
+        + abs(output_trace_delta)
+        + abs(output_synchrony_delta)
+    )
+    return RegionalActivityMetrics(
+        step=frame.step,
+        input_value=float(input_value),
+        input_activity=input_activity,
+        input_fast_activity=input_fast_activity,
+        input_slow_activity=input_slow_activity,
+        assoc_activity=assoc_activity,
+        assoc_fast_activity=assoc_fast_activity,
+        assoc_slow_activity=assoc_slow_activity,
+        output_activity=output_activity,
+        output_activity_baseline=output_activity_baseline,
+        output_response_activity=output_response_activity,
+        output_fast_activity=output_fast_activity,
+        output_slow_activity=output_slow_activity,
+        left_to_right_ratio=output_activity / max(input_activity, 1e-12),
+        output_trace=output_trace,
+        output_synchrony=output_synchrony,
+        output_fast_delta=output_fast_delta,
+        output_slow_delta=output_slow_delta,
+        output_trace_delta=output_trace_delta,
+        output_synchrony_delta=output_synchrony_delta,
+        output_activity_delta=output_activity_delta,
+        output_event_score=output_event_score,
+        output_fast_response_score=abs(output_fast_delta),
+        output_slow_drift_score=abs(output_slow_delta),
+    )
+
+
+def _protocol_region_activity(
+    region: RegionSnapshot,
+) -> tuple[float, float, float]:
+    fast = region.mean_local_synchrony
+    slow = region.mean_trace + (1.0 - region.mean_metabolite)
+    return fast, slow, combine_region_activity(fast, slow)
 
 
 def compute_regional_activity_metrics(

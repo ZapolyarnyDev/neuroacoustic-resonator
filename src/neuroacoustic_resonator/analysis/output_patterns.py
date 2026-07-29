@@ -9,7 +9,7 @@ from neuroacoustic_resonator.analysis.pattern_detector import classify_pattern
 from neuroacoustic_resonator.analysis.protocol_features import pattern_snapshot
 from neuroacoustic_resonator.core.field import FieldState
 from neuroacoustic_resonator.core.regions import RegionMasks
-from neuroacoustic_resonator.protocol import PatternSnapshot
+from neuroacoustic_resonator.protocol import PatternSnapshot, SoundProtocolFrame
 
 
 @dataclass(frozen=True)
@@ -149,6 +149,10 @@ def output_pattern_features(
     regions: RegionMasks,
 ) -> dict[str, float]:
     snapshot = pattern_snapshot(state, regions.output)
+    return pattern_features(snapshot)
+
+
+def pattern_features(snapshot: PatternSnapshot) -> dict[str, float]:
     synchrony = snapshot.phase_order_1
     phase_order_2 = snapshot.phase_order_2
     phase_order_3 = snapshot.phase_order_3
@@ -200,6 +204,17 @@ def output_pattern_features(
         "brightness": brightness,
         "roughness": roughness,
     }
+
+
+def protocol_pattern_signature(
+    frame: SoundProtocolFrame,
+) -> OutputPatternSignature:
+    active = frame.active_pattern
+    return OutputPatternSignature(
+        label="idle" if active is None else active.label,
+        confidence=0.0 if active is None else active.confidence,
+        features=pattern_features(frame.pattern),
+    )
 
 
 def classify_output_pattern(features: dict[str, float]) -> tuple[str, float]:
