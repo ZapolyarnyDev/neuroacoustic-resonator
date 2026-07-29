@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 
 from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityMetrics,
-    RegionalActivityTracker,
 )
+from neuroacoustic_resonator.analysis.protocol_stream import ProtocolAnalysisStream
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 
@@ -118,34 +118,45 @@ def collect_probe_rows(
     sim_config = SimulationConfig.from_file(config.config_path)
     simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
-    tracker = RegionalActivityTracker()
+    protocol_stream = ProtocolAnalysisStream.from_config(sim_config, regions)
 
-    for _ in range(config.warmup_steps):
-        simulation.step()
-
-    baseline_frame = simulation.snapshot()
-    baseline = tracker.update(
-        baseline_frame,
-        regions,
+    baseline_observation = protocol_stream.observe(
+        simulation.snapshot(),
         input_value=simulation.last_input_value,
     )
+    if baseline_observation is None:
+        msg = "protocol must emit the initial propagation frame"
+        raise RuntimeError(msg)
+    for _ in range(config.warmup_steps):
+        observation = protocol_stream.observe(
+            simulation.step(),
+            input_value=simulation.last_input_value,
+        )
+        if observation is not None:
+            baseline_observation = observation
+
+    baseline = baseline_observation.activity
     simulation.field.apply_phase_impulse(regions.input, config.impulse)
 
     rows: ProbeRows = []
     previous = baseline
     for offset in range(1, horizon + 1):
-        frame = simulation.step()
-        metrics = tracker.update(
-            frame,
-            regions,
+        observation = protocol_stream.observe(
+            simulation.step(),
             input_value=simulation.last_input_value,
         )
+        if observation is None:
+            continue
+        metrics = observation.activity
         row = propagation_probe_row(
             metrics,
             baseline=baseline,
             previous=previous,
             offset=offset,
         )
+        row["sequence"] = observation.frame.sequence
+        row["version"] = observation.frame.version
+        row["time_seconds"] = observation.frame.time_seconds
         rows.append(row)
         previous = metrics
 

@@ -54,6 +54,8 @@ steps: 8
     loaded = json.loads(summary_path.read_text(encoding="utf-8"))
 
     assert len(rows) == 5
+    assert rows[0]["version"] == "0.1"
+    assert int(rows[0]["sequence"]) >= 0
     assert rows[0]["audio_step"] == "0"
     assert "output_response_activity" in rows[0]
     assert "output_fast_response_score" in rows[0]

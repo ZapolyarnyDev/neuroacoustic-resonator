@@ -54,6 +54,7 @@ steps: 8
     loaded = json.loads(summary_path.read_text(encoding="utf-8"))
 
     assert len(rows) == 10
+    assert {row["version"] for row in rows} == {"0.1"}
     assert {row["repeat_index"] for row in rows} == {"1", "2"}
     assert summary["first"]["rows"] == 5
     assert summary["second"]["rows"] == 5

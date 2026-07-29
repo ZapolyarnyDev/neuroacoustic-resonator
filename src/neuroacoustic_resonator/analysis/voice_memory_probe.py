@@ -11,14 +11,14 @@ import numpy as np
 
 from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityMetrics,
-    RegionalActivityTracker,
 )
 from neuroacoustic_resonator.analysis.output_patterns import (
     PATTERN_FEATURE_KEYS,
     OutputPatternSignature,
     compare_output_patterns,
-    output_pattern_signature,
+    protocol_pattern_signature,
 )
+from neuroacoustic_resonator.analysis.protocol_stream import ProtocolAnalysisStream
 from neuroacoustic_resonator.audio.input import (
     AudioInputFeatures,
     WavInputDrive,
@@ -26,7 +26,8 @@ from neuroacoustic_resonator.audio.input import (
 )
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
-from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
+from neuroacoustic_resonator.core.simulation import Simulation
+from neuroacoustic_resonator.protocol import SoundProtocolFrame
 
 VoiceMemoryRows = list[dict[str, Any]]
 VoiceMemorySummary = dict[str, Any]
@@ -188,7 +189,7 @@ def collect_voice_memory_rows(
 ) -> VoiceMemoryRows:
     simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
-    tracker = RegionalActivityTracker()
+    protocol_stream = ProtocolAnalysisStream.from_config(sim_config, regions)
     drive = WavInputDrive(
         features,
         regions,
@@ -198,14 +199,13 @@ def collect_voice_memory_rows(
 
     for _ in range(config.warmup_steps):
         frame = simulation.step()
-        tracker.update(frame, regions, input_value=simulation.last_input_value)
+        protocol_stream.observe(frame, input_value=simulation.last_input_value)
 
     rows: VoiceMemoryRows = []
     rows.extend(
         run_voice_repeat(
             simulation,
-            tracker,
-            regions,
+            protocol_stream,
             features,
             drive,
             repeat_index=1,
@@ -214,12 +214,11 @@ def collect_voice_memory_rows(
     )
     for _ in range(config.pause_steps):
         frame = simulation.step()
-        tracker.update(frame, regions, input_value=simulation.last_input_value)
+        protocol_stream.observe(frame, input_value=simulation.last_input_value)
     rows.extend(
         run_voice_repeat(
             simulation,
-            tracker,
-            regions,
+            protocol_stream,
             features,
             drive,
             repeat_index=2,
@@ -249,8 +248,7 @@ def silence_features_like(features: AudioInputFeatures) -> AudioInputFeatures:
 
 def run_voice_repeat(
     simulation: Simulation,
-    tracker: RegionalActivityTracker,
-    regions: RegionMasks,
+    protocol_stream: ProtocolAnalysisStream,
     features: AudioInputFeatures,
     drive: WavInputDrive,
     *,
@@ -264,19 +262,16 @@ def run_voice_repeat(
     rows: VoiceMemoryRows = []
     for audio_step in range(steps):
         input_value = drive.apply(simulation.field, audio_step)
-        simulation.step_index += 1
-        state = simulation.field.step()
-        simulation.last_input_value = input_value
-        frame = SimulationFrame(
-            state=state,
-            metrics=simulation.field.metrics(step=simulation.step_index),
-            local_synchrony=simulation.field.local_synchrony(),
-        )
-        metrics = tracker.update(frame, regions, input_value=input_value)
-        pattern = output_pattern_signature(frame.state, regions)
+        frame = simulation.step_with_input(input_value)
+        observation = protocol_stream.observe(frame, input_value=input_value)
+        if observation is None:
+            continue
+        metrics = observation.activity
+        pattern = protocol_pattern_signature(observation.frame)
         rows.append(
             voice_memory_row(
                 features,
+                observation.frame,
                 metrics,
                 pattern=pattern,
                 repeat_index=repeat_index,
@@ -288,6 +283,7 @@ def run_voice_repeat(
 
 def voice_memory_row(
     features: AudioInputFeatures,
+    frame: SoundProtocolFrame,
     metrics: RegionalActivityMetrics,
     *,
     pattern: Any,
@@ -295,8 +291,11 @@ def voice_memory_row(
     audio_step: int,
 ) -> dict[str, Any]:
     row = {
+        "version": frame.version,
+        "sequence": frame.sequence,
         "repeat_index": repeat_index,
         "global_step": metrics.step,
+        "protocol_time_seconds": frame.time_seconds,
         "audio_step": audio_step,
         "time_seconds": audio_step * features.hop_size / features.sample_rate,
         "rms": float(features.rms[audio_step]),

@@ -3,8 +3,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from neuroacoustic_resonator.analysis.metrics import MetricsHistory
+from neuroacoustic_resonator.analysis.protocol_stream import (
+    ProtocolAnalysisStream,
+    ProtocolFrameHistory,
+)
 from neuroacoustic_resonator.configuration import SimulationConfig
+from neuroacoustic_resonator.core.regions import RegionMasks
 
 
 def default_metrics_output_path(
@@ -24,7 +28,7 @@ def collect_metrics(
     *,
     steps: int | None = None,
     sample_interval: int = 1,
-) -> MetricsHistory:
+) -> ProtocolFrameHistory:
     if steps is not None and steps < 1:
         msg = "steps must be positive"
         raise ValueError(msg)
@@ -35,19 +39,36 @@ def collect_metrics(
     config = SimulationConfig.from_file(config_path)
     total_steps = steps or config.steps
     simulation = config.create_simulation()
-    history = MetricsHistory([simulation.snapshot().metrics])
+    regions = RegionMasks.from_size(config.field.size)
+    stream = ProtocolAnalysisStream.from_config(config, regions)
+    initial = stream.observe(
+        simulation.snapshot(),
+        input_value=simulation.last_input_value,
+    )
+    if initial is None:
+        msg = "protocol must emit the initial frame"
+        raise RuntimeError(msg)
+    history = ProtocolFrameHistory([initial.frame])
 
     for _ in range(total_steps):
-        frame = simulation.step()
-        is_sample_step = frame.metrics.step % sample_interval == 0
-        is_final_step = frame.metrics.step == total_steps
+        observation = stream.observe(
+            simulation.step(),
+            input_value=simulation.last_input_value,
+        )
+        if observation is None:
+            continue
+        is_sample_step = observation.frame.step % sample_interval == 0
+        is_final_step = observation.frame.step == total_steps
         if is_sample_step or is_final_step:
-            history.append(frame.metrics)
+            history.append(observation.frame)
 
     return history
 
 
-def write_metrics_history(history: MetricsHistory, output_path: str | Path) -> Path:
+def write_metrics_history(
+    history: ProtocolFrameHistory,
+    output_path: str | Path,
+) -> Path:
     output = Path(output_path)
     if output.suffix == ".csv":
         return history.write_csv(output)
@@ -119,8 +140,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "Latest metrics: "
         f"step={latest.step}, "
-        f"global_synchrony={latest.global_synchrony:.6f}, "
-        f"mean_metabolite={latest.mean_metabolite:.6f}, "
-        f"mean_trace={latest.mean_trace:.6f}"
+        f"global_synchrony={latest.field.global_synchrony:.6f}, "
+        f"mean_metabolite={latest.field.mean_metabolite:.6f}, "
+        f"mean_trace={latest.field.mean_trace:.6f}"
     )
     return 0

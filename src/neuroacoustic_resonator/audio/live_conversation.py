@@ -375,6 +375,11 @@ class LiveConversationEngine:
             "mean_response_score": float(np.mean(response_scores)),
             "input_output_pattern_history": drive_result.output_pattern_summary,
             "response_output_pattern_history": response_pattern_history.summary(),
+            "protocol_version": response_frame.version,
+            "input_protocol_frames": len(drive_result.protocol_frames),
+            "response_protocol_frames": len(response_protocol_frames),
+            "input_end_protocol_sequence": input_frame.sequence,
+            "response_end_protocol_sequence": response_frame.sequence,
             "response_pattern_audio_diagnostics": response_audio_diagnostics,
             "pattern_guided_plasticity": summarize_plasticity_decisions(
                 plasticity_decisions

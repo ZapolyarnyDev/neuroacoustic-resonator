@@ -204,9 +204,18 @@ def summarize_rows(rows: AudioInputRows) -> dict[str, float | int]:
 def read_rows(path: str | Path) -> AudioInputRows:
     with Path(path).open(newline="", encoding="utf-8") as stream:
         return [
-            {key: float(value) for key, value in row.items()}
+            {key: csv_value(value) for key, value in row.items()}
             for row in csv.DictReader(stream)
         ]
+
+
+def csv_value(value: str) -> float | str | None:
+    if value == "":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return value
 
 
 def column(rows: AudioInputRows, key: str) -> np.ndarray:

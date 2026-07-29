@@ -13,7 +13,10 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from neuroacoustic_resonator.analysis.metrics import compute_regional_activity_metrics
+from neuroacoustic_resonator.analysis.protocol_stream import (
+    ProtocolAnalysisStream,
+    ProtocolObservation,
+)
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation
@@ -50,22 +53,21 @@ class ExperimentAnalysisConfig:
 def run_experiment_suite(config: ExperimentAnalysisConfig) -> ExperimentSummary:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     sim_config = SimulationConfig.from_file(config.config_path)
-    field_config = sim_config.field.to_runtime()
-    regions = RegionMasks.from_size(field_config.size)
+    regions = RegionMasks.from_size(sim_config.field.size)
 
     response_rows, response_summary = run_response_stability(
         config,
-        field_config=field_config,
+        sim_config=sim_config,
         regions=regions,
     )
     propagation_rows, propagation_summary = run_propagation_distance(
         config,
-        field_config=field_config,
+        sim_config=sim_config,
         regions=regions,
     )
     memory_rows, memory_summary = run_memory_experiment(
         config,
-        field_config=field_config,
+        sim_config=sim_config,
         regions=regions,
     )
 
@@ -106,21 +108,23 @@ def run_experiment_suite(config: ExperimentAnalysisConfig) -> ExperimentSummary:
 def run_response_stability(
     config: ExperimentAnalysisConfig,
     *,
-    field_config: Any,
+    sim_config: SimulationConfig,
     regions: RegionMasks,
 ) -> tuple[ExperimentRows, ExperimentSummary]:
-    simulation = Simulation(config=field_config)
-    advance(simulation, config.warmup_steps)
+    simulation = sim_config.create_simulation()
+    protocol_stream = ProtocolAnalysisStream.from_config(sim_config, regions)
+    initialize_stream(simulation, protocol_stream)
+    advance(simulation, protocol_stream, config.warmup_steps)
     rows: ExperimentRows = []
     curves: list[np.ndarray] = []
     peaks: list[float] = []
 
     for trial in range(1, config.response_trials + 1):
-        before = snapshot_metrics(simulation, regions)
+        before = latest_metrics(protocol_stream)
         apply_impulse(simulation, regions, config.impulse)
         trial_rows = collect_response_rows(
             simulation,
-            regions,
+            protocol_stream,
             baseline=before,
             horizon=config.response_horizon,
             experiment="response_stability",
@@ -130,7 +134,7 @@ def run_response_stability(
         curve = column(trial_rows, "right_delta")
         curves.append(curve)
         peaks.append(float(np.max(np.abs(curve))))
-        advance(simulation, config.response_pause)
+        advance(simulation, protocol_stream, config.response_pause)
 
     correlations = pairwise_correlations(curves)
     summary = {
@@ -147,17 +151,19 @@ def run_response_stability(
 def run_propagation_distance(
     config: ExperimentAnalysisConfig,
     *,
-    field_config: Any,
+    sim_config: SimulationConfig,
     regions: RegionMasks,
 ) -> tuple[ExperimentRows, ExperimentSummary]:
-    simulation = Simulation(config=field_config)
-    advance(simulation, config.warmup_steps)
-    baseline = snapshot_metrics(simulation, regions)
+    simulation = sim_config.create_simulation()
+    protocol_stream = ProtocolAnalysisStream.from_config(sim_config, regions)
+    initialize_stream(simulation, protocol_stream)
+    advance(simulation, protocol_stream, config.warmup_steps)
+    baseline = latest_metrics(protocol_stream)
     apply_impulse(simulation, regions, config.impulse)
     rows: ExperimentRows = []
 
     for offset in range(1, config.propagation_horizon + 1):
-        row = step_metrics(simulation, regions)
+        row = step_metrics(simulation, protocol_stream)
         row["experiment"] = "propagation_distance"
         row["offset"] = offset
         row["left_delta"] = row["left_synchrony"] - baseline["left_synchrony"]
@@ -210,27 +216,29 @@ def run_propagation_distance(
 def run_memory_experiment(
     config: ExperimentAnalysisConfig,
     *,
-    field_config: Any,
+    sim_config: SimulationConfig,
     regions: RegionMasks,
 ) -> tuple[ExperimentRows, ExperimentSummary]:
-    simulation = Simulation(config=field_config)
-    advance(simulation, config.warmup_steps)
-    pre_first = snapshot_metrics(simulation, regions)
+    simulation = sim_config.create_simulation()
+    protocol_stream = ProtocolAnalysisStream.from_config(sim_config, regions)
+    initialize_stream(simulation, protocol_stream)
+    advance(simulation, protocol_stream, config.warmup_steps)
+    pre_first = latest_metrics(protocol_stream)
     apply_impulse(simulation, regions, config.impulse)
     first_rows = collect_response_rows(
         simulation,
-        regions,
+        protocol_stream,
         baseline=pre_first,
         horizon=config.memory_horizon,
         experiment="memory",
         pulse=1,
     )
-    advance(simulation, config.memory_pause)
-    pre_second = snapshot_metrics(simulation, regions)
+    advance(simulation, protocol_stream, config.memory_pause)
+    pre_second = latest_metrics(protocol_stream)
     apply_impulse(simulation, regions, config.impulse)
     second_rows = collect_response_rows(
         simulation,
-        regions,
+        protocol_stream,
         baseline=pre_second,
         horizon=config.memory_horizon,
         experiment="memory",
@@ -256,7 +264,7 @@ def run_memory_experiment(
 
 def collect_response_rows(
     simulation: Simulation,
-    regions: RegionMasks,
+    protocol_stream: ProtocolAnalysisStream,
     *,
     baseline: dict[str, float],
     horizon: int,
@@ -266,7 +274,7 @@ def collect_response_rows(
 ) -> ExperimentRows:
     rows: ExperimentRows = []
     for offset in range(1, horizon + 1):
-        row = step_metrics(simulation, regions)
+        row = step_metrics(simulation, protocol_stream)
         row["experiment"] = experiment
         row["offset"] = offset
         if trial is not None:
@@ -280,25 +288,23 @@ def collect_response_rows(
     return rows
 
 
-def snapshot_metrics(simulation: Simulation, regions: RegionMasks) -> dict[str, Any]:
-    frame = simulation.snapshot()
-    local = frame.local_synchrony
-    regional = compute_regional_activity_metrics(
-        frame,
-        regions,
-        input_value=simulation.last_input_value,
-    )
+def snapshot_metrics(observation: ProtocolObservation) -> dict[str, Any]:
+    frame = observation.frame
+    regional = observation.activity
     return {
-        "step": float(simulation.step_index),
-        "global_synchrony": frame.metrics.global_synchrony,
-        "mean_metabolite": frame.metrics.mean_metabolite,
-        "mean_trace": frame.metrics.mean_trace,
-        "left_synchrony": region_mean(local, regions.input),
-        "assoc_synchrony": region_mean(local, regions.assoc),
-        "right_synchrony": region_mean(local, regions.output),
-        "left_trace": region_mean(frame.state.trace, regions.input),
-        "assoc_trace": region_mean(frame.state.trace, regions.assoc),
-        "right_trace": region_mean(frame.state.trace, regions.output),
+        "version": frame.version,
+        "sequence": frame.sequence,
+        "step": float(frame.step),
+        "time_seconds": frame.time_seconds,
+        "global_synchrony": frame.field.global_synchrony,
+        "mean_metabolite": frame.field.mean_metabolite,
+        "mean_trace": frame.field.mean_trace,
+        "left_synchrony": frame.input_region.mean_local_synchrony,
+        "assoc_synchrony": frame.assoc_region.mean_local_synchrony,
+        "right_synchrony": frame.output_region.mean_local_synchrony,
+        "left_trace": frame.input_region.mean_trace,
+        "assoc_trace": frame.assoc_region.mean_trace,
+        "right_trace": frame.output_region.mean_trace,
         "input_value": regional.input_value,
         "input_activity": regional.input_activity,
         "assoc_activity": regional.assoc_activity,
@@ -310,22 +316,54 @@ def snapshot_metrics(simulation: Simulation, regions: RegionMasks) -> dict[str, 
     }
 
 
-def step_metrics(simulation: Simulation, regions: RegionMasks) -> dict[str, Any]:
-    simulation.step()
-    return snapshot_metrics(simulation, regions)
+def step_metrics(
+    simulation: Simulation,
+    protocol_stream: ProtocolAnalysisStream,
+) -> dict[str, Any]:
+    observation = protocol_stream.observe(
+        simulation.step(),
+        input_value=simulation.last_input_value,
+    )
+    if observation is None:
+        msg = "experiment protocol cadence skipped a required step"
+        raise RuntimeError(msg)
+    return snapshot_metrics(observation)
 
 
 def apply_impulse(simulation: Simulation, regions: RegionMasks, amount: float) -> None:
     simulation.field.apply_phase_impulse(regions.input, amount)
 
 
-def advance(simulation: Simulation, steps: int) -> None:
+def initialize_stream(
+    simulation: Simulation,
+    protocol_stream: ProtocolAnalysisStream,
+) -> None:
+    observation = protocol_stream.observe(
+        simulation.snapshot(),
+        input_value=simulation.last_input_value,
+    )
+    if observation is None:
+        msg = "protocol must emit the initial experiment frame"
+        raise RuntimeError(msg)
+
+
+def latest_metrics(protocol_stream: ProtocolAnalysisStream) -> dict[str, Any]:
+    if protocol_stream.last_observation is None:
+        msg = "experiment protocol stream has no observation"
+        raise RuntimeError(msg)
+    return snapshot_metrics(protocol_stream.last_observation)
+
+
+def advance(
+    simulation: Simulation,
+    protocol_stream: ProtocolAnalysisStream,
+    steps: int,
+) -> None:
     for _ in range(steps):
-        simulation.step()
-
-
-def region_mean(values: np.ndarray, mask: np.ndarray) -> float:
-    return float(np.mean(values[mask]))
+        protocol_stream.observe(
+            simulation.step(),
+            input_value=simulation.last_input_value,
+        )
 
 
 def column(rows: ExperimentRows, key: str) -> np.ndarray:

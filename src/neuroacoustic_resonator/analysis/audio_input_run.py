@@ -11,7 +11,10 @@ import numpy as np
 
 from neuroacoustic_resonator.analysis.metrics import (
     RegionalActivityMetrics,
-    RegionalActivityTracker,
+)
+from neuroacoustic_resonator.analysis.protocol_stream import (
+    ProtocolAnalysisStream,
+    protocol_frame_row,
 )
 from neuroacoustic_resonator.audio.input import (
     AudioInputFeatures,
@@ -20,7 +23,7 @@ from neuroacoustic_resonator.audio.input import (
 )
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
-from neuroacoustic_resonator.core.simulation import SimulationFrame
+from neuroacoustic_resonator.protocol import SoundProtocolFrame
 
 AudioInputRows = list[dict[str, Any]]
 AudioInputSummary = dict[str, Any]
@@ -68,7 +71,7 @@ def run_audio_input_simulation(config: AudioInputRunConfig) -> AudioInputSummary
     sim_config = SimulationConfig.from_file(config.config_path)
     simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
-    tracker = RegionalActivityTracker()
+    protocol_stream = ProtocolAnalysisStream.from_config(sim_config, regions)
     features = extract_audio_input_features(
         config.input_wav,
         frame_size=config.frame_size,
@@ -84,9 +87,8 @@ def run_audio_input_simulation(config: AudioInputRunConfig) -> AudioInputSummary
 
     for _ in range(config.warmup_steps):
         warmup_frame = simulation.step()
-        tracker.update(
+        protocol_stream.observe(
             warmup_frame,
-            regions,
             input_value=simulation.last_input_value,
         )
 
@@ -97,16 +99,18 @@ def run_audio_input_simulation(config: AudioInputRunConfig) -> AudioInputSummary
     rows: AudioInputRows = []
     for step in range(steps):
         input_value = drive.apply(simulation.field, step)
-        simulation.step_index += 1
-        state = simulation.field.step()
-        simulation.last_input_value = input_value
-        frame = SimulationFrame(
-            state=state,
-            metrics=simulation.field.metrics(step=simulation.step_index),
-            local_synchrony=simulation.field.local_synchrony(),
+        frame = simulation.step_with_input(input_value)
+        observation = protocol_stream.observe(frame, input_value=input_value)
+        if observation is None:
+            continue
+        rows.append(
+            audio_input_row(
+                features,
+                observation.frame,
+                observation.activity,
+                step=step,
+            )
         )
-        metrics = tracker.update(frame, regions, input_value=input_value)
-        rows.append(audio_input_row(features, metrics, step=step))
 
     summary = summarize_audio_input_rows(rows, config=config)
     write_audio_input_rows(config.output_csv, rows)
@@ -116,34 +120,38 @@ def run_audio_input_simulation(config: AudioInputRunConfig) -> AudioInputSummary
 
 def audio_input_row(
     features: AudioInputFeatures,
+    frame: SoundProtocolFrame,
     metrics: RegionalActivityMetrics,
     *,
     step: int,
 ) -> dict[str, Any]:
-    return {
-        "step": metrics.step,
-        "audio_step": step,
-        "time_seconds": step * features.hop_size / features.sample_rate,
-        "rms": float(features.rms[step]),
-        "onset": float(features.onset[step]),
-        "spectral_centroid": float(features.spectral_centroid[step]),
-        "input_value": metrics.input_value,
-        "input_activity": metrics.input_activity,
-        "input_fast_activity": metrics.input_fast_activity,
-        "input_slow_activity": metrics.input_slow_activity,
-        "assoc_activity": metrics.assoc_activity,
-        "assoc_fast_activity": metrics.assoc_fast_activity,
-        "assoc_slow_activity": metrics.assoc_slow_activity,
-        "output_activity": metrics.output_activity,
-        "output_activity_baseline": metrics.output_activity_baseline,
-        "output_response_activity": metrics.output_response_activity,
-        "output_fast_activity": metrics.output_fast_activity,
-        "output_slow_activity": metrics.output_slow_activity,
-        "left_to_right_ratio": metrics.left_to_right_ratio,
-        "output_event_score": metrics.output_event_score,
-        "output_fast_response_score": metrics.output_fast_response_score,
-        "output_slow_drift_score": metrics.output_slow_drift_score,
-    }
+    row = protocol_frame_row(frame)
+    row.update(
+        {
+            "audio_step": step,
+            "time_seconds": step * features.hop_size / features.sample_rate,
+            "rms": float(features.rms[step]),
+            "onset": float(features.onset[step]),
+            "spectral_centroid": float(features.spectral_centroid[step]),
+            "input_value": metrics.input_value,
+            "input_activity": metrics.input_activity,
+            "input_fast_activity": metrics.input_fast_activity,
+            "input_slow_activity": metrics.input_slow_activity,
+            "assoc_activity": metrics.assoc_activity,
+            "assoc_fast_activity": metrics.assoc_fast_activity,
+            "assoc_slow_activity": metrics.assoc_slow_activity,
+            "output_activity": metrics.output_activity,
+            "output_activity_baseline": metrics.output_activity_baseline,
+            "output_response_activity": metrics.output_response_activity,
+            "output_fast_activity": metrics.output_fast_activity,
+            "output_slow_activity": metrics.output_slow_activity,
+            "left_to_right_ratio": metrics.left_to_right_ratio,
+            "output_event_score": metrics.output_event_score,
+            "output_fast_response_score": metrics.output_fast_response_score,
+            "output_slow_drift_score": metrics.output_slow_drift_score,
+        }
+    )
+    return row
 
 
 def summarize_audio_input_rows(

@@ -38,6 +38,12 @@ from neuroacoustic_resonator.analysis.pattern_plasticity import (
     pattern_guided_plasticity_decision,
     summarize_plasticity_decisions,
 )
+from neuroacoustic_resonator.analysis.protocol_stream import (
+    ProtocolAnalysisStream,
+    ProtocolFrameHistory,
+    ProtocolObservation,
+    protocol_frame_row,
+)
 from neuroacoustic_resonator.analysis.reinforcement import (
     PatternReinforcementSignals,
     PatternReinforcementWeights,
@@ -96,6 +102,9 @@ __all__ = [
     "PatternReinforcementSignals",
     "PatternReinforcementWeights",
     "ProtocolActivityTracker",
+    "ProtocolAnalysisStream",
+    "ProtocolFrameHistory",
+    "ProtocolObservation",
     "RegionMasks",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
@@ -119,6 +128,7 @@ __all__ = [
     "output_pattern_signature",
     "pattern_features",
     "pattern_guided_plasticity_decision",
+    "protocol_frame_row",
     "protocol_pattern_signature",
     "region_activity",
     "region_fast_activity",

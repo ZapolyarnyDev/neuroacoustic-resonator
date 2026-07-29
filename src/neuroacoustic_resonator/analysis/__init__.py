@@ -55,6 +55,12 @@ from neuroacoustic_resonator.analysis.propagation_probe import (
     PropagationProbeConfig,
     run_propagation_probe,
 )
+from neuroacoustic_resonator.analysis.protocol_stream import (
+    ProtocolAnalysisStream,
+    ProtocolFrameHistory,
+    ProtocolObservation,
+    protocol_frame_row,
+)
 from neuroacoustic_resonator.analysis.reinforcement import (
     PatternReinforcementSignals,
     PatternReinforcementWeights,
@@ -96,6 +102,9 @@ __all__ = [
     "PatternReinforcementWeights",
     "PropagationProbeConfig",
     "ProtocolActivityTracker",
+    "ProtocolAnalysisStream",
+    "ProtocolFrameHistory",
+    "ProtocolObservation",
     "RegionalActivityMetrics",
     "RegionalActivityTracker",
     "SyntheticStimulusSpec",
@@ -114,6 +123,7 @@ __all__ = [
     "pattern_features",
     "pattern_guided_plasticity_decision",
     "pattern_novelty",
+    "protocol_frame_row",
     "protocol_pattern_signature",
     "region_activity",
     "region_fast_activity",

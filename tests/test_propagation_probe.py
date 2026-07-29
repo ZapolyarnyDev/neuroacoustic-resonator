@@ -76,6 +76,8 @@ steps: 8
     loaded_summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
     assert len(rows) == 8
+    assert rows[0]["version"] == "0.1"
+    assert int(rows[0]["sequence"]) >= 0
     assert rows[0]["offset"] == "1"
     assert "output_activity_delta" in rows[0]
     assert "output_activity_delta_abs" in rows[0]

@@ -69,7 +69,11 @@ class Simulation:
         )
 
     def step(self) -> SimulationFrame:
-        self.last_input_value = self.input_drive.apply(self.field, self.step_index)
+        input_value = self.input_drive.apply(self.field, self.step_index)
+        return self.step_with_input(input_value)
+
+    def step_with_input(self, input_value: float) -> SimulationFrame:
+        self.last_input_value = float(input_value)
         self.step_index += 1
         state = self.field.step()
         return SimulationFrame(

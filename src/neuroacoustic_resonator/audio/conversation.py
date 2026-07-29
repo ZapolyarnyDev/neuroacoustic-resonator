@@ -312,9 +312,11 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
             features,
             drive,
         )
-        input_end_pattern = protocol_pattern_signature(
-            _latest_protocol_frame(drive_result.protocol_frames, protocol_stream)
+        input_protocol_frame = _latest_protocol_frame(
+            drive_result.protocol_frames,
+            protocol_stream,
         )
+        input_end_pattern = protocol_pattern_signature(input_protocol_frame)
         planned_response_seconds = response_duration_for_input(
             drive_result,
             config=config,
@@ -344,9 +346,11 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
                 plasticity_decisions=plasticity_decisions,
             )
         )
-        response_end_pattern = protocol_pattern_signature(
-            _latest_protocol_frame(response_protocol_frames, protocol_stream)
+        response_protocol_frame = _latest_protocol_frame(
+            response_protocol_frames,
+            protocol_stream,
         )
+        response_end_pattern = protocol_pattern_signature(response_protocol_frame)
         response_audio_diagnostics = summarize_pattern_audio(
             response_audio,
             response_protocol_frames,
@@ -391,6 +395,11 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
                 "mean_response_score": float(np.mean(response_scores)),
                 "input_output_pattern_history": drive_result.output_pattern_summary,
                 "response_output_pattern_history": response_pattern_history.summary(),
+                "protocol_version": response_protocol_frame.version,
+                "input_protocol_frames": len(drive_result.protocol_frames),
+                "response_protocol_frames": len(response_protocol_frames),
+                "input_end_protocol_sequence": input_protocol_frame.sequence,
+                "response_end_protocol_sequence": response_protocol_frame.sequence,
                 "response_pattern_audio_diagnostics": response_audio_diagnostics,
                 "pattern_guided_plasticity": summarize_plasticity_decisions(
                     plasticity_decisions
@@ -590,14 +599,7 @@ def drive_utterance(
     pattern_history = OutputPatternHistory()
     for input_step in range(features.frame_count):
         input_value = drive.apply(simulation.field, input_step)
-        simulation.step_index += 1
-        state = simulation.field.step()
-        simulation.last_input_value = input_value
-        frame = SimulationFrame(
-            state=state,
-            metrics=simulation.field.metrics(step=simulation.step_index),
-            local_synchrony=simulation.field.local_synchrony(),
-        )
+        frame = simulation.step_with_input(input_value)
         observation = protocol_stream.observe(
             frame,
             regions,

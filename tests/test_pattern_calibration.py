@@ -89,6 +89,7 @@ def test_run_pattern_calibration_writes_rows_summary_and_reinforcement(
     loaded = json.loads(summary_path.read_text(encoding="utf-8"))
 
     assert len(rows) == 4
+    assert {row["protocol_version"] for row in rows} == {"0.1"}
     assert summary["rows"] == 4
     assert set(summary["stimuli"]) == {"voice", "tone"}
     assert "reinforcement" in summary

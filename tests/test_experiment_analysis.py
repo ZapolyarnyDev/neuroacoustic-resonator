@@ -1,3 +1,4 @@
+import csv
 import json
 
 import numpy as np
@@ -44,6 +45,12 @@ steps: 4
     assert (output_dir / "experiment_1_response_stability.csv").exists()
     assert (output_dir / "experiment_2_propagation_distance.csv").exists()
     assert (output_dir / "experiment_3_memory.csv").exists()
+    with (output_dir / "experiment_2_propagation_distance.csv").open(
+        newline="",
+        encoding="utf-8",
+    ) as stream:
+        propagation_rows = list(csv.DictReader(stream))
+    assert {row["version"] for row in propagation_rows} == {"0.1"}
     summary_path = output_dir / "experiment_summary.json"
     assert summary_path.exists()
     assert (
