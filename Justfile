@@ -59,6 +59,18 @@ pattern-calibration:
 pattern-calibration-input input:
     uv run python scripts/run_pattern_calibration.py --config configs/field_only.yaml --input {{input}} --output-dir experiments/pattern_calibration --output-csv experiments/logs/pattern_calibration.csv --output-summary experiments/logs/pattern_calibration_summary.json --repeats 2 --input-assoc-gain 0.8 --input-output-gain 0.0
 
+protocol-record:
+    uv run neuroacoustic-protocol record --config configs/field_only.yaml --steps 128 --output outputs/protocol/recording.jsonl --summary outputs/protocol/recording-summary.json
+
+protocol-record-custom config steps output:
+    uv run neuroacoustic-protocol record --config {{config}} --steps {{steps}} --output {{output}}
+
+protocol-replay:
+    uv run neuroacoustic-protocol replay --input outputs/protocol/recording.jsonl --summary outputs/protocol/replay-summary.json --output-wav outputs/protocol/replay.wav
+
+protocol-replay-custom input:
+    uv run neuroacoustic-protocol replay --input {{input}}
+
 voice-probe input:
     uv run python scripts/probe_voice_response.py --config configs/field_only.yaml --input {{input}} --output-dir experiments/logs --prefix voice_vs_silence
 

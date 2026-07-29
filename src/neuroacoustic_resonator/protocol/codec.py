@@ -128,7 +128,11 @@ def encode_frame(frame: SoundProtocolFrame) -> str:
 
 def decode_frame(value: str) -> SoundProtocolFrame:
     try:
-        decoded = json.loads(value, parse_constant=_reject_json_constant)
+        decoded = json.loads(
+            value,
+            object_pairs_hook=_require_unique_json_keys,
+            parse_constant=_reject_json_constant,
+        )
     except json.JSONDecodeError as exc:
         msg = f"invalid protocol JSON: {exc.msg}"
         raise ProtocolDecodeError(msg) from exc
@@ -174,6 +178,7 @@ def write_protocol_jsonl(
     frames: Iterable[SoundProtocolFrame],
 ) -> Path:
     destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("w", encoding="utf-8", newline="\n") as stream:
         writer = ProtocolJsonlWriter(stream)
         for frame in frames:
@@ -402,3 +407,15 @@ def _require_optional_string(value: object, path: str) -> str | None:
 def _reject_json_constant(value: str) -> None:
     msg = f"non-finite JSON number is not allowed: {value}"
     raise ProtocolDecodeError(msg)
+
+
+def _require_unique_json_keys(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            msg = f"duplicate JSON field is not allowed: {key!r}"
+            raise ProtocolDecodeError(msg)
+        result[key] = value
+    return result

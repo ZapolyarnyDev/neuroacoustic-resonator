@@ -29,10 +29,10 @@ flowchart LR
     A[Live or recorded audio] --> B[Audio features]
     B --> C[Input region]
     C --> D[Metabolic oscillator field]
-    D --> E[Output-region patterns]
+    D --> E[Sound Protocol v0]
     E --> F[Pattern analysis]
-    E --> G[Acoustic response]
-    D --> H[Metrics and probes]
+    E --> G[Audio consumers]
+    E --> H[JSONL and research reports]
 ```
 
 The field is divided into input, association, and output regions. Audio features
@@ -49,6 +49,7 @@ offline analysis.
 - Frequency and coupling plasticity with homeostatic bounds.
 - Audio feature extraction and configurable input routing.
 - Output-region pattern signatures and temporal pattern history.
+- A strict, versioned JSONL sound protocol with exact offline replay.
 - Pattern calibration, propagation, voice-response, and memory probes.
 - Checkpoint save/resume support for longer experiments.
 - Offline metrics, diagnostics, plots, summaries, and benchmark exports.
@@ -100,6 +101,34 @@ If [`just`](https://just.systems/) is installed, see the available recipes with:
 ```bash
 just
 ```
+
+## Record and replay the field
+
+Sound Protocol v0 is now the shared stream used by conversations, diagnostics,
+and research probes. Record a reproducible simulation as strict JSONL:
+
+```bash
+just protocol-record
+```
+
+Replay the recording without running the oscillator field:
+
+```bash
+just protocol-replay
+```
+
+Replay can produce a summary and a WAV through the current diagnostic reference
+renderer. The renderer is not one of the planned sound modes.
+
+Direct CLI usage follows the same commands:
+
+```bash
+uv run neuroacoustic-protocol record --config configs/field_only.yaml --steps 128 --output outputs/protocol/recording.jsonl
+uv run neuroacoustic-protocol replay --input outputs/protocol/recording.jsonl
+```
+
+A minimal exact round-trip is available in
+[examples/protocol_round_trip.py](examples/protocol_round_trip.py).
 
 ## Live audio experiment
 
@@ -154,6 +183,7 @@ configs/      Reproducible simulation configurations
 scripts/      Entry points for research, audio, benchmarks, and state persistence
 src/          Field engine, analysis, audio, I/O, and visualizations
 tests/        Unit and integration tests
+examples/     Small reproducible protocol examples
 experiments/  Generated research artifacts
 outputs/      Generated images, metrics, and benchmarks
 ```

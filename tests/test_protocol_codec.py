@@ -153,6 +153,16 @@ def test_jsonl_reader_rejects_blank_lines_with_line_number() -> None:
         list(ProtocolJsonlReader(stream))
 
 
+def test_decoder_rejects_duplicate_json_fields() -> None:
+    encoded = encode_frame(_frame()).replace(
+        '"sequence":3',
+        '"sequence":3,"sequence":4',
+    )
+
+    with pytest.raises(ProtocolDecodeError, match="duplicate"):
+        decode_frame(encoded)
+
+
 def test_encoded_frame_is_strict_standard_json() -> None:
     encoded = encode_frame(_frame())
 
