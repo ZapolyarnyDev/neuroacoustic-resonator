@@ -19,6 +19,7 @@ from neuroacoustic_resonator.analysis.metrics import (
 from neuroacoustic_resonator.analysis.protocol_stream import ProtocolAnalysisStream
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.core.topology import GridTopology
 
 ProbeRows = list[dict[str, Any]]
 ProbeSummary = dict[str, Any]
@@ -37,6 +38,8 @@ class PropagationProbeConfig:
     horizons: tuple[int, ...] = ()
     impulse: float = 0.45
     response_threshold: float = 0.02
+    seeds: tuple[int, ...] = ()
+    uncoupled_control: bool = False
 
     def __post_init__(self) -> None:
         if self.warmup_steps < 0:
@@ -54,9 +57,14 @@ class PropagationProbeConfig:
         if self.response_threshold < 0.0:
             msg = "response_threshold must be non-negative"
             raise ValueError(msg)
+        if len(set(self.seeds)) != len(self.seeds):
+            msg = "seeds must not contain duplicates"
+            raise ValueError(msg)
 
 
 def run_propagation_probe(config: PropagationProbeConfig) -> ProbeSummary:
+    if config.seeds or config.uncoupled_control:
+        return run_controlled_probe(config)
     if config.horizons:
         return run_multi_horizon_probe(config)
 
@@ -67,6 +75,9 @@ def run_propagation_probe(config: PropagationProbeConfig) -> ProbeSummary:
         config=config,
         horizon=config.horizon,
     )
+    summary["environment"] = propagation_environment(
+        SimulationConfig.from_file(config.config_path)
+    )
     write_probe_rows(config.output_csv, rows)
     write_probe_summary(config.output_summary, summary)
     if config.output_plot is not None:
@@ -74,6 +85,129 @@ def run_propagation_probe(config: PropagationProbeConfig) -> ProbeSummary:
         summary["plot_path"] = str(config.output_plot)
         write_probe_summary(config.output_summary, summary)
     return summary
+
+
+def run_controlled_probe(config: PropagationProbeConfig) -> ProbeSummary:
+    source_config = SimulationConfig.from_file(config.config_path)
+    seeds = controlled_seeds(config, source_config)
+    horizons = config.horizons or (config.horizon,)
+    all_rows: ProbeRows = []
+    trials: list[dict[str, Any]] = []
+    for seed in seeds:
+        coupled_config = simulation_config_for_trial(source_config, seed=seed)
+        conditions = [
+            ("coupled", coupled_config, config.impulse),
+            ("no_impulse", coupled_config, 0.0),
+        ]
+        if config.uncoupled_control:
+            uncoupled_config = simulation_config_for_trial(
+                source_config,
+                seed=seed,
+                uncoupled=True,
+            )
+            conditions.append(
+                (
+                    "uncoupled",
+                    uncoupled_config,
+                    config.impulse,
+                )
+            )
+            conditions.append(("uncoupled_no_impulse", uncoupled_config, 0.0))
+        for horizon in horizons:
+            horizon_summaries: dict[str, ProbeSummary] = {}
+            condition_rows: dict[str, ProbeRows] = {}
+            for condition, trial_config, impulse in conditions:
+                rows, baseline = collect_probe_rows(
+                    config,
+                    horizon=horizon,
+                    simulation_config=trial_config,
+                    impulse=impulse,
+                )
+                for row in rows:
+                    row["seed"] = seed
+                    row["condition"] = condition
+                    row["horizon"] = horizon
+                all_rows.extend(rows)
+                condition_rows[condition] = rows
+                condition_summary = summarize_probe_rows(
+                    rows,
+                    baseline=baseline,
+                    config=config,
+                    horizon=horizon,
+                )
+                condition_summary["field"] = {
+                    "seed": trial_config.field.seed,
+                    "coupling_strength": trial_config.field.coupling_strength,
+                    "coupling_homeostasis_rate": (
+                        trial_config.field.coupling_homeostasis_rate
+                    ),
+                }
+                horizon_summaries[condition] = condition_summary
+            trial: dict[str, Any] = {
+                "seed": seed,
+                "horizon": horizon,
+                "conditions": horizon_summaries,
+            }
+            if config.uncoupled_control:
+                trial["comparison"] = compare_controlled_conditions(
+                    horizon_summaries["coupled"],
+                    condition_rows["coupled"],
+                    condition_rows["no_impulse"],
+                    condition_rows["uncoupled"],
+                    condition_rows["uncoupled_no_impulse"],
+                    response_threshold=config.response_threshold,
+                )
+            trials.append(trial)
+
+    summary = {
+        "config": str(config.config_path),
+        "parameters": {
+            "warmup_steps": config.warmup_steps,
+            "horizons": list(horizons),
+            "impulse": config.impulse,
+            "response_threshold": config.response_threshold,
+            "seeds": list(seeds),
+            "uncoupled_control": config.uncoupled_control,
+        },
+        "environment": propagation_environment(source_config),
+        "trials": trials,
+        "aggregate": aggregate_controlled_trials(trials),
+    }
+    write_probe_rows(config.output_csv, all_rows)
+    write_probe_summary(config.output_summary, summary)
+    if config.output_plot is not None:
+        write_probe_plot(config.output_plot, all_rows)
+        summary["plot_path"] = str(config.output_plot)
+        write_probe_summary(config.output_summary, summary)
+    return summary
+
+
+def controlled_seeds(
+    config: PropagationProbeConfig,
+    source_config: SimulationConfig,
+) -> tuple[int, ...]:
+    if config.seeds:
+        return config.seeds
+    if source_config.field.seed is None:
+        msg = "controlled propagation requires explicit seeds"
+        raise ValueError(msg)
+    return (source_config.field.seed,)
+
+
+def simulation_config_for_trial(
+    source: SimulationConfig,
+    *,
+    seed: int,
+    uncoupled: bool = False,
+) -> SimulationConfig:
+    changes: dict[str, Any] = {"seed": seed}
+    if uncoupled:
+        changes.update(
+            coupling_strength=0.0,
+            coupling_homeostasis_rate=0.0,
+        )
+    field = source.field.model_copy(update=changes)
+    return source.model_copy(update={"field": field})
 
 
 def run_multi_horizon_probe(config: PropagationProbeConfig) -> ProbeSummary:
@@ -99,6 +233,9 @@ def run_multi_horizon_probe(config: PropagationProbeConfig) -> ProbeSummary:
             "impulse": config.impulse,
             "response_threshold": config.response_threshold,
         },
+        "environment": propagation_environment(
+            SimulationConfig.from_file(config.config_path)
+        ),
         "horizons": horizon_summaries,
     }
     write_probe_rows(config.output_csv, all_rows)
@@ -114,8 +251,10 @@ def collect_probe_rows(
     config: PropagationProbeConfig,
     *,
     horizon: int,
+    simulation_config: SimulationConfig | None = None,
+    impulse: float | None = None,
 ) -> tuple[ProbeRows, RegionalActivityMetrics]:
-    sim_config = SimulationConfig.from_file(config.config_path)
+    sim_config = simulation_config or SimulationConfig.from_file(config.config_path)
     simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
     protocol_stream = ProtocolAnalysisStream.from_config(sim_config, regions)
@@ -136,7 +275,9 @@ def collect_probe_rows(
             baseline_observation = observation
 
     baseline = baseline_observation.activity
-    simulation.field.apply_phase_impulse(regions.input, config.impulse)
+    applied_impulse = config.impulse if impulse is None else impulse
+    if applied_impulse != 0.0:
+        simulation.field.apply_phase_impulse(regions.input, applied_impulse)
 
     rows: ProbeRows = []
     previous = baseline
@@ -284,6 +425,193 @@ def summarize_probe_rows(
     }
 
 
+def compare_controlled_conditions(
+    coupled: ProbeSummary,
+    coupled_rows: ProbeRows,
+    no_impulse_rows: ProbeRows,
+    uncoupled_rows: ProbeRows,
+    uncoupled_no_impulse_rows: ProbeRows,
+    *,
+    response_threshold: float,
+) -> dict[str, Any]:
+    causal_input = controlled_effect(
+        coupled_rows,
+        no_impulse_rows,
+        "input_activity_delta",
+    )
+    causal_assoc = controlled_effect(
+        coupled_rows,
+        no_impulse_rows,
+        "assoc_activity_delta",
+    )
+    causal_output = controlled_effect(
+        coupled_rows,
+        no_impulse_rows,
+        "output_activity_delta",
+    )
+    uncoupled_output = controlled_effect(
+        uncoupled_rows,
+        uncoupled_no_impulse_rows,
+        "output_activity_delta",
+    )
+    input_latency = first_threshold_crossing(causal_input, response_threshold)
+    assoc_latency = first_threshold_crossing(causal_assoc, response_threshold)
+    output_latency = first_threshold_crossing(causal_output, response_threshold)
+    causal_input_peak = peak_value_and_step(causal_input)
+    causal_assoc_peak = peak_value_and_step(causal_assoc)
+    causal_output_peak = peak_value_and_step(causal_output)
+    control_peak = float(np.max(uncoupled_output))
+    causal_to_control_ratio = (
+        None if control_peak <= 1e-12 else causal_output_peak[0] / control_peak
+    )
+    assoc_precedes_output = (
+        isinstance(assoc_latency, int)
+        and isinstance(output_latency, int)
+        and assoc_latency < output_latency
+    )
+    output_above_control = causal_output_peak[0] > control_peak
+    return {
+        "input_latency_steps": input_latency,
+        "assoc_latency_steps": assoc_latency,
+        "output_latency_steps": output_latency,
+        "causal_peak_input_activity_delta": causal_input_peak[0],
+        "causal_peak_input_activity_step": causal_input_peak[1],
+        "causal_peak_assoc_activity_delta": causal_assoc_peak[0],
+        "causal_peak_assoc_activity_step": causal_assoc_peak[1],
+        "causal_peak_output_activity_delta": causal_output_peak[0],
+        "causal_peak_output_activity_step": causal_output_peak[1],
+        "coupled_peak_output_activity_delta": float(
+            coupled["peak_output_activity_delta"]
+        ),
+        "uncoupled_peak_output_activity_delta": control_peak,
+        "causal_to_uncoupled_peak_ratio": causal_to_control_ratio,
+        "assoc_precedes_output": assoc_precedes_output,
+        "output_above_control": output_above_control,
+        "passed": bool(
+            output_latency is not None
+            and assoc_precedes_output
+            and output_above_control
+        ),
+    }
+
+
+def controlled_effect(
+    coupled_rows: ProbeRows,
+    no_impulse_rows: ProbeRows,
+    key: str,
+) -> np.ndarray:
+    if len(coupled_rows) != len(no_impulse_rows):
+        msg = "controlled propagation rows must have matching lengths"
+        raise ValueError(msg)
+    return np.abs(column(coupled_rows, key) - column(no_impulse_rows, key))
+
+
+def peak_value_and_step(values: np.ndarray) -> tuple[float, int | None]:
+    index = int(np.argmax(values))
+    peak = float(values[index])
+    return peak, None if peak <= 1e-12 else index + 1
+
+
+def aggregate_controlled_trials(trials: list[dict[str, Any]]) -> dict[str, Any]:
+    comparisons = [trial["comparison"] for trial in trials if "comparison" in trial]
+    coupled = [trial["conditions"]["coupled"] for trial in trials]
+    if not comparisons:
+        reached_output = [
+            bool(summary["response_reached_output"]) for summary in coupled
+        ]
+        return {
+            "trials": len(trials),
+            "coupled_output_reach_rate": float(np.mean(reached_output)),
+            "gate_passed": False,
+        }
+    reached_output = [
+        comparison["output_latency_steps"] is not None for comparison in comparisons
+    ]
+    ratios = [
+        float(comparison["causal_to_uncoupled_peak_ratio"])
+        for comparison in comparisons
+        if comparison["causal_to_uncoupled_peak_ratio"] is not None
+    ]
+    passed = [bool(comparison["passed"]) for comparison in comparisons]
+    return {
+        "trials": len(trials),
+        "coupled_output_reach_rate": float(np.mean(reached_output)),
+        "assoc_precedes_output_rate": float(
+            np.mean(
+                [
+                    bool(comparison["assoc_precedes_output"])
+                    for comparison in comparisons
+                ]
+            )
+        ),
+        "output_above_control_rate": float(
+            np.mean(
+                [bool(comparison["output_above_control"]) for comparison in comparisons]
+            )
+        ),
+        "mean_causal_to_uncoupled_peak_ratio": (
+            None if not ratios else float(np.mean(ratios))
+        ),
+        "passed_trials": int(sum(passed)),
+        "gate_passed": all(passed),
+    }
+
+
+def propagation_environment(config: SimulationConfig) -> dict[str, Any]:
+    regions = RegionMasks.from_size(config.field.size)
+    topology = GridTopology.from_size(
+        config.field.size,
+        boundary_x=config.field.boundary_x,
+        boundary_y=config.field.boundary_y,
+    )
+    return {
+        "size": config.field.size,
+        "boundary_x": config.field.boundary_x,
+        "boundary_y": config.field.boundary_y,
+        "graph_distances": {
+            "input_to_assoc": minimum_mask_distance(
+                regions.input,
+                regions.assoc,
+                topology,
+            ),
+            "assoc_to_output": minimum_mask_distance(
+                regions.assoc,
+                regions.output,
+                topology,
+            ),
+            "input_to_output": minimum_mask_distance(
+                regions.input,
+                regions.output,
+                topology,
+            ),
+        },
+    }
+
+
+def minimum_mask_distance(
+    source: np.ndarray,
+    target: np.ndarray,
+    topology: GridTopology,
+) -> int:
+    if source.shape != topology.shape or target.shape != topology.shape:
+        msg = "region masks and topology must have matching shapes"
+        raise ValueError(msg)
+    if not np.any(source) or not np.any(target):
+        msg = "region masks must not be empty"
+        raise ValueError(msg)
+    target_coordinates = np.argwhere(target)
+    best = sum(topology.shape)
+    for source_y, source_x in np.argwhere(source):
+        delta_y = np.abs(target_coordinates[:, 0] - source_y)
+        delta_x = np.abs(target_coordinates[:, 1] - source_x)
+        if topology.boundary_y == "periodic":
+            delta_y = np.minimum(delta_y, topology.shape[0] - delta_y)
+        if topology.boundary_x == "periodic":
+            delta_x = np.minimum(delta_x, topology.shape[1] - delta_x)
+        best = min(best, int(np.min(delta_y + delta_x)))
+    return best
+
+
 def write_probe_rows(path: str | Path, rows: ProbeRows) -> Path:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -306,7 +634,28 @@ def write_probe_plot(path: str | Path, rows: ProbeRows) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure, axis = plt.subplots(figsize=(10, 5), constrained_layout=True)
     horizons = sorted({int(row.get("horizon", 0)) for row in rows})
-    if horizons == [0]:
+    if "condition" in rows[0]:
+        groups = sorted(
+            {
+                (int(row["seed"]), str(row["condition"]), int(row["horizon"]))
+                for row in rows
+            }
+        )
+        for seed, condition, horizon in groups:
+            plot_rows = [
+                row
+                for row in rows
+                if int(row["seed"]) == seed
+                and str(row["condition"]) == condition
+                and int(row["horizon"]) == horizon
+            ]
+            axis.plot(
+                column(plot_rows, "offset"),
+                column(plot_rows, "output_activity_delta"),
+                label=f"{condition} seed={seed} h={horizon}",
+                alpha=0.75,
+            )
+    elif horizons == [0]:
         plot_rows = rows
         axis.plot(
             column(plot_rows, "offset"),
@@ -420,6 +769,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--horizons", type=int, nargs="*", default=())
     parser.add_argument("--impulse", type=float, default=0.45)
     parser.add_argument("--response-threshold", type=float, default=0.02)
+    parser.add_argument("--seeds", type=int, nargs="*", default=())
+    parser.add_argument("--uncoupled-control", action="store_true")
     parser.add_argument(
         "--output-csv",
         type=Path,
@@ -450,19 +801,33 @@ def main(argv: list[str] | None = None) -> int:
         horizons=tuple(args.horizons),
         impulse=args.impulse,
         response_threshold=args.response_threshold,
+        seeds=tuple(args.seeds),
+        uncoupled_control=args.uncoupled_control,
     )
     summary = run_propagation_probe(config)
-    if "horizons" in summary:
+    if "aggregate" in summary:
+        aggregate = summary["aggregate"]
+        print(
+            "Controlled propagation probe: "
+            f"trials={aggregate['trials']} "
+            f"reached_output={aggregate['coupled_output_reach_rate']:.3f} "
+            f"assoc_precedes_output={aggregate.get('assoc_precedes_output_rate', 0.0):.3f} "
+            f"above_control={aggregate.get('output_above_control_rate', 0.0):.3f} "
+            f"gate_passed={aggregate['gate_passed']}"
+        )
+        horizon_summary = None
+    elif "horizons" in summary:
         horizon_summary = summary["horizons"][str(config.horizons[-1])]
     else:
         horizon_summary = summary
-    print(
-        "Propagation probe: "
-        f"reached_output={horizon_summary['response_reached_output']} "
-        f"latency={horizon_summary['response_latency_steps']} "
-        f"peak_output_delta={horizon_summary['peak_output_activity_delta']:.6f} "
-        f"peak_ratio={horizon_summary['peak_delta_right_left_ratio']:.6f}"
-    )
+    if horizon_summary is not None:
+        print(
+            "Propagation probe: "
+            f"reached_output={horizon_summary['response_reached_output']} "
+            f"latency={horizon_summary['response_latency_steps']} "
+            f"peak_output_delta={horizon_summary['peak_output_activity_delta']:.6f} "
+            f"peak_ratio={horizon_summary['peak_delta_right_left_ratio']:.6f}"
+        )
     print(f"Wrote rows: {config.output_csv}")
     print(f"Wrote summary: {config.output_summary}")
     if config.output_plot is not None:

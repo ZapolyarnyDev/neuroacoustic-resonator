@@ -68,6 +68,7 @@ steps: 2
         "field_only.yaml",
         "synthetic_input.yaml",
         "long_run.yaml",
+        "strict_propagation.yaml",
     ],
 )
 def test_project_configs_load(config_name) -> None:

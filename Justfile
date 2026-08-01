@@ -51,7 +51,7 @@ experiments:
     uv run python scripts/run_experiments.py --config configs/synthetic_input.yaml --output-dir experiments/logs --propagation-horizon 1024
 
 propagation-probe:
-    uv run python scripts/probe_propagation.py --config configs/synthetic_input.yaml --warmup-steps 200 --horizon 512 --output-csv experiments/logs/propagation_probe.csv --output-summary experiments/logs/propagation_probe_summary.json --output-plot experiments/logs/propagation_probe.png
+    uv run python scripts/probe_propagation.py --config configs/strict_propagation.yaml --warmup-steps 200 --horizon 1024 --impulse 0.45 --response-threshold 0.0005 --seeds 67 101 211 --uncoupled-control --output-csv experiments/logs/propagation_probe.csv --output-summary experiments/logs/propagation_probe_summary.json --output-plot experiments/logs/propagation_probe.png
 
 pattern-calibration:
     uv run python scripts/run_pattern_calibration.py --config configs/field_only.yaml --synthetic tone:tone:220:0.5 --synthetic pulse:pulse:330:0.5 --synthetic chirp:chirp:180:0.5 --output-dir experiments/pattern_calibration --output-csv experiments/logs/pattern_calibration.csv --output-summary experiments/logs/pattern_calibration_summary.json --repeats 2 --input-assoc-gain 0.8 --input-output-gain 0.0
