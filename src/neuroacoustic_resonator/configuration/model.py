@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from neuroacoustic_resonator.core.field import FieldConfig
 from neuroacoustic_resonator.core.input_drive import InputMode, SyntheticInputConfig
 from neuroacoustic_resonator.core.simulation import Simulation
+from neuroacoustic_resonator.core.topology import BoundaryMode
 
 if TYPE_CHECKING:
     from neuroacoustic_resonator.analysis.pattern_detector import (
@@ -44,6 +45,8 @@ class FieldConfigModel(BaseModel):
     max_coupling: float = Field(default=1.0, gt=0.0)
     min_frequency: float = Field(default=0.2, gt=0.0)
     max_frequency: float = Field(default=3.0, gt=0.0)
+    boundary_x: BoundaryMode = "periodic"
+    boundary_y: BoundaryMode = "periodic"
     seed: int | None = None
 
     @model_validator(mode="after")

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from neuroacoustic_resonator.core.topology import BoundaryMode
+
 FloatArray = NDArray[np.float64]
 
 TAU = 2.0 * np.pi
@@ -36,6 +38,8 @@ class FieldConfig:
     max_coupling: float = 1.0
     min_frequency: float = 0.2
     max_frequency: float = 3.0
+    boundary_x: BoundaryMode = "periodic"
+    boundary_y: BoundaryMode = "periodic"
     seed: int | None = None
 
     def __post_init__(self) -> None:
@@ -110,6 +114,12 @@ class FieldConfig:
             raise ValueError(msg)
         if self.max_frequency <= self.min_frequency:
             msg = "max_frequency must be greater than min_frequency"
+            raise ValueError(msg)
+        if self.boundary_x not in {"open", "periodic"}:
+            msg = f"unsupported x boundary: {self.boundary_x!r}"
+            raise ValueError(msg)
+        if self.boundary_y not in {"open", "periodic"}:
+            msg = f"unsupported y boundary: {self.boundary_y!r}"
             raise ValueError(msg)
 
 

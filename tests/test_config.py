@@ -26,6 +26,8 @@ preview_path: outputs/test-preview.png
     assert config.field.memory_drive_strength == 0.15
     assert config.field.memory_drive_assoc_gain == 1.5
     assert config.field.metabolite_diffusion == 0.0
+    assert config.field.boundary_x == "periodic"
+    assert config.field.boundary_y == "periodic"
     assert not config.synthetic_input.enabled
     assert config.protocol.frame_interval_steps == 1
     assert config.protocol.confirmation_frames == 3
