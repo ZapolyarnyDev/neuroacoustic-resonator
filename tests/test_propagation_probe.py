@@ -8,12 +8,15 @@ import pytest
 
 from neuroacoustic_resonator.analysis.propagation_probe import (
     PropagationProbeConfig,
+    apply_probe_impulse,
     first_threshold_crossing,
     lagged_correlation,
     minimum_mask_distance,
     run_propagation_probe,
 )
+from neuroacoustic_resonator.core.field import FieldConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.core.simulation import Simulation
 from neuroacoustic_resonator.core.topology import GridTopology
 
 
@@ -43,6 +46,29 @@ def test_propagation_probe_config_validates_values() -> None:
         PropagationProbeConfig(response_threshold=-0.1)
     with pytest.raises(ValueError, match="duplicates"):
         PropagationProbeConfig(seeds=(1, 1))
+    with pytest.raises(ValueError, match="impulse profile"):
+        PropagationProbeConfig(impulse_profile="radial")  # type: ignore[arg-type]
+
+
+def test_biphasic_impulse_creates_local_structure() -> None:
+    simulation = Simulation(FieldConfig(size=8, seed=1))
+    regions = RegionMasks.from_size(8)
+    before = simulation.field.state.phase.copy()
+
+    apply_probe_impulse(
+        simulation,
+        regions,
+        amount=0.45,
+        profile="biphasic",
+    )
+
+    delta = np.angle(np.exp(1j * (simulation.field.state.phase - before)))
+    rows = np.indices(regions.shape)[0]
+    upper = regions.input & (rows < regions.shape[0] // 2)
+    lower = regions.input & (rows >= regions.shape[0] // 2)
+    assert delta[upper] == pytest.approx(0.45)
+    assert delta[lower] == pytest.approx(-0.45)
+    assert delta[~regions.input] == pytest.approx(0.0)
 
 
 def test_region_distance_respects_open_and_periodic_x_boundaries() -> None:
@@ -176,6 +202,7 @@ steps: 8
             warmup_steps=2,
             horizon=4,
             impulse=0.45,
+            impulse_profile="biphasic",
             response_threshold=0.0,
             seeds=(1, 2),
             uncoupled_control=True,
@@ -194,6 +221,7 @@ steps: 8
     }
     assert {int(row["seed"]) for row in rows} == {1, 2}
     assert summary["aggregate"]["trials"] == 2
+    assert summary["parameters"]["impulse_profile"] == "biphasic"
     assert len(summary["trials"]) == 2
     assert summary["environment"]["boundary_x"] == "open"
     for trial in summary["trials"]:

@@ -1,9 +1,9 @@
 field:
-  size: 32
+  size: 16
   dt: 0.02
   base_frequency: 1.0
   frequency_spread: 0.05
-  coupling_strength: 0.18
+  coupling_strength: 0.9
   metabolite_recovery: 0.03
   metabolite_cost: 0.02
   metabolite_diffusion: 0.01
@@ -33,5 +33,5 @@ protocol:
   minimum_active_frames: 3
   hysteresis_margin: 0.08
   novelty_threshold: 0.15
-steps: 1024
+steps: 2048
 preview_path: outputs/strict-propagation-preview.png

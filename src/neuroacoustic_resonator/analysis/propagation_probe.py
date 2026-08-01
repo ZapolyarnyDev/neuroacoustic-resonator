@@ -5,7 +5,7 @@ import csv
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import matplotlib
 import numpy as np
@@ -19,10 +19,12 @@ from neuroacoustic_resonator.analysis.metrics import (
 from neuroacoustic_resonator.analysis.protocol_stream import ProtocolAnalysisStream
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
+from neuroacoustic_resonator.core.simulation import Simulation
 from neuroacoustic_resonator.core.topology import GridTopology
 
 ProbeRows = list[dict[str, Any]]
 ProbeSummary = dict[str, Any]
+ImpulseProfile = Literal["biphasic", "uniform"]
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,7 @@ class PropagationProbeConfig:
     horizon: int = 512
     horizons: tuple[int, ...] = ()
     impulse: float = 0.45
+    impulse_profile: ImpulseProfile = "uniform"
     response_threshold: float = 0.02
     seeds: tuple[int, ...] = ()
     uncoupled_control: bool = False
@@ -53,6 +56,9 @@ class PropagationProbeConfig:
             raise ValueError(msg)
         if self.impulse < 0.0:
             msg = "impulse must be non-negative"
+            raise ValueError(msg)
+        if self.impulse_profile not in {"biphasic", "uniform"}:
+            msg = f"unsupported impulse profile: {self.impulse_profile!r}"
             raise ValueError(msg)
         if self.response_threshold < 0.0:
             msg = "response_threshold must be non-negative"
@@ -165,6 +171,7 @@ def run_controlled_probe(config: PropagationProbeConfig) -> ProbeSummary:
             "warmup_steps": config.warmup_steps,
             "horizons": list(horizons),
             "impulse": config.impulse,
+            "impulse_profile": config.impulse_profile,
             "response_threshold": config.response_threshold,
             "seeds": list(seeds),
             "uncoupled_control": config.uncoupled_control,
@@ -231,6 +238,7 @@ def run_multi_horizon_probe(config: PropagationProbeConfig) -> ProbeSummary:
             "warmup_steps": config.warmup_steps,
             "horizons": list(config.horizons),
             "impulse": config.impulse,
+            "impulse_profile": config.impulse_profile,
             "response_threshold": config.response_threshold,
         },
         "environment": propagation_environment(
@@ -277,7 +285,12 @@ def collect_probe_rows(
     baseline = baseline_observation.activity
     applied_impulse = config.impulse if impulse is None else impulse
     if applied_impulse != 0.0:
-        simulation.field.apply_phase_impulse(regions.input, applied_impulse)
+        apply_probe_impulse(
+            simulation,
+            regions,
+            amount=applied_impulse,
+            profile=config.impulse_profile,
+        )
 
     rows: ProbeRows = []
     previous = baseline
@@ -302,6 +315,24 @@ def collect_probe_rows(
         previous = metrics
 
     return rows, baseline
+
+
+def apply_probe_impulse(
+    simulation: Simulation,
+    regions: RegionMasks,
+    *,
+    amount: float,
+    profile: ImpulseProfile,
+) -> None:
+    if profile == "uniform":
+        simulation.field.apply_phase_impulse(regions.input, amount)
+        return
+    rows = np.indices(regions.shape)[0]
+    split = regions.shape[0] // 2
+    upper = regions.input & (rows < split)
+    lower = regions.input & (rows >= split)
+    simulation.field.apply_phase_impulse(upper, amount)
+    simulation.field.apply_phase_impulse(lower, -amount)
 
 
 def propagation_probe_row(
@@ -768,6 +799,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--horizon", type=int, default=512)
     parser.add_argument("--horizons", type=int, nargs="*", default=())
     parser.add_argument("--impulse", type=float, default=0.45)
+    parser.add_argument(
+        "--impulse-profile",
+        choices=("uniform", "biphasic"),
+        default="uniform",
+    )
     parser.add_argument("--response-threshold", type=float, default=0.02)
     parser.add_argument("--seeds", type=int, nargs="*", default=())
     parser.add_argument("--uncoupled-control", action="store_true")
@@ -800,6 +836,7 @@ def main(argv: list[str] | None = None) -> int:
         horizon=args.horizon,
         horizons=tuple(args.horizons),
         impulse=args.impulse,
+        impulse_profile=args.impulse_profile,
         response_threshold=args.response_threshold,
         seeds=tuple(args.seeds),
         uncoupled_control=args.uncoupled_control,
