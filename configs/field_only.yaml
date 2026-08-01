@@ -19,6 +19,8 @@ field:
   max_coupling: 1.0
   min_frequency: 0.2
   max_frequency: 3.0
+  boundary_x: open
+  boundary_y: periodic
   seed: 67
 synthetic_input:
   enabled: false

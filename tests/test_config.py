@@ -74,6 +74,8 @@ def test_project_configs_load(config_name) -> None:
     config = SimulationConfig.from_file(f"configs/{config_name}")
 
     assert config.field.size > 1
+    assert config.field.boundary_x == "open"
+    assert config.field.boundary_y == "periodic"
     assert config.protocol.frame_interval_steps >= 1
     assert config.steps >= 1
 

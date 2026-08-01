@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from neuroacoustic_resonator.core.topology import BoundaryMode
+from neuroacoustic_resonator.core.topology import BoundaryMode, GridTopology
 
 FloatArray = NDArray[np.float64]
 
@@ -147,6 +147,11 @@ class FieldMetrics:
 class OscillatorField:
     def __init__(self, config: FieldConfig) -> None:
         self.config = config
+        self.topology = GridTopology.from_size(
+            config.size,
+            boundary_x=config.boundary_x,
+            boundary_y=config.boundary_y,
+        )
         rng = np.random.default_rng(config.seed)
         shape = (config.size, config.size)
 
@@ -177,6 +182,11 @@ class OscillatorField:
 
         field = cls.__new__(cls)
         field.config = config
+        field.topology = GridTopology.from_size(
+            config.size,
+            boundary_x=config.boundary_x,
+            boundary_y=config.boundary_y,
+        )
         field._phase = np.mod(state.phase, TAU).astype(np.float64, copy=True)
         field._frequency = state.frequency.astype(np.float64, copy=True)
         field._metabolite = np.clip(state.metabolite, 0.0, 1.0).astype(
@@ -301,13 +311,7 @@ class OscillatorField:
         return self.state
 
     def local_synchrony(self) -> FloatArray:
-        neighbor_vectors = (
-            np.exp(1j * np.roll(self._phase, 1, axis=0))
-            + np.exp(1j * np.roll(self._phase, -1, axis=0))
-            + np.exp(1j * np.roll(self._phase, 1, axis=1))
-            + np.exp(1j * np.roll(self._phase, -1, axis=1))
-        )
-        return np.abs((np.exp(1j * self._phase) + neighbor_vectors) / 5.0)
+        return self.topology.local_phase_order(self._phase)
 
     def global_synchrony(self) -> float:
         return float(np.abs(np.mean(np.exp(1j * self._phase))))
@@ -333,25 +337,17 @@ class OscillatorField:
         )
 
     def _coupling_drive(self) -> FloatArray:
-        neighbors = (
-            np.sin(np.roll(self._phase, 1, axis=0) - self._phase)
-            + np.sin(np.roll(self._phase, -1, axis=0) - self._phase)
-            + np.sin(np.roll(self._phase, 1, axis=1) - self._phase)
-            + np.sin(np.roll(self._phase, -1, axis=1) - self._phase)
+        return (
+            self._metabolite
+            * self._coupling
+            * self.topology.phase_coupling(self._phase)
         )
-        return self._metabolite * self._coupling * neighbors / 4.0
 
     def _metabolic_activity(self, coupling_drive: FloatArray) -> FloatArray:
         return np.abs(coupling_drive)
 
     def _metabolite_laplacian(self) -> FloatArray:
-        return (
-            np.roll(self._metabolite, 1, axis=0)
-            + np.roll(self._metabolite, -1, axis=0)
-            + np.roll(self._metabolite, 1, axis=1)
-            + np.roll(self._metabolite, -1, axis=1)
-            - 4.0 * self._metabolite
-        )
+        return self.topology.laplacian(self._metabolite)
 
     def _apply_synchrony_homeostasis(self) -> None:
         rate = self.config.coupling_homeostasis_rate

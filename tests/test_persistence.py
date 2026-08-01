@@ -46,7 +46,13 @@ def test_save_and_load_field_state_roundtrip(tmp_path) -> None:
 
 def test_save_and_load_simulation_checkpoint_roundtrip(tmp_path) -> None:
     simulation = Simulation(
-        FieldConfig(size=5, seed=1, coupling_strength=0.2),
+        FieldConfig(
+            size=5,
+            seed=1,
+            coupling_strength=0.2,
+            boundary_x="open",
+            boundary_y="periodic",
+        ),
         synthetic_input=SyntheticInputConfig(enabled=True, mode="pulse", seed=2),
     )
     simulation.run(3)
@@ -56,6 +62,8 @@ def test_save_and_load_simulation_checkpoint_roundtrip(tmp_path) -> None:
 
     assert loaded.step_index == 3
     assert loaded.field.config.coupling_strength == 0.2
+    assert loaded.field.config.boundary_x == "open"
+    assert loaded.field.config.boundary_y == "periodic"
     assert loaded.input_drive.config.enabled is True
     assert loaded.input_drive.config.mode == "pulse"
     assert np.allclose(loaded.field.state.phase, simulation.field.state.phase)

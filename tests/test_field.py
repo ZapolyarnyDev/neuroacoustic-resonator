@@ -89,6 +89,48 @@ def test_synchrony_is_one_for_uniform_phase() -> None:
     assert field.global_synchrony() == pytest.approx(1.0)
 
 
+def test_open_x_boundary_prevents_phase_coupling_across_field_edges() -> None:
+    shape = (4, 4)
+    phase = np.zeros(shape)
+    phase[:, -1] = np.pi / 2.0
+    state = FieldState(
+        phase=phase,
+        frequency=np.zeros(shape),
+        metabolite=np.ones(shape),
+        coupling=np.ones(shape),
+        trace=np.zeros(shape),
+    )
+    open_field = OscillatorField.from_state(
+        FieldConfig(size=4, boundary_x="open"),
+        state,
+    )
+    periodic_field = OscillatorField.from_state(
+        FieldConfig(size=4, boundary_x="periodic"),
+        state,
+    )
+
+    assert np.allclose(open_field._coupling_drive()[:, 0], 0.0)
+    assert np.all(periodic_field._coupling_drive()[:, 0] > 0.0)
+
+
+def test_open_x_boundary_keeps_vertical_phase_coupling_periodic() -> None:
+    shape = (4, 4)
+    phase = np.zeros(shape)
+    phase[-1, :] = np.pi / 2.0
+    field = OscillatorField.from_state(
+        FieldConfig(size=4, boundary_x="open", boundary_y="periodic"),
+        FieldState(
+            phase=phase,
+            frequency=np.zeros(shape),
+            metabolite=np.ones(shape),
+            coupling=np.ones(shape),
+            trace=np.zeros(shape),
+        ),
+    )
+
+    assert np.all(field._coupling_drive()[0, :] > 0.0)
+
+
 def test_apply_region_plasticity_changes_masked_output_state() -> None:
     field = OscillatorField(FieldConfig(size=8, seed=1))
     regions = RegionMasks.from_size(8)
