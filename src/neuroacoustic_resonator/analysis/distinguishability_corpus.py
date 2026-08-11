@@ -9,6 +9,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from neuroacoustic_resonator.analysis.pattern_calibration import (
+    CalibrationSeedSplit,
     PatternCalibrationConfig,
     SyntheticKind,
     SyntheticStimulusSpec,
@@ -27,6 +28,21 @@ class CorpusStimulusConfig(BaseModel):
     amplitude: float = Field(default=0.65, ge=0.0)
 
 
+class CorpusSplitsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    train: tuple[int, ...] = Field(min_length=1)
+    validation: tuple[int, ...] = Field(min_length=1)
+    test: tuple[int, ...] = Field(min_length=1)
+
+    def assignments(self) -> tuple[CalibrationSeedSplit, ...]:
+        return (
+            *(CalibrationSeedSplit(seed, "train") for seed in self.train),
+            *(CalibrationSeedSplit(seed, "validation") for seed in self.validation),
+            *(CalibrationSeedSplit(seed, "test") for seed in self.test),
+        )
+
+
 class DistinguishabilityCorpusConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -36,6 +52,7 @@ class DistinguishabilityCorpusConfig(BaseModel):
     output_summary: Path
     output_manifest: Path
     seed_roots: tuple[int, ...] = Field(min_length=1)
+    splits: CorpusSplitsConfig
     repeats: int = Field(ge=1)
     sample_rate: int = Field(default=8_000, ge=1)
     output_frame_size: int = Field(default=256, ge=1)
@@ -66,6 +83,13 @@ class DistinguishabilityCorpusConfig(BaseModel):
         if any(seed < 0 for seed in self.seed_roots):
             msg = "corpus seed_roots must be non-negative"
             raise ValueError(msg)
+        split_seeds = [item.seed_root for item in self.splits.assignments()]
+        if len(set(split_seeds)) != len(split_seeds):
+            msg = "corpus splits must not overlap"
+            raise ValueError(msg)
+        if set(split_seeds) != set(self.seed_roots):
+            msg = "corpus splits must assign every seed root exactly once"
+            raise ValueError(msg)
         return self
 
     @classmethod
@@ -94,6 +118,7 @@ class DistinguishabilityCorpusConfig(BaseModel):
             output_summary=self.output_summary,
             output_manifest=self.output_manifest,
             seed_roots=self.seed_roots,
+            seed_splits=self.splits.assignments(),
             repeats=self.repeats,
             sample_rate=self.sample_rate,
             output_frame_size=self.output_frame_size,

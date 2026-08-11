@@ -21,6 +21,7 @@ from neuroacoustic_resonator.audio.conversation import (
 from neuroacoustic_resonator.configuration import SimulationConfig
 
 SyntheticKind = Literal["tone", "pulse", "chirp", "noise", "silence"]
+TrialSplit = Literal["train", "validation", "test"]
 CalibrationRows = list[dict[str, Any]]
 CalibrationSummary = dict[str, Any]
 
@@ -69,12 +70,24 @@ class CalibrationStimulus:
 
 
 @dataclass(frozen=True)
+class CalibrationSeedSplit:
+    seed_root: int
+    split: TrialSplit
+
+    def __post_init__(self) -> None:
+        if self.seed_root < 0:
+            msg = "seed_root must be non-negative"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True)
 class CalibrationTrial:
     trial_id: str
     stimulus: CalibrationStimulus
     seed_root: int
     field_seed: int
     repeat_index: int
+    split: TrialSplit | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +104,7 @@ class PatternCalibrationConfig:
         Path("experiments") / "logs" / "pattern_calibration_manifest.json"
     )
     seed_roots: tuple[int, ...] = ()
+    seed_splits: tuple[CalibrationSeedSplit, ...] = ()
     repeats: int = 1
     sample_rate: int = 8_000
     output_frame_size: int = 256
@@ -115,6 +129,13 @@ class PatternCalibrationConfig:
             raise ValueError(msg)
         if any(seed < 0 for seed in self.seed_roots):
             msg = "seed_roots must be non-negative"
+            raise ValueError(msg)
+        split_seeds = [item.seed_root for item in self.seed_splits]
+        if len(set(split_seeds)) != len(split_seeds):
+            msg = "seed_splits must contain unique seed roots"
+            raise ValueError(msg)
+        if self.seed_splits and set(split_seeds) != set(self.seed_roots):
+            msg = "seed_splits must assign every configured seed root exactly once"
             raise ValueError(msg)
         labels = [stimulus.label for stimulus in self.stimuli]
         labels.extend(stimulus.label for stimulus in self.synthetic_stimuli)
@@ -159,7 +180,7 @@ def run_pattern_calibration(config: PatternCalibrationConfig) -> CalibrationSumm
     trials_to_run = build_calibration_trials(config, stimuli)
     rows: CalibrationRows = []
     trials: list[dict[str, Any]] = []
-    manifest = [calibration_manifest_entry(trial) for trial in trials_to_run]
+    manifest = [calibration_manifest_entry(trial, config) for trial in trials_to_run]
     write_calibration_manifest(config.output_manifest, manifest)
     for trial in trials_to_run:
         trial_summary = run_calibration_trial(config, trial)
@@ -167,7 +188,7 @@ def run_pattern_calibration(config: PatternCalibrationConfig) -> CalibrationSumm
         rows.append(row)
         trials.append(
             {
-                **calibration_manifest_entry(trial),
+                **calibration_manifest_entry(trial, config),
                 "summary": trial_summary,
             }
         )
@@ -193,12 +214,14 @@ def run_calibration_trial(
 ) -> dict[str, Any]:
     output_wav = config.output_dir / f"{trial.trial_id}-response.wav"
     output_summary = config.output_dir / f"{trial.trial_id}-summary.json"
-    return render_voice_conversation(
+    protocol_jsonl = config.output_dir / f"{trial.trial_id}-protocol.jsonl"
+    trial_summary = render_voice_conversation(
         VoiceConversationConfig(
             config_path=config.config_path,
             input_wavs=(trial.stimulus.wav_path,),
             output_wav=output_wav,
             output_summary=output_summary,
+            protocol_output=protocol_jsonl,
             field_seed=trial.field_seed,
             sample_rate=config.sample_rate,
             output_frame_size=config.output_frame_size,
@@ -215,6 +238,17 @@ def run_calibration_trial(
             use_response_policy=False,
         )
     )
+    metadata = {
+        **calibration_manifest_entry(trial, config),
+        "protocol_version": trial_summary["utterances"][0]["protocol_version"],
+        "protocol_frames": trial_summary["protocol_frames"],
+        "response_wav": trial_summary["output_wav"],
+        "summary_json": str(output_summary),
+    }
+    metadata_json = trial_metadata_path(config, trial)
+    write_trial_metadata(metadata_json, metadata)
+    trial_summary["trial_metadata_json"] = str(metadata_json)
+    return trial_summary
 
 
 def calibration_row(
@@ -233,6 +267,7 @@ def calibration_row(
         "seed_root": trial.seed_root,
         "field_seed": trial.field_seed,
         "repeat_index": trial.repeat_index,
+        "split": trial.split,
         "protocol_version": utterance["protocol_version"],
         "input_protocol_frames": utterance["input_protocol_frames"],
         "response_protocol_frames": utterance["response_protocol_frames"],
@@ -257,6 +292,8 @@ def calibration_row(
         "response_audio_zero_crossing_rate": audio["zero_crossing_rate"],
         "response_audio_spectral_centroid_hz": audio["spectral_centroid_hz"],
         "response_wav": trial_summary["output_wav"],
+        "protocol_jsonl": trial_summary["protocol_jsonl"],
+        "metadata_json": trial_summary["trial_metadata_json"],
     }
 
 
@@ -265,6 +302,7 @@ def build_calibration_trials(
     stimuli: list[CalibrationStimulus],
 ) -> list[CalibrationTrial]:
     seed_roots = config.seed_roots or (configured_field_seed(config.config_path),)
+    seed_splits = {item.seed_root: item.split for item in config.seed_splits}
     trials = [
         CalibrationTrial(
             trial_id=(f"{safe_name(stimulus.label)}-s{seed_root}-r{repeat_index:02d}"),
@@ -272,6 +310,7 @@ def build_calibration_trials(
             seed_root=seed_root,
             field_seed=derive_trial_seed(seed_root, repeat_index),
             repeat_index=repeat_index,
+            split=seed_splits.get(seed_root),
         )
         for stimulus in stimuli
         for seed_root in seed_roots
@@ -304,7 +343,10 @@ def derive_trial_seed(seed_root: int, repeat_index: int) -> int:
     return int.from_bytes(digest, "big")
 
 
-def calibration_manifest_entry(trial: CalibrationTrial) -> dict[str, Any]:
+def calibration_manifest_entry(
+    trial: CalibrationTrial,
+    config: PatternCalibrationConfig,
+) -> dict[str, Any]:
     return {
         "trial_id": trial.trial_id,
         "stimulus_label": trial.stimulus.label,
@@ -313,7 +355,17 @@ def calibration_manifest_entry(trial: CalibrationTrial) -> dict[str, Any]:
         "seed_root": trial.seed_root,
         "field_seed": trial.field_seed,
         "repeat_index": trial.repeat_index,
+        "split": trial.split,
+        "protocol_jsonl": str(config.output_dir / f"{trial.trial_id}-protocol.jsonl"),
+        "metadata_json": str(trial_metadata_path(config, trial)),
     }
+
+
+def trial_metadata_path(
+    config: PatternCalibrationConfig,
+    trial: CalibrationTrial,
+) -> Path:
+    return config.output_dir / f"{trial.trial_id}-metadata.json"
 
 
 def materialize_synthetic_stimuli(
@@ -396,6 +448,10 @@ def summarize_stimuli(rows: CalibrationRows) -> dict[str, Any]:
 def calibration_parameters(config: PatternCalibrationConfig) -> dict[str, Any]:
     return {
         "seed_roots": list(config.seed_roots),
+        "seed_splits": [
+            {"seed_root": item.seed_root, "split": item.split}
+            for item in config.seed_splits
+        ],
         "repeats": config.repeats,
         "sample_rate": config.sample_rate,
         "output_frame_size": config.output_frame_size,
@@ -440,6 +496,13 @@ def write_calibration_manifest(
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return output
+
+
+def write_trial_metadata(path: str | Path, metadata: dict[str, Any]) -> Path:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     return output
 
 

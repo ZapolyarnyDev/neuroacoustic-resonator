@@ -2,18 +2,24 @@ from __future__ import annotations
 
 import csv
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 from scipy.io import wavfile  # type: ignore[import-untyped]
 
 from neuroacoustic_resonator.analysis.pattern_calibration import (
+    CalibrationSeedSplit,
     CalibrationStimulus,
     PatternCalibrationConfig,
     SyntheticStimulusSpec,
     main,
     run_pattern_calibration,
     synthetic_stimulus_audio,
+)
+from neuroacoustic_resonator.protocol import (
+    read_protocol_jsonl,
+    write_protocol_jsonl,
 )
 
 
@@ -77,6 +83,10 @@ def test_run_pattern_calibration_writes_rows_summary_and_reinforcement(
             output_summary=summary_path,
             output_manifest=manifest_path,
             seed_roots=(11, 29),
+            seed_splits=(
+                CalibrationSeedSplit(11, "train"),
+                CalibrationSeedSplit(29, "test"),
+            ),
             repeats=2,
             sample_rate=8_000,
             output_frame_size=80,
@@ -103,7 +113,22 @@ def test_run_pattern_calibration_writes_rows_summary_and_reinforcement(
     assert len(manifest) == 8
     assert len({row["field_seed"] for row in manifest}) == 4
     assert {row["seed_root"] for row in manifest} == {11, 29}
+    assert {row["split"] for row in manifest} == {"train", "test"}
     assert len({row["trial_id"] for row in manifest}) == 8
+    protocol_path = Path(manifest[0]["protocol_jsonl"])
+    metadata_path = Path(manifest[0]["metadata_json"])
+    replay_path = tmp_path / "strict-replay.jsonl"
+    frames = read_protocol_jsonl(protocol_path)
+    write_protocol_jsonl(replay_path, frames)
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert replay_path.read_bytes() == protocol_path.read_bytes()
+    assert metadata["stimulus_label"] == manifest[0]["stimulus_label"]
+    assert metadata["field_seed"] == manifest[0]["field_seed"]
+    assert metadata["split"] == manifest[0]["split"]
+    assert metadata["protocol_frames"] == len(frames)
+    assert [frame.sequence for frame in frames] == sorted(
+        frame.sequence for frame in frames
+    )
 
 
 def test_pattern_calibration_main_writes_outputs(tmp_path) -> None:

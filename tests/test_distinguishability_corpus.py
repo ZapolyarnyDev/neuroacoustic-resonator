@@ -30,9 +30,17 @@ def test_default_corpus_fixes_stimuli_seeds_and_repeats() -> None:
     }
     assert corpus.seed_roots == (101, 211, 307, 401, 503)
     assert corpus.repeats == 2
+    assert {item.seed_root: item.split for item in calibration.seed_splits} == {
+        101: "train",
+        211: "train",
+        307: "train",
+        401: "validation",
+        503: "test",
+    }
     assert len(trials) == 50
     assert len({trial.trial_id for trial in trials}) == 50
     assert len({trial.field_seed for trial in trials}) == 10
+    assert {trial.split for trial in trials} == {"train", "validation", "test"}
     assert all(
         left.field_seed != right.field_seed
         for left, right in zip(trials[::2], trials[1::2], strict=True)

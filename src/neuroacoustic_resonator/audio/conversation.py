@@ -40,7 +40,7 @@ from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
 from neuroacoustic_resonator.encoding import ProtocolEncoder
-from neuroacoustic_resonator.protocol import SoundProtocolFrame
+from neuroacoustic_resonator.protocol import SoundProtocolFrame, write_protocol_jsonl
 
 ConversationSummary = dict[str, Any]
 
@@ -56,6 +56,7 @@ class ConversationProtocolStream:
         self.encoder = encoder
         self.activity = ProtocolActivityTracker()
         self.last_frame: SoundProtocolFrame | None = None
+        self.frames: list[SoundProtocolFrame] = []
 
     def observe(
         self,
@@ -68,6 +69,7 @@ class ConversationProtocolStream:
         if protocol_frame is None:
             return None
         self.last_frame = protocol_frame
+        self.frames.append(protocol_frame)
         return ConversationProtocolObservation(
             frame=protocol_frame,
             activity=self.activity.update(
@@ -105,6 +107,7 @@ class VoiceConversationConfig:
     output_summary: Path = (
         Path("experiments") / "logs" / "voice_conversation_summary.json"
     )
+    protocol_output: Path | None = None
     sample_rate: int = 48_000
     output_frame_size: int = 512
     input_frame_size: int = 1024
@@ -425,9 +428,16 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         np.concatenate(audio_frames) if audio_frames else np.zeros(0, dtype=np.float64)
     )
     write_wav(config.output_wav, audio, sample_rate=config.sample_rate)
+    protocol_output = (
+        write_protocol_jsonl(config.protocol_output, protocol_stream.frames)
+        if config.protocol_output is not None
+        else None
+    )
     summary: ConversationSummary = {
         "config": str(config.config_path),
         "output_wav": str(config.output_wav),
+        "protocol_jsonl": (None if protocol_output is None else str(protocol_output)),
+        "protocol_frames": len(protocol_stream.frames),
         "parameters": {
             "field_seed": sim_config.field.seed,
             "sample_rate": config.sample_rate,
@@ -756,6 +766,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=VoiceConversationConfig.output_summary,
     )
+    parser.add_argument("--protocol-output", type=Path)
     parser.add_argument("--sample-rate", type=int, default=48_000)
     parser.add_argument("--output-frame-size", type=int, default=512)
     parser.add_argument("--input-frame-size", type=int, default=1024)
@@ -804,6 +815,7 @@ def main(argv: list[str] | None = None) -> int:
             input_wavs=tuple(args.inputs),
             output_wav=args.output,
             output_summary=args.summary,
+            protocol_output=args.protocol_output,
             sample_rate=args.sample_rate,
             output_frame_size=args.output_frame_size,
             input_frame_size=args.input_frame_size,
