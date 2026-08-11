@@ -9,6 +9,8 @@ seed_roots:
   - 307
   - 401
   - 503
+  - 601
+  - 701
 splits:
   train:
     - 101
@@ -16,8 +18,10 @@ splits:
     - 307
   validation:
     - 401
-  test:
     - 503
+  test:
+    - 601
+    - 701
 repeats: 2
 sample_rate: 8000
 output_frame_size: 256
