@@ -1,0 +1,36 @@
+corpus_config: configs/distinguishability_corpus.yaml
+output_root: experiments/distinguishability_stage_one
+output_report: experiments/logs/distinguishability_stage_one_report.json
+bootstrap_samples: 5000
+bootstrap_seed: 20260811
+permutation_samples: 2000
+permutation_seed: 20260812
+thresholds:
+  min_seed_roots: 7
+  min_test_seed_roots: 2
+  min_separation_margin_ci_low: 0.0
+  min_cliffs_delta_ci_low: 0.0
+  min_test_balanced_accuracy_ci_low: 0.35
+  max_permutation_p_value: 0.05
+  min_silence_recall: 0.5
+  min_scenario_pass_rate: 1.0
+scenarios:
+  - name: baseline
+  - name: coupling-low
+    field:
+      coupling_strength: 0.128
+  - name: coupling-high
+    field:
+      coupling_strength: 0.192
+  - name: drive-low
+    corpus:
+      drive_strength: 0.36
+  - name: drive-high
+    corpus:
+      drive_strength: 0.54
+  - name: frequency-spread-low
+    field:
+      frequency_spread: 0.04
+  - name: frequency-spread-high
+    field:
+      frequency_spread: 0.06

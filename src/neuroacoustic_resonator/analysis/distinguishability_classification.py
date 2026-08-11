@@ -135,6 +135,9 @@ def classify_protocol_embeddings(
         ),
         "test": {
             **classification_summary(test_actual, test_predictions, model.labels),
+            "seed_roots": sorted(
+                {int(rows[index]["seed_root"]) for index in test_indices}
+            ),
             "balanced_accuracy_ci": clustered_accuracy_ci(
                 [rows[index] for index in test_indices],
                 test_actual,
