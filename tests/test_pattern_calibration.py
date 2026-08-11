@@ -57,6 +57,7 @@ def test_run_pattern_calibration_writes_rows_summary_and_reinforcement(
     wavfile.write(wav_path, 8_000, samples)
     csv_path = tmp_path / "calibration.csv"
     summary_path = tmp_path / "calibration.json"
+    manifest_path = tmp_path / "manifest.json"
     output_dir = tmp_path / "calibration"
 
     summary = run_pattern_calibration(
@@ -74,6 +75,8 @@ def test_run_pattern_calibration_writes_rows_summary_and_reinforcement(
             output_dir=output_dir,
             output_csv=csv_path,
             output_summary=summary_path,
+            output_manifest=manifest_path,
+            seed_roots=(11, 29),
             repeats=2,
             sample_rate=8_000,
             output_frame_size=80,
@@ -87,15 +90,20 @@ def test_run_pattern_calibration_writes_rows_summary_and_reinforcement(
     with csv_path.open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
     loaded = json.loads(summary_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    assert len(rows) == 4
+    assert len(rows) == 8
     assert {row["protocol_version"] for row in rows} == {"0.1"}
-    assert summary["rows"] == 4
+    assert summary["rows"] == 8
     assert set(summary["stimuli"]) == {"voice", "tone"}
     assert "reinforcement" in summary
-    assert loaded["reinforcement"]["sample_count"] == 4
+    assert loaded["reinforcement"]["sample_count"] == 8
     assert "response_audio_spectral_centroid_hz" in rows[0]
     assert (output_dir / "generated_inputs" / "tone.wav").exists()
+    assert len(manifest) == 8
+    assert len({row["field_seed"] for row in manifest}) == 4
+    assert {row["seed_root"] for row in manifest} == {11, 29}
+    assert len({row["trial_id"] for row in manifest}) == 8
 
 
 def test_pattern_calibration_main_writes_outputs(tmp_path) -> None:
@@ -103,6 +111,7 @@ def test_pattern_calibration_main_writes_outputs(tmp_path) -> None:
     write_config(config_path)
     csv_path = tmp_path / "calibration.csv"
     summary_path = tmp_path / "calibration.json"
+    manifest_path = tmp_path / "manifest.json"
     output_dir = tmp_path / "calibration"
 
     exit_code = main(
@@ -117,6 +126,10 @@ def test_pattern_calibration_main_writes_outputs(tmp_path) -> None:
             str(csv_path),
             "--output-summary",
             str(summary_path),
+            "--output-manifest",
+            str(manifest_path),
+            "--seed",
+            "11",
             "--sample-rate",
             "8000",
             "--output-frame-size",
@@ -135,6 +148,7 @@ def test_pattern_calibration_main_writes_outputs(tmp_path) -> None:
     assert exit_code == 0
     assert csv_path.exists()
     assert summary_path.exists()
+    assert manifest_path.exists()
 
 
 def test_pattern_calibration_requires_stimuli() -> None:

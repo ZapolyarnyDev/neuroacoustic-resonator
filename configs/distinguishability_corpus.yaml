@@ -1,0 +1,47 @@
+simulation_config: configs/field_only.yaml
+output_dir: experiments/distinguishability
+output_csv: experiments/logs/distinguishability_corpus.csv
+output_summary: experiments/logs/distinguishability_corpus_summary.json
+output_manifest: experiments/logs/distinguishability_corpus_manifest.json
+seed_roots:
+  - 101
+  - 211
+  - 307
+  - 401
+  - 503
+repeats: 2
+sample_rate: 8000
+output_frame_size: 256
+input_frame_size: 256
+input_hop_size: 128
+drive_strength: 0.45
+input_assoc_gain: 0.8
+input_output_gain: 0.0
+response_seconds: 0.35
+warmup_steps: 16
+gain: 0.35
+stimuli:
+  - label: silence
+    kind: silence
+    duration_seconds: 0.5
+    amplitude: 0.0
+  - label: tone-220
+    kind: tone
+    frequency_hz: 220.0
+    duration_seconds: 0.5
+    amplitude: 0.65
+  - label: chirp-180-720
+    kind: chirp
+    frequency_hz: 180.0
+    end_frequency_hz: 720.0
+    duration_seconds: 0.5
+    amplitude: 0.65
+  - label: pulse-330
+    kind: pulse
+    frequency_hz: 330.0
+    duration_seconds: 0.5
+    amplitude: 0.65
+  - label: noise
+    kind: noise
+    duration_seconds: 0.5
+    amplitude: 0.35

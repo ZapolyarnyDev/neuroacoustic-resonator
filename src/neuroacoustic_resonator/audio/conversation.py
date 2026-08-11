@@ -99,6 +99,7 @@ class UtteranceDriveResult:
 @dataclass(frozen=True)
 class VoiceConversationConfig:
     config_path: Path = Path("configs") / "field_only.yaml"
+    field_seed: int | None = None
     input_wavs: tuple[Path, ...] = ()
     output_wav: Path = Path("experiments") / "audio" / "voice-conversation.wav"
     output_summary: Path = (
@@ -145,6 +146,9 @@ class VoiceConversationConfig:
     def __post_init__(self) -> None:
         if not self.input_wavs:
             msg = "input_wavs must not be empty"
+            raise ValueError(msg)
+        if self.field_seed is not None and self.field_seed < 0:
+            msg = "field_seed must be non-negative"
             raise ValueError(msg)
         if self.sample_rate < 1:
             msg = "sample_rate must be positive"
@@ -246,6 +250,14 @@ class VoiceConversationConfig:
 
 def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSummary:
     sim_config = SimulationConfig.from_file(config.config_path)
+    if config.field_seed is not None:
+        sim_config = sim_config.model_copy(
+            update={
+                "field": sim_config.field.model_copy(
+                    update={"seed": config.field_seed},
+                )
+            }
+        )
     simulation = sim_config.create_simulation()
     regions = RegionMasks.from_size(sim_config.field.size)
     renderer = ProtocolReferenceRenderer(
@@ -417,6 +429,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         "config": str(config.config_path),
         "output_wav": str(config.output_wav),
         "parameters": {
+            "field_seed": sim_config.field.seed,
             "sample_rate": config.sample_rate,
             "output_frame_size": config.output_frame_size,
             "input_frame_size": config.input_frame_size,

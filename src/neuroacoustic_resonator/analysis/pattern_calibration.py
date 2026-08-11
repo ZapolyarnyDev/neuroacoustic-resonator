@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,7 @@ from neuroacoustic_resonator.audio.conversation import (
     VoiceConversationConfig,
     render_voice_conversation,
 )
+from neuroacoustic_resonator.configuration import SimulationConfig
 
 SyntheticKind = Literal["tone", "pulse", "chirp", "noise", "silence"]
 CalibrationRows = list[dict[str, Any]]
@@ -67,6 +69,15 @@ class CalibrationStimulus:
 
 
 @dataclass(frozen=True)
+class CalibrationTrial:
+    trial_id: str
+    stimulus: CalibrationStimulus
+    seed_root: int
+    field_seed: int
+    repeat_index: int
+
+
+@dataclass(frozen=True)
 class PatternCalibrationConfig:
     config_path: Path = Path("configs") / "field_only.yaml"
     stimuli: tuple[CalibrationStimulus, ...] = ()
@@ -76,6 +87,10 @@ class PatternCalibrationConfig:
     output_summary: Path = (
         Path("experiments") / "logs" / "pattern_calibration_summary.json"
     )
+    output_manifest: Path = (
+        Path("experiments") / "logs" / "pattern_calibration_manifest.json"
+    )
+    seed_roots: tuple[int, ...] = ()
     repeats: int = 1
     sample_rate: int = 8_000
     output_frame_size: int = 256
@@ -94,6 +109,17 @@ class PatternCalibrationConfig:
             raise ValueError(msg)
         if self.repeats < 1:
             msg = "repeats must be positive"
+            raise ValueError(msg)
+        if len(set(self.seed_roots)) != len(self.seed_roots):
+            msg = "seed_roots must be unique"
+            raise ValueError(msg)
+        if any(seed < 0 for seed in self.seed_roots):
+            msg = "seed_roots must be non-negative"
+            raise ValueError(msg)
+        labels = [stimulus.label for stimulus in self.stimuli]
+        labels.extend(stimulus.label for stimulus in self.synthetic_stimuli)
+        if len(set(labels)) != len(labels):
+            msg = "stimulus labels must be unique"
             raise ValueError(msg)
         if self.sample_rate < 1:
             msg = "sample_rate must be positive"
@@ -130,26 +156,28 @@ class PatternCalibrationConfig:
 def run_pattern_calibration(config: PatternCalibrationConfig) -> CalibrationSummary:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     stimuli = list(config.stimuli) + materialize_synthetic_stimuli(config)
+    trials_to_run = build_calibration_trials(config, stimuli)
     rows: CalibrationRows = []
     trials: list[dict[str, Any]] = []
-    for stimulus in stimuli:
-        for repeat_index in range(1, config.repeats + 1):
-            trial_summary = run_calibration_trial(config, stimulus, repeat_index)
-            row = calibration_row(stimulus, repeat_index, trial_summary)
-            rows.append(row)
-            trials.append(
-                {
-                    "stimulus_label": stimulus.label,
-                    "repeat_index": repeat_index,
-                    "summary": trial_summary,
-                }
-            )
+    manifest = [calibration_manifest_entry(trial) for trial in trials_to_run]
+    write_calibration_manifest(config.output_manifest, manifest)
+    for trial in trials_to_run:
+        trial_summary = run_calibration_trial(config, trial)
+        row = calibration_row(trial, trial_summary)
+        rows.append(row)
+        trials.append(
+            {
+                **calibration_manifest_entry(trial),
+                "summary": trial_summary,
+            }
+        )
 
     reinforcement = compute_pattern_reinforcement_signals(rows)
     summary: CalibrationSummary = {
         "config": str(config.config_path),
         "parameters": calibration_parameters(config),
         "rows": len(rows),
+        "manifest": str(config.output_manifest),
         "stimuli": summarize_stimuli(rows),
         "reinforcement": reinforcement.to_dict(),
         "trials": trials,
@@ -161,18 +189,17 @@ def run_pattern_calibration(config: PatternCalibrationConfig) -> CalibrationSumm
 
 def run_calibration_trial(
     config: PatternCalibrationConfig,
-    stimulus: CalibrationStimulus,
-    repeat_index: int,
+    trial: CalibrationTrial,
 ) -> dict[str, Any]:
-    trial_stem = f"{safe_name(stimulus.label)}-r{repeat_index:02d}"
-    output_wav = config.output_dir / f"{trial_stem}-response.wav"
-    output_summary = config.output_dir / f"{trial_stem}-summary.json"
+    output_wav = config.output_dir / f"{trial.trial_id}-response.wav"
+    output_summary = config.output_dir / f"{trial.trial_id}-summary.json"
     return render_voice_conversation(
         VoiceConversationConfig(
             config_path=config.config_path,
-            input_wavs=(stimulus.wav_path,),
+            input_wavs=(trial.stimulus.wav_path,),
             output_wav=output_wav,
             output_summary=output_summary,
+            field_seed=trial.field_seed,
             sample_rate=config.sample_rate,
             output_frame_size=config.output_frame_size,
             input_frame_size=config.input_frame_size,
@@ -191,8 +218,7 @@ def run_calibration_trial(
 
 
 def calibration_row(
-    stimulus: CalibrationStimulus,
-    repeat_index: int,
+    trial: CalibrationTrial,
     trial_summary: dict[str, Any],
 ) -> dict[str, Any]:
     utterance = trial_summary["utterances"][0]
@@ -200,10 +226,13 @@ def calibration_row(
     response_history = utterance["response_output_pattern_history"]
     audio = utterance["response_pattern_audio_diagnostics"]["overall"]
     return {
-        "stimulus_label": stimulus.label,
-        "source_type": stimulus.source_type,
-        "input_wav": str(stimulus.wav_path),
-        "repeat_index": repeat_index,
+        "trial_id": trial.trial_id,
+        "stimulus_label": trial.stimulus.label,
+        "source_type": trial.stimulus.source_type,
+        "input_wav": str(trial.stimulus.wav_path),
+        "seed_root": trial.seed_root,
+        "field_seed": trial.field_seed,
+        "repeat_index": trial.repeat_index,
         "protocol_version": utterance["protocol_version"],
         "input_protocol_frames": utterance["input_protocol_frames"],
         "response_protocol_frames": utterance["response_protocol_frames"],
@@ -228,6 +257,62 @@ def calibration_row(
         "response_audio_zero_crossing_rate": audio["zero_crossing_rate"],
         "response_audio_spectral_centroid_hz": audio["spectral_centroid_hz"],
         "response_wav": trial_summary["output_wav"],
+    }
+
+
+def build_calibration_trials(
+    config: PatternCalibrationConfig,
+    stimuli: list[CalibrationStimulus],
+) -> list[CalibrationTrial]:
+    seed_roots = config.seed_roots or (configured_field_seed(config.config_path),)
+    trials = [
+        CalibrationTrial(
+            trial_id=(f"{safe_name(stimulus.label)}-s{seed_root}-r{repeat_index:02d}"),
+            stimulus=stimulus,
+            seed_root=seed_root,
+            field_seed=derive_trial_seed(seed_root, repeat_index),
+            repeat_index=repeat_index,
+        )
+        for stimulus in stimuli
+        for seed_root in seed_roots
+        for repeat_index in range(1, config.repeats + 1)
+    ]
+    field_seeds = [trial.field_seed for trial in trials]
+    expected_unique_seeds = len(seed_roots) * config.repeats
+    if len(set(field_seeds)) != expected_unique_seeds:
+        msg = "derived field seeds must be unique across seed roots and repeats"
+        raise ValueError(msg)
+    return trials
+
+
+def configured_field_seed(path: Path) -> int:
+    seed = SimulationConfig.from_file(path).field.seed
+    return 0 if seed is None else seed
+
+
+def derive_trial_seed(seed_root: int, repeat_index: int) -> int:
+    if seed_root < 0:
+        msg = "seed_root must be non-negative"
+        raise ValueError(msg)
+    if repeat_index < 1:
+        msg = "repeat_index must be positive"
+        raise ValueError(msg)
+    digest = hashlib.blake2s(
+        f"{seed_root}:{repeat_index}".encode(),
+        digest_size=4,
+    ).digest()
+    return int.from_bytes(digest, "big")
+
+
+def calibration_manifest_entry(trial: CalibrationTrial) -> dict[str, Any]:
+    return {
+        "trial_id": trial.trial_id,
+        "stimulus_label": trial.stimulus.label,
+        "source_type": trial.stimulus.source_type,
+        "input_wav": str(trial.stimulus.wav_path),
+        "seed_root": trial.seed_root,
+        "field_seed": trial.field_seed,
+        "repeat_index": trial.repeat_index,
     }
 
 
@@ -310,6 +395,7 @@ def summarize_stimuli(rows: CalibrationRows) -> dict[str, Any]:
 
 def calibration_parameters(config: PatternCalibrationConfig) -> dict[str, Any]:
     return {
+        "seed_roots": list(config.seed_roots),
         "repeats": config.repeats,
         "sample_rate": config.sample_rate,
         "output_frame_size": config.output_frame_size,
@@ -344,6 +430,19 @@ def write_calibration_summary(path: str | Path, summary: CalibrationSummary) -> 
     return output
 
 
+def write_calibration_manifest(
+    path: str | Path,
+    manifest: list[dict[str, Any]],
+) -> Path:
+    if not manifest:
+        msg = "calibration manifest must not be empty"
+        raise ValueError(msg)
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return output
+
+
 def stable_seed(value: str) -> int:
     return sum((index + 1) * ord(char) for index, char in enumerate(value)) % (2**32)
 
@@ -373,6 +472,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=PatternCalibrationConfig.output_summary,
     )
+    parser.add_argument(
+        "--output-manifest",
+        type=Path,
+        default=PatternCalibrationConfig.output_manifest,
+    )
+    parser.add_argument("--seed", type=int, action="append", default=[])
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--sample-rate", type=int, default=8_000)
     parser.add_argument("--output-frame-size", type=int, default=256)
@@ -420,6 +525,8 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             output_csv=args.output_csv,
             output_summary=args.output_summary,
+            output_manifest=args.output_manifest,
+            seed_roots=tuple(args.seed),
             repeats=args.repeats,
             sample_rate=args.sample_rate,
             output_frame_size=args.output_frame_size,
@@ -442,4 +549,5 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"Wrote rows: {args.output_csv}")
     print(f"Wrote summary: {args.output_summary}")
+    print(f"Wrote manifest: {args.output_manifest}")
     return 0
