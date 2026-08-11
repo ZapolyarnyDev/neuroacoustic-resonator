@@ -35,3 +35,14 @@ just stage-one-gate
 Этап считается экспериментально завершённым только при `status: passed` в
 `experiments/logs/distinguishability_stage_one_report.json`. Статусы `incomplete`
 и `failed` не разрешают переход к Этапу 2.
+
+Если gate завершился со `status: failed`, снять variance и distance diagnostics без
+повторного запуска симуляций:
+
+```text
+just stage-one-diagnostics
+```
+
+Команда создаёт `diagnostics.json`, таблицы и график внутри каждого scenario, а
+общую сводку записывает в
+`experiments/logs/distinguishability_stage_one_diagnostics.json`.

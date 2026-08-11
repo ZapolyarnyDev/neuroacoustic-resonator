@@ -74,6 +74,9 @@ stage-one-analysis:
 stage-one-gate:
     uv run python scripts/run_stage_one_evidence.py --gate-only
 
+stage-one-diagnostics:
+    uv run python scripts/diagnose_stage_one.py
+
 protocol-record:
     uv run neuroacoustic-protocol record --config configs/field_only.yaml --steps 128 --output outputs/protocol/recording.jsonl --summary outputs/protocol/recording-summary.json
 
