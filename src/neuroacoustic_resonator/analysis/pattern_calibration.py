@@ -242,6 +242,7 @@ def run_calibration_trial(
         **calibration_manifest_entry(trial, config),
         "protocol_version": trial_summary["utterances"][0]["protocol_version"],
         "protocol_frames": trial_summary["protocol_frames"],
+        "segments": trial_protocol_segments(trial_summary),
         "response_wav": trial_summary["output_wav"],
         "summary_json": str(output_summary),
     }
@@ -249,6 +250,26 @@ def run_calibration_trial(
     write_trial_metadata(metadata_json, metadata)
     trial_summary["trial_metadata_json"] = str(metadata_json)
     return trial_summary
+
+
+def trial_protocol_segments(trial_summary: dict[str, Any]) -> dict[str, Any]:
+    utterance = trial_summary["utterances"][0]
+    input_end = int(utterance["input_end_protocol_sequence"])
+    input_count = int(utterance["input_protocol_frames"])
+    response_end = int(utterance["response_end_protocol_sequence"])
+    response_count = int(utterance["response_protocol_frames"])
+    return {
+        "input": {
+            "sequence_start": input_end - input_count + 1,
+            "sequence_end": input_end,
+            "frames": input_count,
+        },
+        "response": {
+            "sequence_start": response_end - response_count + 1,
+            "sequence_end": response_end,
+            "frames": response_count,
+        },
+    }
 
 
 def calibration_row(

@@ -126,6 +126,8 @@ def test_run_pattern_calibration_writes_rows_summary_and_reinforcement(
     assert metadata["field_seed"] == manifest[0]["field_seed"]
     assert metadata["split"] == manifest[0]["split"]
     assert metadata["protocol_frames"] == len(frames)
+    assert metadata["segments"]["response"]["frames"] > 0
+    assert metadata["segments"]["response"]["sequence_end"] == frames[-1].sequence
     assert [frame.sequence for frame in frames] == sorted(
         frame.sequence for frame in frames
     )
