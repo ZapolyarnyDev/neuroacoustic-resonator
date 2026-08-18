@@ -61,6 +61,10 @@ from neuroacoustic_resonator.audio.input import (
 )
 from neuroacoustic_resonator.audio.io import write_wav
 from neuroacoustic_resonator.configuration import FieldConfigModel, SimulationConfig
+from neuroacoustic_resonator.core.equilibration import (
+    FieldEquilibrationConfig,
+    equilibrate_simulation,
+)
 from neuroacoustic_resonator.core.field import (
     FieldConfig,
     FieldMetrics,
@@ -75,6 +79,7 @@ from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
 from neuroacoustic_resonator.io.persistence import (
     CheckpointPaths,
+    checkpoint_fingerprint,
     checkpoint_paths,
     load_field_state,
     load_simulation_checkpoint,
@@ -90,6 +95,7 @@ __all__ = [
     "CheckpointPaths",
     "FieldConfig",
     "FieldConfigModel",
+    "FieldEquilibrationConfig",
     "FieldMetrics",
     "FieldState",
     "MetricsHistory",
@@ -116,11 +122,13 @@ __all__ = [
     "SyntheticStimulusSpec",
     "VoiceConversationConfig",
     "WavInputDrive",
+    "checkpoint_fingerprint",
     "checkpoint_paths",
     "compare_output_patterns",
     "compute_pattern_reinforcement_signals",
     "compute_protocol_activity_metrics",
     "compute_regional_activity_metrics",
+    "equilibrate_simulation",
     "export_diagnostics_artifacts",
     "extract_audio_input_features",
     "load_field_state",

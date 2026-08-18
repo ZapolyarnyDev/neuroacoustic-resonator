@@ -217,6 +217,19 @@ class OscillatorField:
 
         self._phase[mask] = np.mod(self._phase[mask] + amount, TAU)
 
+    def damp_initial_phases(self, strength: float) -> None:
+        if not 0.0 <= strength <= 1.0:
+            msg = "phase damping strength must be between 0 and 1"
+            raise ValueError(msg)
+        wrapped = np.angle(np.exp(1j * self._phase))
+        self._phase = np.mod((1.0 - strength) * wrapped, TAU)
+
+    def set_metabolite_baseline(self, value: float) -> None:
+        if not 0.0 <= value <= 1.0:
+            msg = "metabolite baseline must be between 0 and 1"
+            raise ValueError(msg)
+        self._metabolite.fill(value)
+
     def apply_region_plasticity(
         self,
         mask: NDArray[np.bool_],

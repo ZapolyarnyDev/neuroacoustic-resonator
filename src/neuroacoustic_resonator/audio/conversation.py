@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +40,10 @@ from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.regions import RegionMasks
 from neuroacoustic_resonator.core.simulation import Simulation, SimulationFrame
 from neuroacoustic_resonator.encoding import ProtocolEncoder
+from neuroacoustic_resonator.io.persistence import (
+    checkpoint_fingerprint,
+    load_simulation_checkpoint,
+)
 from neuroacoustic_resonator.protocol import SoundProtocolFrame, write_protocol_jsonl
 
 ConversationSummary = dict[str, Any]
@@ -102,6 +106,7 @@ class UtteranceDriveResult:
 class VoiceConversationConfig:
     config_path: Path = Path("configs") / "field_only.yaml"
     field_seed: int | None = None
+    initial_checkpoint: Path | None = None
     input_wavs: tuple[Path, ...] = ()
     output_wav: Path = Path("experiments") / "audio" / "voice-conversation.wav"
     output_summary: Path = (
@@ -152,6 +157,12 @@ class VoiceConversationConfig:
             raise ValueError(msg)
         if self.field_seed is not None and self.field_seed < 0:
             msg = "field_seed must be non-negative"
+            raise ValueError(msg)
+        if self.field_seed is not None and self.initial_checkpoint is not None:
+            msg = "field_seed and initial_checkpoint are mutually exclusive"
+            raise ValueError(msg)
+        if self.initial_checkpoint is not None and self.warmup_steps != 0:
+            msg = "checkpoint branches require warmup_steps=0"
             raise ValueError(msg)
         if self.sample_rate < 1:
             msg = "sample_rate must be positive"
@@ -261,8 +272,14 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
                 )
             }
         )
-    simulation = sim_config.create_simulation()
-    regions = RegionMasks.from_size(sim_config.field.size)
+    if config.initial_checkpoint is None:
+        simulation = sim_config.create_simulation()
+        initial_fingerprint = None
+    else:
+        simulation = load_simulation_checkpoint(config.initial_checkpoint)
+        validate_checkpoint_field_config(simulation, sim_config)
+        initial_fingerprint = checkpoint_fingerprint(config.initial_checkpoint)
+    regions = RegionMasks.from_size(simulation.field.config.size)
     renderer = ProtocolReferenceRenderer(
         sample_rate=config.sample_rate,
         frame_size=config.output_frame_size,
@@ -280,7 +297,7 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     )
     protocol_stream = ConversationProtocolStream(
         ProtocolEncoder(
-            dt=sim_config.field.dt,
+            dt=simulation.field.config.dt,
             config=sim_config.protocol.to_encoder_config(),
             detector=TemporalPatternDetector(sim_config.protocol.to_detector_config()),
         )
@@ -439,7 +456,13 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
         "protocol_jsonl": (None if protocol_output is None else str(protocol_output)),
         "protocol_frames": len(protocol_stream.frames),
         "parameters": {
-            "field_seed": sim_config.field.seed,
+            "field_seed": simulation.field.config.seed,
+            "initial_checkpoint": (
+                None
+                if config.initial_checkpoint is None
+                else str(config.initial_checkpoint)
+            ),
+            "initial_checkpoint_fingerprint": initial_fingerprint,
             "sample_rate": config.sample_rate,
             "output_frame_size": config.output_frame_size,
             "input_frame_size": config.input_frame_size,
@@ -488,6 +511,19 @@ def render_voice_conversation(config: VoiceConversationConfig) -> ConversationSu
     }
     write_conversation_summary(config.output_summary, summary)
     return summary
+
+
+def validate_checkpoint_field_config(
+    simulation: Simulation,
+    sim_config: SimulationConfig,
+) -> None:
+    actual = asdict(simulation.field.config)
+    expected = asdict(sim_config.field.to_runtime())
+    actual.pop("seed", None)
+    expected.pop("seed", None)
+    if actual != expected:
+        msg = "checkpoint field configuration does not match conversation config"
+        raise ValueError(msg)
 
 
 def summarize_conversation_session(

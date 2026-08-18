@@ -1,0 +1,56 @@
+simulation_config: configs/field_only.yaml
+output_dir: experiments/controlled_equilibration/baseline
+output_manifest: experiments/controlled_equilibration/baseline/manifest.json
+output_pairs: experiments/controlled_equilibration/baseline/pairs.json
+output_embeddings: experiments/controlled_equilibration/baseline/causal_embeddings.csv
+output_summary: experiments/logs/controlled_equilibration_baseline.json
+seed_roots:
+  - 101
+  - 401
+  - 601
+splits:
+  train:
+    - 101
+  validation:
+    - 401
+  test:
+    - 601
+repeats: 2
+sample_rate: 8000
+output_frame_size: 256
+input_frame_size: 256
+input_hop_size: 128
+drive_strength: 0.45
+input_assoc_gain: 0.8
+input_output_gain: 0.0
+response_seconds: 0.35
+gain: 0.35
+equilibration:
+  neutral_steps: 512
+  phase_damping: 0.2
+  metabolite_baseline: 1.0
+stimuli:
+  - label: silence
+    kind: silence
+    duration_seconds: 0.5
+    amplitude: 0.0
+  - label: tone-220
+    kind: tone
+    frequency_hz: 220.0
+    duration_seconds: 0.5
+    amplitude: 0.65
+  - label: chirp-180-720
+    kind: chirp
+    frequency_hz: 180.0
+    end_frequency_hz: 720.0
+    duration_seconds: 0.5
+    amplitude: 0.65
+  - label: pulse-330
+    kind: pulse
+    frequency_hz: 330.0
+    duration_seconds: 0.5
+    amplitude: 0.65
+  - label: noise
+    kind: noise
+    duration_seconds: 0.5
+    amplitude: 0.35

@@ -19,6 +19,7 @@ __all__ = [
     "TAU",
     "BoundaryMode",
     "FieldConfig",
+    "FieldEquilibrationConfig",
     "FieldMetrics",
     "FieldState",
     "FloatArray",
@@ -30,4 +31,9 @@ __all__ = [
     "SimulationFrame",
     "SyntheticInputConfig",
     "SyntheticInputDrive",
+    "equilibrate_simulation",
 ]
+from neuroacoustic_resonator.core.equilibration import (
+    FieldEquilibrationConfig,
+    equilibrate_simulation,
+)

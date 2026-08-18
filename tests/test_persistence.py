@@ -6,6 +6,7 @@ import pytest
 from neuroacoustic_resonator import FieldConfig, Simulation
 from neuroacoustic_resonator.core.input_drive import SyntheticInputConfig
 from neuroacoustic_resonator.io.persistence import (
+    checkpoint_fingerprint,
     checkpoint_paths,
     load_checkpoint_metadata,
     load_field_state,
@@ -59,6 +60,7 @@ def test_save_and_load_simulation_checkpoint_roundtrip(tmp_path) -> None:
 
     paths = save_simulation_checkpoint(tmp_path / "checkpoint", simulation)
     loaded = load_simulation_checkpoint(paths.arrays_path)
+    metadata = load_checkpoint_metadata(paths.arrays_path)
 
     assert loaded.step_index == 3
     assert loaded.field.config.coupling_strength == 0.2
@@ -67,6 +69,25 @@ def test_save_and_load_simulation_checkpoint_roundtrip(tmp_path) -> None:
     assert loaded.input_drive.config.enabled is True
     assert loaded.input_drive.config.mode == "pulse"
     assert np.allclose(loaded.field.state.phase, simulation.field.state.phase)
+    assert metadata["fingerprint"] == checkpoint_fingerprint(paths.arrays_path)
+
+
+def test_load_simulation_checkpoint_rejects_tampered_state(tmp_path) -> None:
+    simulation = Simulation(FieldConfig(size=5, seed=1))
+    paths = save_simulation_checkpoint(tmp_path / "checkpoint", simulation)
+    state = load_field_state(paths.arrays_path)
+    state.phase[0, 0] += 0.25
+    np.savez_compressed(
+        paths.arrays_path,
+        phase=state.phase,
+        frequency=state.frequency,
+        metabolite=state.metabolite,
+        coupling=state.coupling,
+        trace=state.trace,
+    )
+
+    with pytest.raises(ValueError, match="fingerprint"):
+        load_simulation_checkpoint(paths.arrays_path)
 
 
 def test_load_simulation_checkpoint_rejects_missing_metadata(tmp_path) -> None:

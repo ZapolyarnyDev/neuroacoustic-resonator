@@ -13,6 +13,8 @@ from neuroacoustic_resonator.audio.conversation import (
     render_voice_conversation,
     response_duration_for_input,
 )
+from neuroacoustic_resonator.configuration import SimulationConfig
+from neuroacoustic_resonator.io.persistence import save_simulation_checkpoint
 
 
 def test_render_voice_conversation_writes_response_wav_and_summary(tmp_path) -> None:
@@ -129,6 +131,58 @@ steps: 4
         assert stream.getnframes() == 800
     assert summary["utterances"][0]["mixed_input_audio_seconds"] == 0.0
     assert summary["parameters"]["include_input_audio"] is False
+
+
+def test_conversation_branches_replay_identically_from_checkpoint(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+field:
+  size: 6
+  seed: 1
+synthetic_input:
+  enabled: false
+steps: 4
+""",
+        encoding="utf-8",
+    )
+    stimulus = tmp_path / "stimulus.wav"
+    wavfile.write(stimulus, 8_000, np.ones(256, dtype=np.float32))
+    simulation = SimulationConfig.from_file(config_path).create_simulation()
+    simulation.run(4)
+    checkpoint = tmp_path / "checkpoint.npz"
+    save_simulation_checkpoint(checkpoint, simulation)
+    protocol_paths = (tmp_path / "first.jsonl", tmp_path / "second.jsonl")
+    summaries = []
+    for index, protocol_path in enumerate(protocol_paths):
+        summaries.append(
+            render_voice_conversation(
+                VoiceConversationConfig(
+                    config_path=config_path,
+                    initial_checkpoint=checkpoint,
+                    input_wavs=(stimulus,),
+                    output_wav=tmp_path / f"response-{index}.wav",
+                    output_summary=tmp_path / f"summary-{index}.json",
+                    protocol_output=protocol_path,
+                    sample_rate=8_000,
+                    output_frame_size=80,
+                    input_frame_size=128,
+                    input_hop_size=64,
+                    response_seconds=0.1,
+                    pause_seconds=0.0,
+                    warmup_steps=0,
+                    include_input_audio=False,
+                    use_response_policy=False,
+                )
+            )
+        )
+
+    assert protocol_paths[0].read_bytes() == protocol_paths[1].read_bytes()
+    assert summaries[0]["parameters"]["initial_checkpoint_fingerprint"]
+    assert (
+        summaries[0]["parameters"]["initial_checkpoint_fingerprint"]
+        == summaries[1]["parameters"]["initial_checkpoint_fingerprint"]
+    )
 
 
 def test_render_voice_conversation_produces_audible_response(tmp_path) -> None:

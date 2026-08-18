@@ -7,6 +7,9 @@ from typing import cast
 import numpy as np
 import pytest
 
+from neuroacoustic_resonator.analysis.controlled_equilibration import (
+    causal_response_embedding,
+)
 from neuroacoustic_resonator.analysis.protocol_embeddings import (
     FEATURE_COLUMNS,
     extract_protocol_embeddings,
@@ -186,3 +189,14 @@ def test_response_representations_remove_reference_and_absolute_level() -> None:
     assert pre_input.tolist() == [1.0, 3.0, 6.0]
     assert input_end.tolist() == [0.0, 2.0, 5.0]
     assert velocity.tolist() == [0.0, 2.0, 3.0]
+
+
+def test_causal_response_embedding_subtracts_control_trajectory() -> None:
+    stimulus = [frame(index, value) for index, value in enumerate((0.3, 0.5, 0.8))]
+    control = [frame(index, value) for index, value in enumerate((0.2, 0.2, 0.3))]
+
+    embedding = causal_response_embedding(stimulus, control)
+
+    assert embedding["output_phase_coherence_mean"] == pytest.approx(0.3)
+    assert embedding["output_phase_coherence_delta"] == pytest.approx(0.4)
+    assert embedding["active_fraction"] == 0.0

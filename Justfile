@@ -80,6 +80,9 @@ stage-one-diagnostics:
 stage-one-representations:
     uv run python scripts/derive_seed_invariant_representations.py
 
+controlled-equilibration:
+    uv run python scripts/run_controlled_equilibration.py
+
 protocol-record:
     uv run neuroacoustic-protocol record --config configs/field_only.yaml --steps 128 --output outputs/protocol/recording.jsonl --summary outputs/protocol/recording-summary.json
 

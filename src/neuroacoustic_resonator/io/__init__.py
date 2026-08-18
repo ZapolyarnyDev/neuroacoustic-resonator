@@ -1,5 +1,6 @@
 from neuroacoustic_resonator.io.persistence import (
     CheckpointPaths,
+    checkpoint_fingerprint,
     checkpoint_paths,
     load_checkpoint_metadata,
     load_field_state,
@@ -11,6 +12,7 @@ from neuroacoustic_resonator.io.resume import resume_simulation_checkpoint
 
 __all__ = [
     "CheckpointPaths",
+    "checkpoint_fingerprint",
     "checkpoint_paths",
     "load_checkpoint_metadata",
     "load_field_state",

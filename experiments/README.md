@@ -55,3 +55,13 @@ just stage-one-representations
 ```
 
 Representation выбирается по train/validation. Test читается только после выбора.
+
+Запустить малый paired stimulus/control корпус из общих equilibrated checkpoints:
+
+```text
+just controlled-equilibration
+```
+
+Команда создаёт шесть checkpoint для трёх seed roots и двух независимых повторов,
+запускает 30 ветвей и измеряет 24 активных stimulus как покадровую причинную
+разность относительно silence-ветви с тем же checkpoint fingerprint.

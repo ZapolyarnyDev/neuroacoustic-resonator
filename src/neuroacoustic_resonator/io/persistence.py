@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -94,6 +96,10 @@ def save_simulation_checkpoint(
     }
     if metadata:
         checkpoint_metadata["metadata"] = metadata
+    checkpoint_metadata["fingerprint"] = field_state_fingerprint(
+        simulation.field.state,
+        checkpoint_metadata,
+    )
     return save_field_state(path, simulation.field.state, metadata=checkpoint_metadata)
 
 
@@ -105,6 +111,12 @@ def load_simulation_checkpoint(path: str | Path) -> Simulation:
         raise ValueError(msg)
 
     state = load_field_state(path)
+    stored_fingerprint = metadata.get("fingerprint")
+    if stored_fingerprint is not None:
+        actual_fingerprint = field_state_fingerprint(state, metadata)
+        if stored_fingerprint != actual_fingerprint:
+            msg = "checkpoint fingerprint does not match its state and metadata"
+            raise ValueError(msg)
     field_config_data = metadata.get("field_config")
     if not isinstance(field_config_data, dict):
         msg = "checkpoint metadata must contain field_config"
@@ -122,6 +134,40 @@ def load_simulation_checkpoint(path: str | Path) -> Simulation:
     )
     simulation.step_index = int(metadata.get("step_index", 0))
     return simulation
+
+
+def checkpoint_fingerprint(path: str | Path) -> str:
+    state = load_field_state(path)
+    metadata = load_checkpoint_metadata(path)
+    actual = field_state_fingerprint(state, metadata)
+    stored = metadata.get("fingerprint")
+    if stored is not None and stored != actual:
+        msg = "checkpoint fingerprint does not match its state and metadata"
+        raise ValueError(msg)
+    return actual
+
+
+def field_state_fingerprint(
+    state: FieldState,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    digest = hashlib.sha256()
+    for name in ("phase", "frequency", "metabolite", "coupling", "trace"):
+        values = np.ascontiguousarray(getattr(state, name), dtype=np.float64)
+        digest.update(name.encode("utf-8"))
+        digest.update(json.dumps(values.shape).encode("ascii"))
+        digest.update(values.tobytes(order="C"))
+    canonical_metadata = dict(metadata or {})
+    canonical_metadata.pop("fingerprint", None)
+    digest.update(
+        json.dumps(
+            canonical_metadata,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    )
+    return digest.hexdigest()
 
 
 def _validate_state_shapes(state: FieldState) -> None:

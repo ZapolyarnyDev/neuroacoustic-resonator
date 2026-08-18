@@ -211,6 +211,9 @@ def run_pattern_calibration(config: PatternCalibrationConfig) -> CalibrationSumm
 def run_calibration_trial(
     config: PatternCalibrationConfig,
     trial: CalibrationTrial,
+    *,
+    initial_checkpoint: Path | None = None,
+    expected_checkpoint_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     output_wav = config.output_dir / f"{trial.trial_id}-response.wav"
     output_summary = config.output_dir / f"{trial.trial_id}-summary.json"
@@ -222,7 +225,8 @@ def run_calibration_trial(
             output_wav=output_wav,
             output_summary=output_summary,
             protocol_output=protocol_jsonl,
-            field_seed=trial.field_seed,
+            field_seed=None if initial_checkpoint is not None else trial.field_seed,
+            initial_checkpoint=initial_checkpoint,
             sample_rate=config.sample_rate,
             output_frame_size=config.output_frame_size,
             input_frame_size=config.input_frame_size,
@@ -232,12 +236,16 @@ def run_calibration_trial(
             input_output_gain=config.input_output_gain,
             response_seconds=config.response_seconds,
             pause_seconds=0.0,
-            warmup_steps=config.warmup_steps,
+            warmup_steps=0 if initial_checkpoint is not None else config.warmup_steps,
             gain=config.gain,
             include_input_audio=False,
             use_response_policy=False,
         )
     )
+    actual_fingerprint = trial_summary["parameters"]["initial_checkpoint_fingerprint"]
+    if actual_fingerprint != expected_checkpoint_fingerprint:
+        msg = "calibration branch checkpoint fingerprint mismatch"
+        raise ValueError(msg)
     metadata = {
         **calibration_manifest_entry(trial, config),
         "protocol_version": trial_summary["utterances"][0]["protocol_version"],
@@ -245,6 +253,10 @@ def run_calibration_trial(
         "segments": trial_protocol_segments(trial_summary),
         "response_wav": trial_summary["output_wav"],
         "summary_json": str(output_summary),
+        "initial_checkpoint": (
+            None if initial_checkpoint is None else str(initial_checkpoint)
+        ),
+        "checkpoint_fingerprint": actual_fingerprint,
     }
     metadata_json = trial_metadata_path(config, trial)
     write_trial_metadata(metadata_json, metadata)
