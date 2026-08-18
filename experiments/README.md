@@ -46,3 +46,12 @@ just stage-one-diagnostics
 Команда создаёт `diagnostics.json`, таблицы и график внутри каждого scenario, а
 общую сводку записывает в
 `experiments/logs/distinguishability_stage_one_diagnostics.json`.
+
+Сравнить абсолютные и seed-invariant response representations на уже записанных
+Sound Protocol streams:
+
+```text
+just stage-one-representations
+```
+
+Representation выбирается по train/validation. Test читается только после выбора.
