@@ -83,6 +83,9 @@ stage-one-representations:
 controlled-equilibration:
     uv run python scripts/run_controlled_equilibration.py
 
+controlled-equilibration-analysis:
+    uv run python scripts/run_controlled_equilibration.py --analysis-only
+
 protocol-record:
     uv run neuroacoustic-protocol record --config configs/field_only.yaml --steps 128 --output outputs/protocol/recording.jsonl --summary outputs/protocol/recording-summary.json
 

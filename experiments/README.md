@@ -65,3 +65,12 @@ just controlled-equilibration
 Команда создаёт шесть checkpoint для трёх seed roots и двух независимых повторов,
 запускает 30 ветвей и измеряет 24 активных stimulus как покадровую причинную
 разность относительно silence-ветви с тем же checkpoint fingerprint.
+
+Повторно рассчитать строгую статистику по готовым causal embeddings без симуляций:
+
+```text
+just controlled-equilibration-analysis
+```
+
+Отчёт содержит leave-one-seed-root-out accuracy по каждому root, bootstrap с
+ресэмплированием целых checkpoint и permutation labels только внутри checkpoint.

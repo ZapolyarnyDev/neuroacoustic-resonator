@@ -10,10 +10,6 @@ import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from neuroacoustic_resonator.analysis.distinguishability_classification import (
-    balanced_accuracy,
-    fit_nearest_centroid,
-)
 from neuroacoustic_resonator.analysis.distinguishability_corpus import (
     CorpusSplitsConfig,
     CorpusStimulusConfig,
@@ -21,8 +17,8 @@ from neuroacoustic_resonator.analysis.distinguishability_corpus import (
 from neuroacoustic_resonator.analysis.distinguishability_diagnostics import (
     diagnose_protocol_embeddings,
 )
-from neuroacoustic_resonator.analysis.distinguishability_statistics import (
-    fit_train_standardizer,
+from neuroacoustic_resonator.analysis.paired_causal_evidence import (
+    evaluate_paired_causal_evidence,
 )
 from neuroacoustic_resonator.analysis.pattern_calibration import (
     CalibrationTrial,
@@ -39,7 +35,6 @@ from neuroacoustic_resonator.analysis.protocol_embeddings import (
     FEATURE_COLUMNS,
     SIGNAL_GETTERS,
     EmbeddingRow,
-    read_embedding_rows,
     response_embedding,
     select_response_frames,
     temporal_statistics,
@@ -158,7 +153,8 @@ class ControlledEquilibrationCorpusConfig(BaseModel):
 def run_controlled_equilibration_corpus(
     config_path: str | Path,
     *,
-    permutation_samples: int = 2_000,
+    permutation_samples: int = 10_000,
+    bootstrap_samples: int = 5_000,
 ) -> dict[str, Any]:
     config = ControlledEquilibrationCorpusConfig.from_file(config_path)
     config.output_dir.mkdir(parents=True, exist_ok=True)
@@ -232,10 +228,13 @@ def run_controlled_equilibration_corpus(
         config.output_dir / "causal_diagnostics.png",
         permutation_samples=permutation_samples,
     )
-    classification = leave_one_seed_root_out_classification(
+    evidence = evaluate_paired_causal_evidence(
         config.output_embeddings,
+        config.output_dir / "causal_evidence.json",
         permutation_samples=permutation_samples,
         permutation_seed=20_260_818,
+        bootstrap_samples=bootstrap_samples,
+        bootstrap_seed=20_260_819,
     )
     absolute_variance = absolute_diagnostics["variance"]["aggregate"]
     causal_variance = causal_diagnostics["variance"]["aggregate"]
@@ -256,7 +255,7 @@ def run_controlled_equilibration_corpus(
             absolute_variance["stimulus_to_seed_ratio"],
             causal_variance["stimulus_to_seed_ratio"],
         ),
-        "cross_seed_classification": classification,
+        "cross_seed_classification": evidence["classification"],
         "cross_seed_distance": {
             "within_stimulus_mean": causal_distances["groups"][
                 "cross_seed_within_stimulus"
@@ -272,10 +271,37 @@ def run_controlled_equilibration_corpus(
             "manifest": str(config.output_manifest),
             "pairs": str(config.output_pairs),
             "embeddings": str(config.output_embeddings),
+            "causal_evidence": str(config.output_dir / "causal_evidence.json"),
         },
     }
     write_json(config.output_summary, report)
     return report
+
+
+def analyze_controlled_equilibration(
+    config_path: str | Path,
+    *,
+    permutation_samples: int = 10_000,
+    bootstrap_samples: int = 5_000,
+) -> dict[str, Any]:
+    config = ControlledEquilibrationCorpusConfig.from_file(config_path)
+    evidence_path = config.output_dir / "causal_evidence.json"
+    evidence = evaluate_paired_causal_evidence(
+        config.output_embeddings,
+        evidence_path,
+        permutation_samples=permutation_samples,
+        bootstrap_samples=bootstrap_samples,
+    )
+    if config.output_summary.exists():
+        summary = read_json_object(config.output_summary)
+        summary["cross_seed_classification"] = evidence["classification"]
+        outputs = summary.setdefault("outputs", {})
+        if not isinstance(outputs, dict):
+            msg = "controlled equilibration summary outputs must be an object"
+            raise ValueError(msg)
+        outputs["causal_evidence"] = str(evidence_path)
+        write_json(config.output_summary, summary)
+    return evidence
 
 
 def create_equilibrated_checkpoints(
@@ -317,70 +343,6 @@ def create_equilibrated_checkpoints(
                 "fingerprint": fingerprint,
             }
     return checkpoints
-
-
-def leave_one_seed_root_out_classification(
-    embeddings_csv: str | Path,
-    *,
-    permutation_samples: int,
-    permutation_seed: int,
-) -> dict[str, Any]:
-    if permutation_samples < 1:
-        msg = "permutation_samples must be positive"
-        raise ValueError(msg)
-    rows = read_embedding_rows(embeddings_csv)
-    roots = sorted({int(row["seed_root"]) for row in rows})
-    labels = tuple(sorted({row["stimulus_label"] for row in rows}))
-    if len(roots) < 3:
-        msg = "cross-seed classification requires at least three seed roots"
-        raise ValueError(msg)
-    actual = np.asarray([row["stimulus_label"] for row in rows])
-    predicted = cross_seed_predictions(rows, roots, actual)
-    observed = balanced_accuracy(actual, predicted, labels)
-    rng = np.random.default_rng(permutation_seed)
-    field_seeds = np.asarray([int(row["field_seed"]) for row in rows])
-    scores = np.empty(permutation_samples, dtype=np.float64)
-    for index in range(permutation_samples):
-        permuted = actual.copy()
-        for field_seed in np.unique(field_seeds):
-            indices = np.flatnonzero(field_seeds == field_seed)
-            permuted[indices] = rng.permutation(permuted[indices])
-        permutation_predictions = cross_seed_predictions(rows, roots, permuted)
-        scores[index] = balanced_accuracy(permuted, permutation_predictions, labels)
-    return {
-        "method": "leave_one_seed_root_out_nearest_centroid",
-        "seed_roots": roots,
-        "samples": len(rows),
-        "balanced_accuracy": observed,
-        "chance_level": 1.0 / len(labels),
-        "permutation_samples": permutation_samples,
-        "permutation_p_value": float(
-            (1 + np.count_nonzero(scores >= observed)) / (permutation_samples + 1)
-        ),
-    }
-
-
-def cross_seed_predictions(
-    rows: list[dict[str, str]],
-    roots: list[int],
-    labels: np.ndarray,
-) -> np.ndarray:
-    predicted = np.empty(labels.shape, dtype=labels.dtype)
-    row_roots = np.asarray([int(row["seed_root"]) for row in rows])
-    for held_out in roots:
-        train_indices = np.flatnonzero(row_roots != held_out)
-        test_indices = np.flatnonzero(row_roots == held_out)
-        training_rows = [{**rows[index], "split": "train"} for index in train_indices]
-        standardizer = fit_train_standardizer(training_rows)
-        model = fit_nearest_centroid(
-            standardizer.transform(training_rows),
-            labels[train_indices],
-            "euclidean",
-        )
-        predicted[test_indices], _ = model.predict(
-            standardizer.transform([rows[index] for index in test_indices])
-        )
-    return predicted
 
 
 def build_pair_manifest(
@@ -568,15 +530,25 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("configs/controlled_equilibration.yaml"),
     )
-    parser.add_argument("--permutation-samples", type=int, default=2_000)
+    parser.add_argument("--permutation-samples", type=int, default=10_000)
+    parser.add_argument("--bootstrap-samples", type=int, default=5_000)
+    parser.add_argument("--analysis-only", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    report = run_controlled_equilibration_corpus(
-        args.config,
-        permutation_samples=args.permutation_samples,
-    )
+    if args.analysis_only:
+        report = analyze_controlled_equilibration(
+            args.config,
+            permutation_samples=args.permutation_samples,
+            bootstrap_samples=args.bootstrap_samples,
+        )
+    else:
+        report = run_controlled_equilibration_corpus(
+            args.config,
+            permutation_samples=args.permutation_samples,
+            bootstrap_samples=args.bootstrap_samples,
+        )
     print(json.dumps(report, indent=2))
     return 0

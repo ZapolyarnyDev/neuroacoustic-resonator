@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 from neuroacoustic_resonator.analysis.controlled_equilibration import (
     ControlledEquilibrationCorpusConfig,
-    leave_one_seed_root_out_classification,
+    analyze_controlled_equilibration,
     validate_pair_entry,
+)
+from neuroacoustic_resonator.analysis.paired_causal_evidence import (
+    validate_paired_causal_design,
 )
 from neuroacoustic_resonator.analysis.protocol_embeddings import (
     FEATURE_COLUMNS,
@@ -100,12 +104,83 @@ def test_leave_one_seed_root_out_classification_uses_all_roots(tmp_path) -> None
     embeddings = tmp_path / "embeddings.csv"
     write_embedding_rows(embeddings, rows)
 
-    report = leave_one_seed_root_out_classification(
-        embeddings,
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps({"outputs": {}}), encoding="utf-8")
+    config_text = Path("configs/controlled_equilibration.yaml").read_text(
+        encoding="utf-8"
+    )
+    config_text = (
+        config_text.replace(
+            "output_dir: experiments/controlled_equilibration/baseline",
+            f"output_dir: {tmp_path.as_posix()}",
+        )
+        .replace(
+            "output_embeddings: experiments/controlled_equilibration/baseline/causal_embeddings.csv",
+            f"output_embeddings: {embeddings.as_posix()}",
+        )
+        .replace(
+            "output_summary: experiments/logs/controlled_equilibration_baseline.json",
+            f"output_summary: {summary_path.as_posix()}",
+        )
+    )
+    config_path = tmp_path / "controlled.yaml"
+    config_path.write_text(config_text, encoding="utf-8")
+
+    report = analyze_controlled_equilibration(
+        config_path,
         permutation_samples=20,
-        permutation_seed=7,
+        bootstrap_samples=20,
+    )
+    updated_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    classification = report["classification"]
+    assert report["design"]["seed_roots"] == [101, 401, 601]
+    assert report["design"]["checkpoint_count"] == 6
+    assert classification["balanced_accuracy"] == 1.0
+    assert classification["chance_level"] == 0.25
+    assert classification["roots_above_chance"] == 3
+    assert all(
+        root["balanced_accuracy"] == 1.0 for root in classification["by_seed_root"]
+    )
+    assert classification["checkpoint_clustered_bootstrap"]["balanced_accuracy_ci"] == [
+        1.0,
+        1.0,
+    ]
+    assert (
+        classification["checkpoint_label_permutation"][
+            "preserves_shared_control_dependence"
+        ]
+        is True
+    )
+    assert updated_summary["cross_seed_classification"]["balanced_accuracy"] == 1.0
+    assert updated_summary["outputs"]["causal_evidence"].endswith(
+        "causal_evidence.json"
     )
 
-    assert report["seed_roots"] == [101, 401, 601]
-    assert report["balanced_accuracy"] == 1.0
-    assert report["chance_level"] == 0.25
+
+def test_paired_evidence_rejects_duplicate_checkpoint_label(tmp_path) -> None:
+    rows: list[EmbeddingRow] = []
+    for seed_root in (101, 401, 601):
+        for repeat_index in (1, 2):
+            for label in ("tone", "noise"):
+                row: EmbeddingRow = {
+                    "trial_id": f"{label}-{seed_root}-{repeat_index}",
+                    "stimulus_label": label,
+                    "source_type": label,
+                    "seed_root": seed_root,
+                    "field_seed": seed_root * 10 + repeat_index,
+                    "repeat_index": repeat_index,
+                    "split": "train",
+                    "protocol_version": "0.1",
+                    "response_frames": 8,
+                }
+                row.update({name: 0.0 for name in FEATURE_COLUMNS})
+                rows.append(row)
+    duplicate = dict(rows[0])
+    duplicate["trial_id"] = "duplicate"
+    rows.append(duplicate)
+
+    with pytest.raises(ValueError, match="exactly once"):
+        validate_paired_causal_design(
+            [{key: str(value) for key, value in row.items()} for row in rows]
+        )
