@@ -6,212 +6,85 @@
 [![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> 🗣️👂 A self-organizing neuroacoustic system that transforms live sound into
-> evolving oscillator-field dynamics and generates responses from emergent
-> synchronization.
+An experimental field of coupled oscillators that transforms audio into evolving
+dynamics, records them as Sound Protocol v0, and renders protocol-driven responses.
+It is not a language model and does not currently demonstrate language, cognition,
+or learned acoustic concepts.
 
-Neuroacoustic Resonator is an experimental dynamical system built from coupled
-phase oscillators, local energy metabolism, adaptive connections, memory traces,
-and audio-driven perturbations.
+## Current status
 
-It is not a language model. It starts without a vocabulary, pretrained weights,
-or symbolic rules. The project asks a narrower, testable question: can stable,
-repeatable acoustic patterns emerge from continuous field dynamics, and can
-those patterns remain sensitive to the sounds that produced them?
+The active research question is whether different sounds produce reproducible,
+seed-invariant field responses. Paired stimulus/control branches now start from the
+same equilibrated checkpoint. The first 3-root pilot reached `0.542` cross-seed
+balanced accuracy against `0.25` chance, with checkpoint-clustered 95% CI
+`[0.274, 0.601]`. This is promising pilot evidence, not a completed result.
 
-The project is in an early research stage. Current results are experimental and
-should not be interpreted as evidence of language, cognition, or consciousness.
-
-## How it works
-
-```mermaid
-flowchart LR
-    A[Live or recorded audio] --> B[Audio features]
-    B --> C[Input region]
-    C --> D[Metabolic oscillator field]
-    D --> E[Sound Protocol v0]
-    E --> F[Pattern analysis]
-    E --> G[Audio consumers]
-    E --> H[JSONL and research reports]
-```
-
-The field is divided into input, association, and output regions. Audio features
-perturb the input region; activity then propagates through local coupling,
-plasticity, metabolic constraints, and memory traces. The output region is
-measured for synchronization, phase structure, energy state, and recurring
-patterns. These measurements can drive an acoustic response or be exported for
-offline analysis.
-
-## What has already been done
-
-- A two-dimensional field of coupled phase oscillators.
-- Local metabolite consumption, recovery, and diffusion.
-- Frequency and coupling plasticity with homeostatic bounds.
-- Audio feature extraction and configurable input routing.
-- Output-region pattern signatures and temporal pattern history.
-- A strict, versioned JSONL sound protocol with exact offline replay.
-- Pattern calibration, propagation, voice-response, and memory probes.
-- Checkpoint save/resume support for longer experiments.
-- Offline metrics, diagnostics, plots, summaries, and benchmark exports.
-- Turn-based microphone interaction and WAV-based conversation experiments.
-- Reproducible configuration through YAML, `uv`, and a locked dependency graph.
-
-## Where the project is heading
-
-The current goal is to teach the field to describe its own behavior in a way
-that makes sense. I call this mechanism the sound protocol: a shared description
-of the field's state and the patterns it detects. Different sound modes will use
-this protocol to interpret the same field.
-
-Once the protocol can reliably distinguish responses to different inputs, sound
-generation can be split into a separate layer. A biomorphic voice, modular
-synth, voice-like but nonverbal mode, percussion, or dark ambient mode will all
-be able to work with the same field without rebuilding the engine.
-
-> A self-hosted web app is in the plans 😈
-
-One idea I find interesting: a field with its own continuous dynamics might one
-day (or maybe not 😉) become an external state layer for a frozen model (an LLM,
-of course), giving it ongoing processes that continue beyond its training.
-cutoff.
-
-## Quick start
-
-Requirements:
-
-- Python 3.13
-- [`uv`](https://docs.astral.sh/uv/)
-
-Install the locked development dependencies:
-
-```bash
-uv sync --locked --dev
-```
-
-Run a short simulation and create an image of the field:
-
-```bash
-uv run python main.py
-```
-
-The result will be saved to `outputs/field-preview.png`.
-
-If [`just`](https://just.systems/) is installed, see the available recipes with:
-
-```bash
-just
-```
-
-## Record and replay the field
-
-Sound Protocol v0 is now the shared stream used by conversations, diagnostics,
-and research probes. Record a reproducible simulation as strict JSONL:
-
-```bash
-just protocol-record
-```
-
-Replay the recording without running the oscillator field:
-
-```bash
-just protocol-replay
-```
-
-Replay can produce a summary and a WAV through the current diagnostic reference
-renderer. The renderer is not one of the planned sound modes.
-
-Direct CLI usage follows the same commands:
-
-```bash
-uv run neuroacoustic-protocol record --config configs/field_only.yaml --steps 128 --output outputs/protocol/recording.jsonl
-uv run neuroacoustic-protocol replay --input outputs/protocol/recording.jsonl
-```
-
-A minimal exact round-trip is available in
-[examples/protocol_round_trip.py](examples/protocol_round_trip.py).
-
-## Live audio experiment
-
-Available audio devices:
-
-```bash
-just audio-devices
-```
-
-Start turn-based interaction through the microphone:
-
-```bash
-just live-conversation
-```
-
-This is an experimental test bench for the current field and its
-response-generation pipeline, not the final result.
-
-## Research workflows
-
-Run calibration on synthetic signals:
-
-```bash
-just pattern-calibration
-```
-
-Check how a perturbation propagates:
-
-```bash
-just propagation-probe
-```
-
-Collect a long sequence of metrics:
-
-```bash
-just metrics
-```
-
-Run a set of experiments:
-
-```bash
-just experiments
-```
-
-Generated files are saved to `experiments/` and `outputs/`. The README files
-inside them describe the expected contents of these directories.
-
-## Repository layout
+Current pipeline:
 
 ```text
-configs/      Reproducible simulation configurations
-scripts/      Entry points for research, audio, benchmarks, and state persistence
-src/          Field engine, analysis, audio, I/O, and visualizations
-tests/        Unit and integration tests
-examples/     Small reproducible protocol examples
-experiments/  Generated research artifacts
-outputs/      Generated images, metrics, and benchmarks
+audio -> input/association/output field -> Sound Protocol v0 -> analysis or renderer
 ```
 
-## Development
+## Setup
 
-Run all local checks:
+Requires Python 3.13, [uv](https://docs.astral.sh/uv/), and
+[just](https://just.systems/).
 
 ```bash
+just sync
 just check
+just preview
 ```
 
-Fix lint errors and format the code:
+Generated artifacts are written to `experiments/` and `outputs/` and are not
+committed by default.
 
-```bash
-just fmt
-```
+## Commands
 
-Install and run pre-commit hooks:
+Run `just` to list the current public recipes.
 
-```bash
-just hooks-install
-just hooks
-```
+### Environment and quality
 
-I use Ruff, mypy, pytest, pre-commit, and CI on Linux and Windows here.
-P.S. The current contribution policy is described in
-[CONTRIBUTING.md](CONTRIBUTING.md).
+| Command | Purpose |
+|---|---|
+| `just sync` | Install the locked runtime and development environment. |
+| `just check` | Run Ruff, formatting validation, mypy, and the complete test suite. |
+| `just fmt` | Apply safe Ruff fixes and format Python files. |
+| `just test [pytest args]` | Run all tests or pass a path/options to pytest. |
+| `just build` | Build the Python package. |
+| `just hooks-install` | Install the repository pre-commit hook. |
+| `just hooks` | Run all pre-commit checks immediately. |
+
+### Active research
+
+| Command | Purpose |
+|---|---|
+| `just causal-run` | Run the 30-branch equilibrated stimulus/control pilot and rebuild all evidence. |
+| `just causal-analyze` | Recalculate checkpoint-aware statistics from existing causal embeddings without simulations. |
+
+### Field and Sound Protocol
+
+| Command | Purpose |
+|---|---|
+| `just preview` | Run a short field simulation and write `outputs/field-preview.png`. |
+| `just protocol-record [config] [steps] [output]` | Record a strict Sound Protocol JSONL stream; defaults to `field_only.yaml`, 128 steps. |
+| `just protocol-replay [input] [output]` | Replay JSONL without the field and render the diagnostic WAV. |
+
+### Audio interaction
+
+| Command | Purpose |
+|---|---|
+| `just audio-devices` | List microphone and output devices. |
+| `just live` | Start turn-based microphone interaction and record the session. |
+| `just conversation <input.wav> [output.wav]` | Run one recorded WAV through the field and save its response. |
+
+### State and performance
+
+| Command | Purpose |
+|---|---|
+| `just checkpoint [steps] [output]` | Save a long-running field state; defaults to 10,000 steps. |
+| `just resume <checkpoint> <steps> <output>` | Continue a saved simulation into a new checkpoint. |
+| `just benchmark` | Benchmark field stepping at sizes 64, 128, and 200. |
 
 ## License
 
