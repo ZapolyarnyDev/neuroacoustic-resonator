@@ -25,6 +25,8 @@ just causal-analyze
 - `experiments/logs/controlled_equilibration_baseline.json` — общая сводка;
 - `experiments/controlled_equilibration/baseline/causal_evidence.json` — accuracy,
   результаты по roots/checkpoints, bootstrap и permutation;
+- `experiments/controlled_equilibration/baseline/regional_causal_report.json` —
+  сравнение input, assoc, output и объединённого пространственно-временного отклика;
 - `experiments/controlled_equilibration/baseline/causal_diagnostics.png` — variance
   decomposition и distance distributions.
 

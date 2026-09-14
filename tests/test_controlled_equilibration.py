@@ -119,6 +119,10 @@ def test_leave_one_seed_root_out_classification_uses_all_roots(tmp_path) -> None
             f"output_embeddings: {embeddings.as_posix()}",
         )
         .replace(
+            "output_pairs: experiments/controlled_equilibration/baseline/pairs.json",
+            f"output_pairs: {(tmp_path / 'missing-pairs.json').as_posix()}",
+        )
+        .replace(
             "output_summary: experiments/logs/controlled_equilibration_baseline.json",
             f"output_summary: {summary_path.as_posix()}",
         )

@@ -59,7 +59,7 @@ just preview
 | Команда | Назначение |
 |---|---|
 | `just causal-run` | Запустить 30 equilibrated stimulus/control ветвей и пересобрать evidence. |
-| `just causal-analyze` | Пересчитать checkpoint-aware статистику по готовым embeddings без симуляций. |
+| `just causal-analyze` | Пересчитать checkpoint-aware output и региональную causal-статистику без симуляций. |
 
 ### Поле и Sound Protocol
 

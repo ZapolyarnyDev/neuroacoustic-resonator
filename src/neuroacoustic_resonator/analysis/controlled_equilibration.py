@@ -40,6 +40,9 @@ from neuroacoustic_resonator.analysis.protocol_embeddings import (
     temporal_statistics,
     write_embedding_rows,
 )
+from neuroacoustic_resonator.analysis.regional_causal_representations import (
+    analyze_regional_causal_representations,
+)
 from neuroacoustic_resonator.configuration import SimulationConfig
 from neuroacoustic_resonator.core.equilibration import (
     FieldEquilibrationConfig,
@@ -236,6 +239,13 @@ def run_controlled_equilibration_corpus(
         bootstrap_samples=bootstrap_samples,
         bootstrap_seed=20_260_819,
     )
+    regional_report = analyze_regional_causal_representations(
+        pairs,
+        config.output_dir,
+        config.output_embeddings,
+        permutation_samples=permutation_samples,
+        bootstrap_samples=bootstrap_samples,
+    )
     absolute_variance = absolute_diagnostics["variance"]["aggregate"]
     causal_variance = causal_diagnostics["variance"]["aggregate"]
     causal_distances = causal_diagnostics["distances"]
@@ -267,11 +277,15 @@ def run_controlled_equilibration_corpus(
             "cliffs_delta": causal_distances["cross_seed_cliffs_delta"],
         },
         "paired_stimulus_permutation": causal_diagnostics["paired_permutation"],
+        "regional_representations": regional_report["representations"],
         "outputs": {
             "manifest": str(config.output_manifest),
             "pairs": str(config.output_pairs),
             "embeddings": str(config.output_embeddings),
             "causal_evidence": str(config.output_dir / "causal_evidence.json"),
+            "regional_causal_report": str(
+                config.output_dir / "regional_causal_report.json"
+            ),
         },
     }
     write_json(config.output_summary, report)
@@ -292,14 +306,41 @@ def analyze_controlled_equilibration(
         permutation_samples=permutation_samples,
         bootstrap_samples=bootstrap_samples,
     )
+    regional_report: dict[str, Any] | None = None
+    if config.output_pairs.exists():
+        pairs_value = json.loads(config.output_pairs.read_text(encoding="utf-8"))
+        if not isinstance(pairs_value, list) or not pairs_value:
+            msg = "controlled equilibration pairs must be a non-empty list"
+            raise ValueError(msg)
+        pairs: list[dict[str, Any]] = []
+        for pair in pairs_value:
+            if not isinstance(pair, dict):
+                msg = "controlled equilibration pair must be an object"
+                raise ValueError(msg)
+            validate_pair_entry(pair)
+            pairs.append(pair)
+        regional_report = analyze_regional_causal_representations(
+            pairs,
+            config.output_dir,
+            config.output_embeddings,
+            permutation_samples=permutation_samples,
+            bootstrap_samples=bootstrap_samples,
+        )
+        evidence["regional_representations"] = regional_report["representations"]
     if config.output_summary.exists():
         summary = read_json_object(config.output_summary)
         summary["cross_seed_classification"] = evidence["classification"]
+        if regional_report is not None:
+            summary["regional_representations"] = regional_report["representations"]
         outputs = summary.setdefault("outputs", {})
         if not isinstance(outputs, dict):
             msg = "controlled equilibration summary outputs must be an object"
             raise ValueError(msg)
         outputs["causal_evidence"] = str(evidence_path)
+        if regional_report is not None:
+            outputs["regional_causal_report"] = str(
+                config.output_dir / "regional_causal_report.json"
+            )
         write_json(config.output_summary, summary)
     return evidence
 

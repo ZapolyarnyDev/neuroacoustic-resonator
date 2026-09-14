@@ -12,9 +12,16 @@ from neuroacoustic_resonator.analysis.controlled_equilibration import (
 )
 from neuroacoustic_resonator.analysis.protocol_embeddings import (
     FEATURE_COLUMNS,
+    embedding_feature_columns,
     extract_protocol_embeddings,
     read_embedding_rows,
     represent_signal,
+)
+from neuroacoustic_resonator.analysis.regional_causal_representations import (
+    causal_temporal_statistics,
+    extract_regional_causal_embeddings,
+    regional_causal_embedding,
+    regional_feature_columns,
 )
 from neuroacoustic_resonator.protocol import (
     FieldSnapshot,
@@ -200,3 +207,57 @@ def test_causal_response_embedding_subtracts_control_trajectory() -> None:
     assert embedding["output_phase_coherence_mean"] == pytest.approx(0.3)
     assert embedding["output_phase_coherence_delta"] == pytest.approx(0.4)
     assert embedding["active_fraction"] == 0.0
+
+
+def test_regional_causal_embedding_preserves_space_and_time() -> None:
+    stimulus = [frame(index, value) for index, value in enumerate((0.3, 0.5, 0.8))]
+    control = [frame(index, value) for index, value in enumerate((0.2, 0.2, 0.3))]
+
+    embedding = regional_causal_embedding(
+        stimulus,
+        control,
+        ("input", "assoc", "output"),
+    )
+
+    assert tuple(embedding) == regional_feature_columns(("input", "assoc", "output"))
+    assert len(embedding) == 300
+    assert embedding["input_phase_coherence_mean"] == pytest.approx(0.3)
+    assert embedding["assoc_phase_coherence_peak_absolute"] == pytest.approx(0.5)
+    assert embedding["output_phase_coherence_peak_time_fraction"] == 1.0
+
+
+def test_causal_temporal_statistics_measure_onset_peak_and_retention() -> None:
+    statistics = causal_temporal_statistics(
+        np.asarray([0.0, 0.2, 1.0, 0.1], dtype=np.float64)
+    )
+
+    assert statistics["onset_time_fraction"] == pytest.approx(1.0 / 3.0)
+    assert statistics["peak_time_fraction"] == pytest.approx(2.0 / 3.0)
+    assert statistics["peak_absolute"] == 1.0
+    assert statistics["retention"] == pytest.approx(0.1)
+
+
+def test_extract_regional_causal_embeddings_writes_independent_schemas(
+    tmp_path: Path,
+) -> None:
+    stimulus = write_trial(tmp_path, "tone", "tone", 11, "train", 0.3)
+    control = write_trial(tmp_path, "silence", "silence", 11, "train", 0.1)
+    pair = {
+        "pair_id": "tone",
+        "stimulus_label": "tone",
+        "source_type": "tone",
+        "seed_root": 11,
+        "field_seed": 110,
+        "repeat_index": 1,
+        "split": "train",
+        "stimulus_metadata_json": stimulus["metadata_json"],
+        "control_metadata_json": control["metadata_json"],
+    }
+
+    paths = extract_regional_causal_embeddings([pair], tmp_path / "regional")
+    input_rows = read_embedding_rows(paths["input"])
+    combined_rows = read_embedding_rows(paths["combined"])
+
+    assert len(embedding_feature_columns(input_rows)) == 100
+    assert len(embedding_feature_columns(combined_rows)) == 300
+    assert float(input_rows[0]["input_phase_coherence_mean"]) == pytest.approx(0.2)

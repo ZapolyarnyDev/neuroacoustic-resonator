@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from itertools import pairwise
 from pathlib import Path
 from typing import Any, Literal
@@ -297,13 +297,37 @@ def temporal_statistics(values: np.ndarray) -> dict[str, float]:
     }
 
 
-def write_embedding_rows(path: str | Path, rows: Sequence[EmbeddingRow]) -> Path:
+def embedding_feature_columns(rows: Sequence[Mapping[str, object]]) -> tuple[str, ...]:
     if not rows:
         msg = "embedding rows must not be empty"
         raise ValueError(msg)
+    columns = tuple(rows[0])
+    identity_count = len(IDENTITY_COLUMNS)
+    if columns[:identity_count] != IDENTITY_COLUMNS or len(columns) == identity_count:
+        msg = "embedding table must start with identity columns and contain features"
+        raise ValueError(msg)
+    if any(tuple(row) != columns for row in rows):
+        msg = "embedding rows must use one ordered schema"
+        raise ValueError(msg)
+    return columns[identity_count:]
+
+
+def write_embedding_rows(
+    path: str | Path,
+    rows: Sequence[EmbeddingRow],
+    *,
+    feature_columns: Sequence[str] = FEATURE_COLUMNS,
+) -> Path:
+    if not rows:
+        msg = "embedding rows must not be empty"
+        raise ValueError(msg)
+    expected = (*IDENTITY_COLUMNS, *feature_columns)
+    if any(tuple(row) != expected for row in rows):
+        msg = "embedding rows do not match the requested feature schema"
+        raise ValueError(msg)
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [*IDENTITY_COLUMNS, *FEATURE_COLUMNS]
+    fieldnames = list(expected)
     with output.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=fieldnames)
         writer.writeheader()
@@ -311,14 +335,18 @@ def write_embedding_rows(path: str | Path, rows: Sequence[EmbeddingRow]) -> Path
     return output
 
 
-def read_embedding_rows(path: str | Path) -> list[dict[str, str]]:
+def read_embedding_rows(
+    path: str | Path,
+    *,
+    feature_columns: Sequence[str] | None = None,
+) -> list[dict[str, str]]:
     with Path(path).open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
     if not rows:
         msg = "embedding table must not be empty"
         raise ValueError(msg)
-    expected = [*IDENTITY_COLUMNS, *FEATURE_COLUMNS]
-    if list(rows[0]) != expected:
+    detected = embedding_feature_columns(rows)
+    if feature_columns is not None and detected != tuple(feature_columns):
         msg = "embedding table schema does not match the protocol feature schema"
         raise ValueError(msg)
     return rows

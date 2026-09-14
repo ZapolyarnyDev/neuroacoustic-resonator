@@ -60,7 +60,7 @@ Run `just` to list the current public recipes.
 | Command | Purpose |
 |---|---|
 | `just causal-run` | Run the 30-branch equilibrated stimulus/control pilot and rebuild all evidence. |
-| `just causal-analyze` | Recalculate checkpoint-aware statistics from existing causal embeddings without simulations. |
+| `just causal-analyze` | Recalculate checkpoint-aware output and regional causal statistics without simulations. |
 
 ### Field and Sound Protocol
 

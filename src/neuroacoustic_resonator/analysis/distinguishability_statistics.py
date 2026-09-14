@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from neuroacoustic_resonator.analysis.protocol_embeddings import (
-    FEATURE_COLUMNS,
+    embedding_feature_columns,
     read_embedding_rows,
 )
 
@@ -77,7 +77,8 @@ def fit_train_standardizer(rows: Sequence[StringRow]) -> TrainStandardizer:
     if not train_rows:
         msg = "embedding table must contain train rows"
         raise ValueError(msg)
-    matrix = feature_matrix(train_rows, FEATURE_COLUMNS)
+    feature_columns = embedding_feature_columns(rows)
+    matrix = feature_matrix(train_rows, feature_columns)
     mean = np.mean(matrix, axis=0)
     scale = np.std(matrix, axis=0)
     active = scale > 1e-12
@@ -86,12 +87,12 @@ def fit_train_standardizer(rows: Sequence[StringRow]) -> TrainStandardizer:
         raise ValueError(msg)
     feature_names = tuple(
         name
-        for name, is_active in zip(FEATURE_COLUMNS, active, strict=True)
+        for name, is_active in zip(feature_columns, active, strict=True)
         if is_active
     )
     dropped = tuple(
         name
-        for name, is_active in zip(FEATURE_COLUMNS, active, strict=True)
+        for name, is_active in zip(feature_columns, active, strict=True)
         if not is_active
     )
     return TrainStandardizer(
