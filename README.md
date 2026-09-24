@@ -61,6 +61,8 @@ Run `just` to list the current public recipes.
 |---|---|
 | `just causal-run` | Run the 30-branch equilibrated stimulus/control pilot and rebuild all evidence. |
 | `just causal-analyze` | Recalculate checkpoint-aware output and regional causal statistics without simulations. |
+| `just causal-ablations` | Run the four development-seed equilibration variants and compare output responses. |
+| `just causal-ablations-report` | Rebuild the ablation comparison from completed variants. |
 
 ### Field and Sound Protocol
 

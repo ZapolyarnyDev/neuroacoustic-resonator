@@ -1,0 +1,20 @@
+corpus_config: configs/controlled_equilibration.yaml
+output_dir: experiments/controlled_equilibration/ablations
+seed_roots:
+  - 101
+  - 211
+  - 307
+  - 401
+  - 601
+splits:
+  train:
+    - 101
+    - 211
+    - 307
+  validation:
+    - 401
+  test:
+    - 601
+repeats: 2
+permutation_samples: 2000
+bootstrap_samples: 1000

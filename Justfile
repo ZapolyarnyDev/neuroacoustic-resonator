@@ -36,6 +36,12 @@ causal-run:
 causal-analyze:
     uv run python scripts/run_controlled_equilibration.py --analysis-only
 
+causal-ablations:
+    uv run python scripts/run_equilibration_ablations.py
+
+causal-ablations-report:
+    uv run python scripts/run_equilibration_ablations.py --report-only
+
 # Field and Sound Protocol
 preview:
     uv run python main.py
