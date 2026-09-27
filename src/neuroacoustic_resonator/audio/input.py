@@ -54,6 +54,94 @@ class AudioInputFeatures:
         ]
 
 
+@dataclass(frozen=True)
+class ChannelAudioFeatures:
+    sample_rate: int
+    hop_size: int
+    sample_count: int
+    band_energy: np.ndarray
+
+    @property
+    def channel_count(self) -> int:
+        return int(self.band_energy.shape[1])
+
+    @property
+    def frame_count(self) -> int:
+        return int(self.band_energy.shape[0])
+
+    @property
+    def duration_seconds(self) -> float:
+        return self.sample_count / self.sample_rate
+
+    def energy_at_time(self, time_seconds: float) -> np.ndarray:
+        if time_seconds < 0.0:
+            msg = "time_seconds must be non-negative"
+            raise ValueError(msg)
+        if time_seconds >= self.duration_seconds:
+            return np.zeros(self.band_energy.shape[1:], dtype=np.float64)
+        index = min(
+            int(time_seconds * self.sample_rate / self.hop_size), self.frame_count - 1
+        )
+        return self.band_energy[index].copy()
+
+
+def extract_channel_audio_features(
+    wav_path: str | Path,
+    *,
+    frame_size: int = 1024,
+    hop_size: int = 512,
+    bands: int = 8,
+) -> ChannelAudioFeatures:
+    sample_rate, samples = wavfile.read(wav_path)
+    return extract_channel_audio_array_features(
+        samples,
+        sample_rate=int(sample_rate),
+        frame_size=frame_size,
+        hop_size=hop_size,
+        bands=bands,
+    )
+
+
+def extract_channel_audio_array_features(
+    samples: np.ndarray,
+    *,
+    sample_rate: int,
+    frame_size: int = 1024,
+    hop_size: int = 512,
+    bands: int = 8,
+) -> ChannelAudioFeatures:
+    if sample_rate < 1 or frame_size < 2 or hop_size < 1 or bands < 1:
+        msg = "sample_rate, hop_size, bands must be positive; frame_size must exceed 1"
+        raise ValueError(msg)
+    audio = _to_channels_float(samples)
+    frames = np.stack(
+        [
+            _frame_audio(audio[:, channel], frame_size=frame_size, hop_size=hop_size)
+            for channel in range(audio.shape[1])
+        ],
+        axis=1,
+    )
+    spectrum = np.abs(np.fft.rfft(frames, axis=2))
+    frequencies = np.fft.rfftfreq(frame_size, d=1.0 / sample_rate)
+    edges = np.linspace(0.0, sample_rate / 2.0, bands + 1)
+    energies = np.zeros((*spectrum.shape[:2], bands), dtype=np.float64)
+    for band in range(bands):
+        selected = (frequencies >= edges[band]) & (
+            frequencies < edges[band + 1]
+            if band < bands - 1
+            else frequencies <= edges[band + 1]
+        )
+        energies[:, :, band] = (
+            np.sqrt(np.sum(spectrum[:, :, selected] ** 2, axis=2)) / frame_size
+        )
+    return ChannelAudioFeatures(
+        sample_rate=sample_rate,
+        hop_size=hop_size,
+        sample_count=audio.shape[0],
+        band_energy=energies,
+    )
+
+
 class WavInputDrive:
     def __init__(
         self,
@@ -188,11 +276,15 @@ def write_audio_input_features_csv(
 
 
 def _to_mono_float(samples: np.ndarray) -> np.ndarray:
+    return np.mean(_to_channels_float(samples), axis=1)
+
+
+def _to_channels_float(samples: np.ndarray) -> np.ndarray:
     audio = np.asarray(samples)
-    if audio.ndim == 2:
-        audio = np.mean(audio, axis=1)
-    if audio.ndim != 1:
-        msg = "WAV input must be mono or stereo"
+    if audio.ndim == 1:
+        audio = audio[:, np.newaxis]
+    if audio.ndim != 2 or audio.shape[1] < 1:
+        msg = "WAV input must have at least one channel"
         raise ValueError(msg)
 
     if np.issubdtype(audio.dtype, np.integer):

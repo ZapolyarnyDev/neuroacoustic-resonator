@@ -9,6 +9,7 @@ from neuroacoustic_resonator.audio.input import (
     AudioInputFeatures,
     WavInputDrive,
     extract_audio_input_features,
+    extract_channel_audio_array_features,
     main,
     write_audio_input_features_csv,
 )
@@ -35,6 +36,30 @@ def test_extract_audio_input_features_from_wav(tmp_path) -> None:
     assert np.max(features.drive) <= 0.5
     assert np.max(features.rms) > 0.0
     assert np.max(features.spectral_centroid) > 0.0
+
+
+def test_channel_features_preserve_relative_stereo_level_and_duration() -> None:
+    rate = 8_000
+    time = np.arange(800) / rate
+    tone = np.sin(2.0 * np.pi * 440.0 * time)
+    stereo = np.column_stack((tone, tone * 0.25)).astype(np.float32)
+    features = extract_channel_audio_array_features(
+        stereo, sample_rate=rate, frame_size=256, hop_size=128, bands=8
+    )
+
+    assert features.channel_count == 2
+    assert features.duration_seconds == pytest.approx(0.1)
+    left = float(np.linalg.norm(features.band_energy[0, 0]))
+    right = float(np.linalg.norm(features.band_energy[0, 1]))
+    assert right / left == pytest.approx(0.25)
+    assert np.allclose(features.energy_at_time(0.1), 0.0)
+
+
+def test_integer_stereo_mono_reduction_uses_dtype_scale() -> None:
+    from neuroacoustic_resonator.audio.input import _to_mono_float
+
+    samples = np.full((16, 2), 8_192, dtype=np.int16)
+    assert np.allclose(_to_mono_float(samples), 8_192 / 32_768)
 
 
 def test_wav_input_drive_applies_features_to_input_region(tmp_path) -> None:
