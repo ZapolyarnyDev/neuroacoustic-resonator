@@ -217,6 +217,12 @@ class OscillatorField:
 
         self._phase[mask] = np.mod(self._phase[mask] + amount, TAU)
 
+    def apply_phase_pattern(self, amounts: FloatArray) -> None:
+        if amounts.shape != self._phase.shape or not np.all(np.isfinite(amounts)):
+            msg = "phase pattern must be finite and match field shape"
+            raise ValueError(msg)
+        self._phase = np.mod(self._phase + amounts, TAU)
+
     def damp_initial_phases(self, strength: float) -> None:
         if not 0.0 <= strength <= 1.0:
             msg = "phase damping strength must be between 0 and 1"
