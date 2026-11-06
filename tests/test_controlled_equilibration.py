@@ -160,6 +160,10 @@ def test_leave_one_seed_root_out_classification_uses_all_roots(tmp_path) -> None
     assert updated_summary["outputs"]["causal_evidence"].endswith(
         "causal_evidence.json"
     )
+    assert report["provenance"]["command"] == "analyze"
+    assert updated_summary["provenance"] == report["provenance"]
+    written_evidence = json.loads((tmp_path / "causal_evidence.json").read_text())
+    assert written_evidence["provenance"] == report["provenance"]
 
 
 def test_paired_evidence_rejects_duplicate_checkpoint_label(tmp_path) -> None:

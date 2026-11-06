@@ -62,6 +62,7 @@ just preview
 | `just causal-analyze` | Пересчитать checkpoint-aware output и региональную causal-статистику без симуляций. |
 | `just causal-ablations` | Запустить четыре варианта equilibration на development seeds и сравнить output. |
 | `just causal-ablations-report` | Пересобрать сравнение по готовым вариантам без симуляций. |
+| `just report` | Записать ключевой отчёт текущего коммита в `experiments/reports/`. |
 
 ### Поле и Sound Protocol
 
