@@ -147,3 +147,57 @@ def test_write_research_report_requires_provenance(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="provenance"):
         write_research_report(config_path, tmp_path / "reports")
+
+
+def test_render_report_adds_baselines_table() -> None:
+    summary = summary_fixture()
+    summary["baselines"] = {
+        "field": {
+            "balanced_accuracy": 0.5416,
+            "balanced_accuracy_ci": [0.274, 0.601],
+            "p_value": 0.0002,
+        },
+        "uncoupled_field": {
+            "balanced_accuracy": 0.5416,
+            "balanced_accuracy_ci": [0.25, 0.625],
+            "p_value": 0.0017,
+        },
+    }
+
+    report = render_report(summary)
+
+    assert "| Базовая линия | Accuracy | 95% CI | p |" in report
+    assert "| поле | 0.542 | [0.274, 0.601] | 0.0002 |" in report
+    assert "| поле без связей | 0.542 | [0.250, 0.625] | 0.002 |" in report
+    assert "вход: drive" not in report
+
+
+def test_render_report_omits_baselines_without_results() -> None:
+    assert "Базовая линия" not in render_report(summary_fixture())
+
+
+def test_render_report_states_missing_signal() -> None:
+    summary = summary_fixture()
+    for key in (
+        "cross_seed_classification",
+        "causal_difference",
+        "regional_representations",
+    ):
+        summary.pop(key)
+    summary["no_signal"] = {"reason": "identical", "chance_level": 0.25}
+    summary["baselines"] = {
+        "field": {"no_signal": True},
+        "drive": {
+            "balanced_accuracy": 1.0,
+            "balanced_accuracy_ci": [1.0, 1.0],
+            "p_value": 0.0001,
+        },
+    }
+
+    report = render_report(summary)
+
+    assert "Сигнала нет" in report
+    assert "Accuracy = chance (0.25)" in report
+    assert "| поле | сигнала нет | — | — |" in report
+    assert "| вход: drive | 1.000 | [1.000, 1.000] | 0.0001 |" in report
+    assert "Balanced accuracy" not in report

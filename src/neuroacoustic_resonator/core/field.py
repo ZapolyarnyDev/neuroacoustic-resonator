@@ -276,6 +276,18 @@ class OscillatorField:
             self.config.max_frequency,
         )
 
+    def set_region_coupling(self, mask: NDArray[np.bool_], value: float) -> None:
+        if mask.shape != self._phase.shape:
+            msg = f"mask shape must be {self._phase.shape}"
+            raise ValueError(msg)
+        if mask.dtype != np.bool_:
+            msg = "mask must be boolean"
+            raise ValueError(msg)
+        if not self.config.min_coupling <= value <= self.config.max_coupling:
+            msg = "coupling must be within the configured bounds"
+            raise ValueError(msg)
+        self._coupling[mask] = value
+
     def set_memory_drive_gain(self, mask: NDArray[np.bool_], gain: float) -> None:
         if mask.shape != self._phase.shape:
             msg = f"mask shape must be {self._phase.shape}"

@@ -64,6 +64,7 @@ Run `just` to list the current public recipes.
 | `just causal-ablations` | Run the four development-seed equilibration variants and compare output responses. |
 | `just causal-ablations-report` | Rebuild the ablation comparison from completed variants. |
 | `just report` | Write the key report for the current commit to `experiments/reports/`. |
+| `just causal-parts` | Measure the response with each field component disabled and with the output region cut off. |
 
 ### Field and Sound Protocol
 

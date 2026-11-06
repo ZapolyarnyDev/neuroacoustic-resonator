@@ -45,6 +45,9 @@ causal-ablations-report:
 report:
     uv run python scripts/write_report.py
 
+causal-parts:
+    uv run python scripts/run_field_parts.py
+
 # Field and Sound Protocol
 preview:
     uv run python main.py

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Self
 
@@ -16,6 +16,9 @@ from neuroacoustic_resonator.analysis.distinguishability_corpus import (
 )
 from neuroacoustic_resonator.analysis.distinguishability_diagnostics import (
     diagnose_protocol_embeddings,
+)
+from neuroacoustic_resonator.analysis.distinguishability_statistics import (
+    fit_train_standardizer,
 )
 from neuroacoustic_resonator.analysis.paired_causal_evidence import (
     evaluate_paired_causal_evidence,
@@ -35,6 +38,7 @@ from neuroacoustic_resonator.analysis.protocol_embeddings import (
     FEATURE_COLUMNS,
     SIGNAL_GETTERS,
     EmbeddingRow,
+    read_embedding_rows,
     response_embedding,
     select_response_frames,
     temporal_statistics,
@@ -49,6 +53,7 @@ from neuroacoustic_resonator.core.equilibration import (
     FieldEquilibrationConfig,
     equilibrate_simulation,
 )
+from neuroacoustic_resonator.core.simulation import Simulation
 from neuroacoustic_resonator.io.persistence import (
     checkpoint_fingerprint,
     load_checkpoint_metadata,
@@ -151,6 +156,7 @@ class ControlledEquilibrationCorpusConfig(BaseModel):
             response_seconds=self.response_seconds,
             warmup_steps=0,
             gain=self.gain,
+            renderer_plasticity=False,
         )
 
 
@@ -161,46 +167,24 @@ def run_controlled_equilibration_corpus(
     bootstrap_samples: int = 5_000,
 ) -> dict[str, Any]:
     config = ControlledEquilibrationCorpusConfig.from_file(config_path)
-    config.output_dir.mkdir(parents=True, exist_ok=True)
-    calibration = config.calibration_config()
-    stimuli = materialize_synthetic_stimuli(calibration)
-    splits = {item.seed_root: item.split for item in config.splits.assignments()}
-    checkpoints = create_equilibrated_checkpoints(config, splits)
-    manifest: list[dict[str, Any]] = []
-    by_checkpoint: dict[str, dict[str, dict[str, Any]]] = {}
-    for stimulus in stimuli:
-        for seed_root in config.seed_roots:
-            for repeat_index in range(1, config.repeats + 1):
-                checkpoint = checkpoints[(seed_root, repeat_index)]
-                trial = CalibrationTrial(
-                    trial_id=(
-                        f"{safe_label(stimulus.label)}-s{seed_root}-r{repeat_index:02d}"
-                    ),
-                    stimulus=stimulus,
-                    seed_root=seed_root,
-                    field_seed=derive_trial_seed(seed_root, repeat_index),
-                    repeat_index=repeat_index,
-                    split=splits[seed_root],
-                )
-                run_calibration_trial(
-                    calibration,
-                    trial,
-                    initial_checkpoint=checkpoint["path"],
-                    expected_checkpoint_fingerprint=checkpoint["fingerprint"],
-                )
-                entry = {
-                    **calibration_manifest_entry(trial, calibration),
-                    "checkpoint": str(checkpoint["path"]),
-                    "checkpoint_fingerprint": checkpoint["fingerprint"],
-                }
-                manifest.append(entry)
-                by_checkpoint.setdefault(checkpoint["fingerprint"], {})[
-                    stimulus.label
-                ] = entry
-    write_calibration_manifest(config.output_manifest, manifest)
-    pairs = build_pair_manifest(config, by_checkpoint)
-    write_json(config.output_pairs, pairs)
-    extract_causal_embeddings(pairs, config.output_embeddings)
+    checkpoints, manifest, pairs = simulate_paired_corpus(config)
+    if not embeddings_have_signal(config.output_embeddings):
+        return record_no_signal(
+            config,
+            config_path,
+            command="run",
+            arguments={
+                "permutation_samples": permutation_samples,
+                "bootstrap_samples": bootstrap_samples,
+            },
+            summary={
+                "config": str(config_path),
+                "branch_trials": len(manifest),
+                "causal_pairs": len(pairs),
+                "checkpoints": len(checkpoints),
+                "fingerprints_verified": True,
+            },
+        )
     active_manifest = config.output_dir / "active_branches_manifest.json"
     write_json(
         active_manifest,
@@ -305,6 +289,62 @@ def run_controlled_equilibration_corpus(
     return report
 
 
+def simulate_paired_corpus(
+    config: ControlledEquilibrationCorpusConfig,
+    *,
+    prepare_branch_point: Callable[[Simulation], None] | None = None,
+) -> tuple[
+    dict[tuple[int, int], dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+    calibration = config.calibration_config()
+    stimuli = materialize_synthetic_stimuli(calibration)
+    splits = {item.seed_root: item.split for item in config.splits.assignments()}
+    checkpoints = create_equilibrated_checkpoints(
+        config,
+        splits,
+        prepare_branch_point=prepare_branch_point,
+    )
+    manifest: list[dict[str, Any]] = []
+    by_checkpoint: dict[str, dict[str, dict[str, Any]]] = {}
+    for stimulus in stimuli:
+        for seed_root in config.seed_roots:
+            for repeat_index in range(1, config.repeats + 1):
+                checkpoint = checkpoints[(seed_root, repeat_index)]
+                trial = CalibrationTrial(
+                    trial_id=(
+                        f"{safe_label(stimulus.label)}-s{seed_root}-r{repeat_index:02d}"
+                    ),
+                    stimulus=stimulus,
+                    seed_root=seed_root,
+                    field_seed=derive_trial_seed(seed_root, repeat_index),
+                    repeat_index=repeat_index,
+                    split=splits[seed_root],
+                )
+                run_calibration_trial(
+                    calibration,
+                    trial,
+                    initial_checkpoint=checkpoint["path"],
+                    expected_checkpoint_fingerprint=checkpoint["fingerprint"],
+                )
+                entry = {
+                    **calibration_manifest_entry(trial, calibration),
+                    "checkpoint": str(checkpoint["path"]),
+                    "checkpoint_fingerprint": checkpoint["fingerprint"],
+                }
+                manifest.append(entry)
+                by_checkpoint.setdefault(checkpoint["fingerprint"], {})[
+                    stimulus.label
+                ] = entry
+    write_calibration_manifest(config.output_manifest, manifest)
+    pairs = build_pair_manifest(config, by_checkpoint)
+    write_json(config.output_pairs, pairs)
+    extract_causal_embeddings(pairs, config.output_embeddings)
+    return checkpoints, manifest, pairs
+
+
 def analyze_controlled_equilibration(
     config_path: str | Path,
     *,
@@ -312,6 +352,22 @@ def analyze_controlled_equilibration(
     bootstrap_samples: int = 5_000,
 ) -> dict[str, Any]:
     config = ControlledEquilibrationCorpusConfig.from_file(config_path)
+    if not embeddings_have_signal(config.output_embeddings):
+        existing = (
+            read_json_object(config.output_summary)
+            if config.output_summary.exists()
+            else {"config": str(config_path)}
+        )
+        return record_no_signal(
+            config,
+            config_path,
+            command="analyze",
+            arguments={
+                "permutation_samples": permutation_samples,
+                "bootstrap_samples": bootstrap_samples,
+            },
+            summary=existing,
+        )
     evidence_path = config.output_dir / "causal_evidence.json"
     evidence = evaluate_paired_causal_evidence(
         config.output_embeddings,
@@ -370,6 +426,52 @@ def analyze_controlled_equilibration(
     return evidence
 
 
+def embeddings_have_signal(embeddings: Path) -> bool:
+    rows = read_embedding_rows(embeddings)
+    try:
+        fit_train_standardizer([{**row, "split": "train"} for row in rows])
+    except ValueError as error:
+        if "no varying" in str(error):
+            return False
+        raise
+    return True
+
+
+def record_no_signal(
+    config: ControlledEquilibrationCorpusConfig,
+    config_path: str | Path,
+    *,
+    command: str,
+    arguments: Mapping[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    labels = sorted(
+        {row["stimulus_label"] for row in read_embedding_rows(config.output_embeddings)}
+    )
+    for key in (
+        "absolute",
+        "causal_difference",
+        "field_seed_variance_reduction_fraction",
+        "stimulus_to_seed_ratio_gain",
+        "cross_seed_classification",
+        "cross_seed_distance",
+        "paired_stimulus_permutation",
+        "regional_representations",
+    ):
+        summary.pop(key, None)
+    summary["no_signal"] = {
+        "reason": "stimulus and control responses are identical in every feature",
+        "chance_level": 1.0 / len(labels),
+    }
+    summary["provenance"] = collect_provenance(
+        command=command,
+        arguments=arguments,
+        configs=(Path(config_path), config.simulation_config),
+    )
+    write_json(config.output_summary, summary)
+    return summary
+
+
 def record_results(
     config: ControlledEquilibrationCorpusConfig,
     config_path: str | Path,
@@ -395,6 +497,8 @@ def record_results(
 def create_equilibrated_checkpoints(
     config: ControlledEquilibrationCorpusConfig,
     splits: Mapping[int, str],
+    *,
+    prepare_branch_point: Callable[[Simulation], None] | None = None,
 ) -> dict[tuple[int, int], dict[str, Any]]:
     base = SimulationConfig.from_file(config.simulation_config)
     checkpoint_dir = config.output_dir / "checkpoints"
@@ -412,6 +516,8 @@ def create_equilibrated_checkpoints(
                 simulation,
                 config.equilibration.to_runtime(),
             )
+            if prepare_branch_point is not None:
+                prepare_branch_point(simulation)
             path = checkpoint_dir / f"s{seed_root}-r{repeat_index:02d}.npz"
             save_simulation_checkpoint(
                 path,
@@ -633,7 +739,14 @@ def main(argv: list[str] | None = None) -> int:
             bootstrap_samples=args.bootstrap_samples,
         )
     else:
+        from neuroacoustic_resonator.analysis.baselines import run_baselines
+
         report = run_controlled_equilibration_corpus(
+            args.config,
+            permutation_samples=args.permutation_samples,
+            bootstrap_samples=args.bootstrap_samples,
+        )
+        report["baselines"] = run_baselines(
             args.config,
             permutation_samples=args.permutation_samples,
             bootstrap_samples=args.bootstrap_samples,
