@@ -28,15 +28,14 @@ experiments/*
 !experiments/logs/
 !experiments/states/
 !experiments/videos/
+!experiments/reports/
+!experiments/articles/
 experiments/audio/*
 experiments/logs/*
 experiments/states/*
-experiments/videos/*
 !experiments/audio/.gitkeep
 !experiments/audio/README.md
 !experiments/logs/.gitkeep
 !experiments/logs/README.md
 !experiments/states/.gitkeep
 !experiments/states/README.md
-!experiments/videos/.gitkeep
-!experiments/videos/README.md
