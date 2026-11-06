@@ -19,6 +19,7 @@ from neuroacoustic_resonator.analysis.protocol_embeddings import (
 
 StringRow = dict[str, str]
 DistanceRow = dict[str, str | int | float]
+NOISE_FLOOR = 1e-9
 
 
 @dataclass(frozen=True)
@@ -81,7 +82,7 @@ def fit_train_standardizer(rows: Sequence[StringRow]) -> TrainStandardizer:
     matrix = feature_matrix(train_rows, feature_columns)
     mean = np.mean(matrix, axis=0)
     scale = np.std(matrix, axis=0)
-    active = scale > 1e-12
+    active = scale > NOISE_FLOOR * np.maximum(1.0, np.abs(mean))
     if not np.any(active):
         msg = "train embeddings have no varying protocol features"
         raise ValueError(msg)

@@ -20,6 +20,7 @@ from neuroacoustic_resonator.analysis.distinguishability_statistics import (
 from neuroacoustic_resonator.analysis.protocol_embeddings import read_embedding_rows
 
 StringRow = dict[str, str]
+PCA_VARIANCE = 0.9
 
 
 @dataclass(frozen=True)
@@ -160,6 +161,8 @@ def cross_seed_predictions(
 def prepare_cross_seed_folds(
     rows: list[StringRow],
     roots: list[int],
+    *,
+    pca_variance: float | None = PCA_VARIANCE,
 ) -> list[CrossSeedFold]:
     folds: list[CrossSeedFold] = []
     row_roots = np.asarray([int(row["seed_root"]) for row in rows])
@@ -168,17 +171,36 @@ def prepare_cross_seed_folds(
         test_indices = np.flatnonzero(row_roots == held_out)
         training_rows = [{**rows[index], "split": "train"} for index in train_indices]
         standardizer = fit_train_standardizer(training_rows)
+        train_matrix = standardizer.transform(training_rows)
+        test_matrix = standardizer.transform([rows[index] for index in test_indices])
+        if pca_variance is not None:
+            basis = principal_basis(train_matrix, pca_variance)
+            train_matrix = train_matrix @ basis
+            test_matrix = test_matrix @ basis
         folds.append(
             CrossSeedFold(
                 train_indices=train_indices,
                 test_indices=test_indices,
-                train_matrix=standardizer.transform(training_rows),
-                test_matrix=standardizer.transform(
-                    [rows[index] for index in test_indices]
-                ),
+                train_matrix=train_matrix,
+                test_matrix=test_matrix,
             )
         )
     return folds
+
+
+def principal_basis(matrix: np.ndarray, variance: float) -> np.ndarray:
+    if not 0.0 < variance <= 1.0:
+        msg = "pca variance must be in (0, 1]"
+        raise ValueError(msg)
+    centered = matrix - np.mean(matrix, axis=0)
+    _, singular, vectors = np.linalg.svd(centered, full_matrices=False)
+    energy = np.square(singular)
+    total = float(np.sum(energy))
+    if total <= 0.0:
+        return vectors[:1].T
+    explained = np.cumsum(energy) / total
+    components = int(np.searchsorted(explained, variance - 1e-12) + 1)
+    return vectors[:components].T
 
 
 def predict_cross_seed_folds(

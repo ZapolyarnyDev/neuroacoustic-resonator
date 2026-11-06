@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from neuroacoustic_resonator.analysis.controlled_equilibration import (
@@ -15,6 +16,7 @@ from neuroacoustic_resonator.analysis.paired_causal_evidence import (
 )
 from neuroacoustic_resonator.analysis.protocol_embeddings import (
     FEATURE_COLUMNS,
+    IDENTITY_COLUMNS,
     EmbeddingRow,
     write_embedding_rows,
 )
@@ -200,3 +202,45 @@ def test_paired_evidence_rejects_duplicate_checkpoint_label(tmp_path) -> None:
         validate_paired_causal_design(
             [{key: str(value) for key, value in row.items()} for row in rows]
         )
+
+
+def test_principal_basis_keeps_components_for_requested_variance() -> None:
+    from neuroacoustic_resonator.analysis.paired_causal_evidence import (
+        principal_basis,
+    )
+
+    rng = np.random.default_rng(3)
+    matrix = np.column_stack(
+        [
+            rng.normal(0.0, 10.0, 40),
+            rng.normal(0.0, 3.0, 40),
+            rng.normal(0.0, 0.01, 40),
+        ]
+    )
+
+    assert principal_basis(matrix, 0.5).shape == (3, 1)
+    assert principal_basis(matrix, 0.999).shape == (3, 2)
+    assert principal_basis(matrix, 1.0).shape == (3, 3)
+    with pytest.raises(ValueError, match="variance"):
+        principal_basis(matrix, 0.0)
+
+
+def test_standardizer_drops_features_at_numerical_noise_level() -> None:
+    from neuroacoustic_resonator.analysis.distinguishability_statistics import (
+        fit_train_standardizer,
+    )
+
+    rows = [
+        {
+            **{column: "0" for column in IDENTITY_COLUMNS},
+            "split": "train",
+            "signal": str(value),
+            "noise": str(1.0 + value * 1e-11),
+        }
+        for value in (0.0, 1.0, 2.0, 3.0)
+    ]
+
+    standardizer = fit_train_standardizer(rows)
+
+    assert standardizer.feature_names == ("signal",)
+    assert standardizer.dropped_features == ("noise",)
