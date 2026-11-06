@@ -168,13 +168,25 @@ def no_signal_result(chance: float) -> dict[str, Any]:
     }
 
 
+UNCOUPLED_FIELD = {"coupling_strength": 0.0, "coupling_homeostasis_rate": 0.0}
+
+
 def uncoupled_corpus_config(
     config: ControlledEquilibrationCorpusConfig,
     output_dir: Path,
 ) -> Path:
+    return variant_corpus_config(config, output_dir, field_updates=UNCOUPLED_FIELD)
+
+
+def variant_corpus_config(
+    config: ControlledEquilibrationCorpusConfig,
+    output_dir: Path,
+    *,
+    field_updates: Mapping[str, Any] | None = None,
+    equilibration: Mapping[str, Any] | None = None,
+) -> Path:
     field_config = yaml.safe_load(config.simulation_config.read_text(encoding="utf-8"))
-    field_config["field"]["coupling_strength"] = 0.0
-    field_config["field"]["coupling_homeostasis_rate"] = 0.0
+    field_config["field"].update(field_updates or {})
     output_dir.mkdir(parents=True, exist_ok=True)
     field_path = output_dir / "field.yaml"
     field_path.write_text(yaml.safe_dump(field_config, sort_keys=False), "utf-8")
@@ -187,6 +199,8 @@ def uncoupled_corpus_config(
         output_embeddings=(output_dir / "causal_embeddings.csv").as_posix(),
         output_summary=(output_dir / "summary.json").as_posix(),
     )
+    if equilibration is not None:
+        values["equilibration"] = dict(equilibration)
     corpus_path = output_dir / "corpus.yaml"
     corpus_path.write_text(yaml.safe_dump(values, sort_keys=False), "utf-8")
     return corpus_path

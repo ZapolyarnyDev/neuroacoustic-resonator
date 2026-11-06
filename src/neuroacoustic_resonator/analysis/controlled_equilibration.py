@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Self
 
@@ -53,6 +53,7 @@ from neuroacoustic_resonator.core.equilibration import (
     FieldEquilibrationConfig,
     equilibrate_simulation,
 )
+from neuroacoustic_resonator.core.simulation import Simulation
 from neuroacoustic_resonator.io.persistence import (
     checkpoint_fingerprint,
     load_checkpoint_metadata,
@@ -290,6 +291,8 @@ def run_controlled_equilibration_corpus(
 
 def simulate_paired_corpus(
     config: ControlledEquilibrationCorpusConfig,
+    *,
+    prepare_branch_point: Callable[[Simulation], None] | None = None,
 ) -> tuple[
     dict[tuple[int, int], dict[str, Any]],
     list[dict[str, Any]],
@@ -299,7 +302,11 @@ def simulate_paired_corpus(
     calibration = config.calibration_config()
     stimuli = materialize_synthetic_stimuli(calibration)
     splits = {item.seed_root: item.split for item in config.splits.assignments()}
-    checkpoints = create_equilibrated_checkpoints(config, splits)
+    checkpoints = create_equilibrated_checkpoints(
+        config,
+        splits,
+        prepare_branch_point=prepare_branch_point,
+    )
     manifest: list[dict[str, Any]] = []
     by_checkpoint: dict[str, dict[str, dict[str, Any]]] = {}
     for stimulus in stimuli:
@@ -490,6 +497,8 @@ def record_results(
 def create_equilibrated_checkpoints(
     config: ControlledEquilibrationCorpusConfig,
     splits: Mapping[int, str],
+    *,
+    prepare_branch_point: Callable[[Simulation], None] | None = None,
 ) -> dict[tuple[int, int], dict[str, Any]]:
     base = SimulationConfig.from_file(config.simulation_config)
     checkpoint_dir = config.output_dir / "checkpoints"
@@ -507,6 +516,8 @@ def create_equilibrated_checkpoints(
                 simulation,
                 config.equilibration.to_runtime(),
             )
+            if prepare_branch_point is not None:
+                prepare_branch_point(simulation)
             path = checkpoint_dir / f"s{seed_root}-r{repeat_index:02d}.npz"
             save_simulation_checkpoint(
                 path,
