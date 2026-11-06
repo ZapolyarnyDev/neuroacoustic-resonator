@@ -13,6 +13,12 @@ from neuroacoustic_resonator.analysis.controlled_equilibration import (
 from neuroacoustic_resonator.analysis.provenance import git_state
 
 REGIONS = ("input", "assoc", "output", "combined")
+BASELINE_LABELS = (
+    ("field", "поле"),
+    ("drive", "вход: drive"),
+    ("audio", "вход: звук"),
+    ("uncoupled_field", "поле без связей"),
+)
 
 
 def write_research_report(
@@ -110,6 +116,20 @@ def render_report(summary: Mapping[str, Any]) -> str:
             f"| {region} | {item['balanced_accuracy']:.3f} | "
             f"{format_p(item['permutation_p_value'])} |"
         )
+    baselines = summary.get("baselines")
+    if baselines:
+        lines.extend(
+            ["", "| Базовая линия | Accuracy | 95% CI | p |", "|---|---|---|---|"]
+        )
+        for name, label in BASELINE_LABELS:
+            item = baselines.get(name)
+            if item is None:
+                continue
+            low, high = item["balanced_accuracy_ci"]
+            lines.append(
+                f"| {label} | {item['balanced_accuracy']:.3f} | "
+                f"[{low:.3f}, {high:.3f}] | {format_p(item['p_value'])} |"
+            )
     return "\n".join(lines) + "\n"
 
 

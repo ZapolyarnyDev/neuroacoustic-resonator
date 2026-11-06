@@ -147,3 +147,30 @@ def test_write_research_report_requires_provenance(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="provenance"):
         write_research_report(config_path, tmp_path / "reports")
+
+
+def test_render_report_adds_baselines_table() -> None:
+    summary = summary_fixture()
+    summary["baselines"] = {
+        "field": {
+            "balanced_accuracy": 0.5416,
+            "balanced_accuracy_ci": [0.274, 0.601],
+            "p_value": 0.0002,
+        },
+        "uncoupled_field": {
+            "balanced_accuracy": 0.5416,
+            "balanced_accuracy_ci": [0.25, 0.625],
+            "p_value": 0.0017,
+        },
+    }
+
+    report = render_report(summary)
+
+    assert "| Базовая линия | Accuracy | 95% CI | p |" in report
+    assert "| поле | 0.542 | [0.274, 0.601] | 0.0002 |" in report
+    assert "| поле без связей | 0.542 | [0.250, 0.625] | 0.002 |" in report
+    assert "вход: drive" not in report
+
+
+def test_render_report_omits_baselines_without_results() -> None:
+    assert "Базовая линия" not in render_report(summary_fixture())

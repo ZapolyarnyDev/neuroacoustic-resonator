@@ -161,46 +161,7 @@ def run_controlled_equilibration_corpus(
     bootstrap_samples: int = 5_000,
 ) -> dict[str, Any]:
     config = ControlledEquilibrationCorpusConfig.from_file(config_path)
-    config.output_dir.mkdir(parents=True, exist_ok=True)
-    calibration = config.calibration_config()
-    stimuli = materialize_synthetic_stimuli(calibration)
-    splits = {item.seed_root: item.split for item in config.splits.assignments()}
-    checkpoints = create_equilibrated_checkpoints(config, splits)
-    manifest: list[dict[str, Any]] = []
-    by_checkpoint: dict[str, dict[str, dict[str, Any]]] = {}
-    for stimulus in stimuli:
-        for seed_root in config.seed_roots:
-            for repeat_index in range(1, config.repeats + 1):
-                checkpoint = checkpoints[(seed_root, repeat_index)]
-                trial = CalibrationTrial(
-                    trial_id=(
-                        f"{safe_label(stimulus.label)}-s{seed_root}-r{repeat_index:02d}"
-                    ),
-                    stimulus=stimulus,
-                    seed_root=seed_root,
-                    field_seed=derive_trial_seed(seed_root, repeat_index),
-                    repeat_index=repeat_index,
-                    split=splits[seed_root],
-                )
-                run_calibration_trial(
-                    calibration,
-                    trial,
-                    initial_checkpoint=checkpoint["path"],
-                    expected_checkpoint_fingerprint=checkpoint["fingerprint"],
-                )
-                entry = {
-                    **calibration_manifest_entry(trial, calibration),
-                    "checkpoint": str(checkpoint["path"]),
-                    "checkpoint_fingerprint": checkpoint["fingerprint"],
-                }
-                manifest.append(entry)
-                by_checkpoint.setdefault(checkpoint["fingerprint"], {})[
-                    stimulus.label
-                ] = entry
-    write_calibration_manifest(config.output_manifest, manifest)
-    pairs = build_pair_manifest(config, by_checkpoint)
-    write_json(config.output_pairs, pairs)
-    extract_causal_embeddings(pairs, config.output_embeddings)
+    checkpoints, manifest, pairs = simulate_paired_corpus(config)
     active_manifest = config.output_dir / "active_branches_manifest.json"
     write_json(
         active_manifest,
@@ -303,6 +264,56 @@ def run_controlled_equilibration_corpus(
         summary=report,
     )
     return report
+
+
+def simulate_paired_corpus(
+    config: ControlledEquilibrationCorpusConfig,
+) -> tuple[
+    dict[tuple[int, int], dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+    calibration = config.calibration_config()
+    stimuli = materialize_synthetic_stimuli(calibration)
+    splits = {item.seed_root: item.split for item in config.splits.assignments()}
+    checkpoints = create_equilibrated_checkpoints(config, splits)
+    manifest: list[dict[str, Any]] = []
+    by_checkpoint: dict[str, dict[str, dict[str, Any]]] = {}
+    for stimulus in stimuli:
+        for seed_root in config.seed_roots:
+            for repeat_index in range(1, config.repeats + 1):
+                checkpoint = checkpoints[(seed_root, repeat_index)]
+                trial = CalibrationTrial(
+                    trial_id=(
+                        f"{safe_label(stimulus.label)}-s{seed_root}-r{repeat_index:02d}"
+                    ),
+                    stimulus=stimulus,
+                    seed_root=seed_root,
+                    field_seed=derive_trial_seed(seed_root, repeat_index),
+                    repeat_index=repeat_index,
+                    split=splits[seed_root],
+                )
+                run_calibration_trial(
+                    calibration,
+                    trial,
+                    initial_checkpoint=checkpoint["path"],
+                    expected_checkpoint_fingerprint=checkpoint["fingerprint"],
+                )
+                entry = {
+                    **calibration_manifest_entry(trial, calibration),
+                    "checkpoint": str(checkpoint["path"]),
+                    "checkpoint_fingerprint": checkpoint["fingerprint"],
+                }
+                manifest.append(entry)
+                by_checkpoint.setdefault(checkpoint["fingerprint"], {})[
+                    stimulus.label
+                ] = entry
+    write_calibration_manifest(config.output_manifest, manifest)
+    pairs = build_pair_manifest(config, by_checkpoint)
+    write_json(config.output_pairs, pairs)
+    extract_causal_embeddings(pairs, config.output_embeddings)
+    return checkpoints, manifest, pairs
 
 
 def analyze_controlled_equilibration(
@@ -633,7 +644,14 @@ def main(argv: list[str] | None = None) -> int:
             bootstrap_samples=args.bootstrap_samples,
         )
     else:
+        from neuroacoustic_resonator.analysis.baselines import run_baselines
+
         report = run_controlled_equilibration_corpus(
+            args.config,
+            permutation_samples=args.permutation_samples,
+            bootstrap_samples=args.bootstrap_samples,
+        )
+        report["baselines"] = run_baselines(
             args.config,
             permutation_samples=args.permutation_samples,
             bootstrap_samples=args.bootstrap_samples,
