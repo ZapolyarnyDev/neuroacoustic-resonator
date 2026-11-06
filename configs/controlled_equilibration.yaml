@@ -21,7 +21,7 @@ output_frame_size: 256
 input_frame_size: 256
 input_hop_size: 128
 drive_strength: 0.45
-input_assoc_gain: 0.8
+input_assoc_gain: 0.0
 input_output_gain: 0.0
 response_seconds: 0.35
 gain: 0.35
