@@ -116,6 +116,7 @@ class PatternCalibrationConfig:
     response_seconds: float = 0.35
     warmup_steps: int = 16
     gain: float = 0.35
+    renderer_plasticity: bool = True
 
     def __post_init__(self) -> None:
         if not self.stimuli and not self.synthetic_stimuli:
@@ -240,6 +241,16 @@ def run_calibration_trial(
             gain=config.gain,
             include_input_audio=False,
             use_response_policy=False,
+            output_plasticity_rate=(
+                VoiceConversationConfig.output_plasticity_rate
+                if config.renderer_plasticity
+                else 0.0
+            ),
+            output_frequency_plasticity_rate=(
+                VoiceConversationConfig.output_frequency_plasticity_rate
+                if config.renderer_plasticity
+                else 0.0
+            ),
         )
     )
     actual_fingerprint = trial_summary["parameters"]["initial_checkpoint_fingerprint"]
@@ -496,6 +507,7 @@ def calibration_parameters(config: PatternCalibrationConfig) -> dict[str, Any]:
         "response_seconds": config.response_seconds,
         "warmup_steps": config.warmup_steps,
         "gain": config.gain,
+        "renderer_plasticity": config.renderer_plasticity,
     }
 
 

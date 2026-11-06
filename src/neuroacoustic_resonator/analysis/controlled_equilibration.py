@@ -151,6 +151,7 @@ class ControlledEquilibrationCorpusConfig(BaseModel):
             response_seconds=self.response_seconds,
             warmup_steps=0,
             gain=self.gain,
+            renderer_plasticity=False,
         )
 
 

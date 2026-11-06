@@ -38,6 +38,14 @@ def test_small_controlled_corpus_fixes_30_branches() -> None:
     assert config.equilibration.neutral_steps == 512
 
 
+def test_controlled_corpus_disables_renderer_plasticity() -> None:
+    config = ControlledEquilibrationCorpusConfig.from_file(
+        "configs/controlled_equilibration.yaml"
+    )
+
+    assert config.calibration_config().renderer_plasticity is False
+
+
 def test_pair_validation_requires_identical_checkpoint_fingerprints(tmp_path) -> None:
     checkpoint = tmp_path / "checkpoint.npz"
     save_simulation_checkpoint(checkpoint, Simulation(FieldConfig(size=5, seed=7)))
