@@ -17,6 +17,9 @@ from neuroacoustic_resonator.analysis.distinguishability_corpus import (
 from neuroacoustic_resonator.analysis.distinguishability_diagnostics import (
     diagnose_protocol_embeddings,
 )
+from neuroacoustic_resonator.analysis.distinguishability_statistics import (
+    fit_train_standardizer,
+)
 from neuroacoustic_resonator.analysis.paired_causal_evidence import (
     evaluate_paired_causal_evidence,
 )
@@ -35,6 +38,7 @@ from neuroacoustic_resonator.analysis.protocol_embeddings import (
     FEATURE_COLUMNS,
     SIGNAL_GETTERS,
     EmbeddingRow,
+    read_embedding_rows,
     response_embedding,
     select_response_frames,
     temporal_statistics,
@@ -163,6 +167,23 @@ def run_controlled_equilibration_corpus(
 ) -> dict[str, Any]:
     config = ControlledEquilibrationCorpusConfig.from_file(config_path)
     checkpoints, manifest, pairs = simulate_paired_corpus(config)
+    if not embeddings_have_signal(config.output_embeddings):
+        return record_no_signal(
+            config,
+            config_path,
+            command="run",
+            arguments={
+                "permutation_samples": permutation_samples,
+                "bootstrap_samples": bootstrap_samples,
+            },
+            summary={
+                "config": str(config_path),
+                "branch_trials": len(manifest),
+                "causal_pairs": len(pairs),
+                "checkpoints": len(checkpoints),
+                "fingerprints_verified": True,
+            },
+        )
     active_manifest = config.output_dir / "active_branches_manifest.json"
     write_json(
         active_manifest,
@@ -324,6 +345,22 @@ def analyze_controlled_equilibration(
     bootstrap_samples: int = 5_000,
 ) -> dict[str, Any]:
     config = ControlledEquilibrationCorpusConfig.from_file(config_path)
+    if not embeddings_have_signal(config.output_embeddings):
+        existing = (
+            read_json_object(config.output_summary)
+            if config.output_summary.exists()
+            else {"config": str(config_path)}
+        )
+        return record_no_signal(
+            config,
+            config_path,
+            command="analyze",
+            arguments={
+                "permutation_samples": permutation_samples,
+                "bootstrap_samples": bootstrap_samples,
+            },
+            summary=existing,
+        )
     evidence_path = config.output_dir / "causal_evidence.json"
     evidence = evaluate_paired_causal_evidence(
         config.output_embeddings,
@@ -380,6 +417,52 @@ def analyze_controlled_equilibration(
         summary=summary,
     )
     return evidence
+
+
+def embeddings_have_signal(embeddings: Path) -> bool:
+    rows = read_embedding_rows(embeddings)
+    try:
+        fit_train_standardizer([{**row, "split": "train"} for row in rows])
+    except ValueError as error:
+        if "no varying" in str(error):
+            return False
+        raise
+    return True
+
+
+def record_no_signal(
+    config: ControlledEquilibrationCorpusConfig,
+    config_path: str | Path,
+    *,
+    command: str,
+    arguments: Mapping[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    labels = sorted(
+        {row["stimulus_label"] for row in read_embedding_rows(config.output_embeddings)}
+    )
+    for key in (
+        "absolute",
+        "causal_difference",
+        "field_seed_variance_reduction_fraction",
+        "stimulus_to_seed_ratio_gain",
+        "cross_seed_classification",
+        "cross_seed_distance",
+        "paired_stimulus_permutation",
+        "regional_representations",
+    ):
+        summary.pop(key, None)
+    summary["no_signal"] = {
+        "reason": "stimulus and control responses are identical in every feature",
+        "chance_level": 1.0 / len(labels),
+    }
+    summary["provenance"] = collect_provenance(
+        command=command,
+        arguments=arguments,
+        configs=(Path(config_path), config.simulation_config),
+    )
+    write_json(config.output_summary, summary)
+    return summary
 
 
 def record_results(

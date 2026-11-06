@@ -69,10 +69,6 @@ def render_report(summary: Mapping[str, Any]) -> str:
     git = provenance["git"]
     environment = provenance["environment"]
     packages = environment["packages"]
-    classification = summary["cross_seed_classification"]
-    bootstrap = classification["checkpoint_clustered_bootstrap"]
-    permutation = classification["checkpoint_label_permutation"]
-    variance = summary["causal_difference"]
     created = datetime.fromisoformat(provenance["created_at"])
     configs = ", ".join(
         f"{Path(item['path']).name} `{item['sha256'][:7]}`"
@@ -81,10 +77,6 @@ def render_report(summary: Mapping[str, Any]) -> str:
     arguments = ", ".join(
         f"{name} {value}" for name, value in provenance["arguments"].items()
     )
-    roots = " / ".join(
-        f"{item['balanced_accuracy']:.3f}" for item in classification["by_seed_root"]
-    )
-    low, high = bootstrap["balanced_accuracy_ci"]
     lines = [
         f"# Controlled equilibration — {created.date().isoformat()} · {git['commit'][:7]}",
         "",
@@ -93,6 +85,28 @@ def render_report(summary: Mapping[str, Any]) -> str:
         f"Конфиги: {configs}",
         f"Команда: `{provenance['command']}` ({arguments})",
         "",
+    ]
+    if "no_signal" in summary:
+        lines.append(
+            "Сигнала нет: отклик выхода на каждый стимул идентичен контролю "
+            f"тишины. Accuracy = chance ({summary['no_signal']['chance_level']:.2f})."
+        )
+    else:
+        lines.extend(classification_lines(summary))
+    lines.extend(baseline_lines(summary.get("baselines")))
+    return "\n".join(lines) + "\n"
+
+
+def classification_lines(summary: Mapping[str, Any]) -> list[str]:
+    classification = summary["cross_seed_classification"]
+    bootstrap = classification["checkpoint_clustered_bootstrap"]
+    permutation = classification["checkpoint_label_permutation"]
+    variance = summary["causal_difference"]
+    roots = " / ".join(
+        f"{item['balanced_accuracy']:.3f}" for item in classification["by_seed_root"]
+    )
+    low, high = bootstrap["balanced_accuracy_ci"]
+    lines = [
         "| Метрика | Значение |",
         "|---|---|",
         "| Balanced accuracy (output pattern) | "
@@ -116,21 +130,26 @@ def render_report(summary: Mapping[str, Any]) -> str:
             f"| {region} | {item['balanced_accuracy']:.3f} | "
             f"{format_p(item['permutation_p_value'])} |"
         )
-    baselines = summary.get("baselines")
-    if baselines:
-        lines.extend(
-            ["", "| Базовая линия | Accuracy | 95% CI | p |", "|---|---|---|---|"]
+    return lines
+
+
+def baseline_lines(baselines: Mapping[str, Any] | None) -> list[str]:
+    if not baselines:
+        return []
+    lines = ["", "| Базовая линия | Accuracy | 95% CI | p |", "|---|---|---|---|"]
+    for name, label in BASELINE_LABELS:
+        item = baselines.get(name)
+        if item is None:
+            continue
+        if item.get("no_signal"):
+            lines.append(f"| {label} | сигнала нет | — | — |")
+            continue
+        low, high = item["balanced_accuracy_ci"]
+        lines.append(
+            f"| {label} | {item['balanced_accuracy']:.3f} | "
+            f"[{low:.3f}, {high:.3f}] | {format_p(item['p_value'])} |"
         )
-        for name, label in BASELINE_LABELS:
-            item = baselines.get(name)
-            if item is None:
-                continue
-            low, high = item["balanced_accuracy_ci"]
-            lines.append(
-                f"| {label} | {item['balanced_accuracy']:.3f} | "
-                f"[{low:.3f}, {high:.3f}] | {format_p(item['p_value'])} |"
-            )
-    return "\n".join(lines) + "\n"
+    return lines
 
 
 def format_p(value: float) -> str:
