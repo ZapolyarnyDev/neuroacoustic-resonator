@@ -40,6 +40,7 @@ from neuroacoustic_resonator.analysis.protocol_embeddings import (
     temporal_statistics,
     write_embedding_rows,
 )
+from neuroacoustic_resonator.analysis.provenance import collect_provenance
 from neuroacoustic_resonator.analysis.regional_causal_representations import (
     analyze_regional_causal_representations,
 )
@@ -231,9 +232,10 @@ def run_controlled_equilibration_corpus(
         config.output_dir / "causal_diagnostics.png",
         permutation_samples=permutation_samples,
     )
+    evidence_path = config.output_dir / "causal_evidence.json"
     evidence = evaluate_paired_causal_evidence(
         config.output_embeddings,
-        config.output_dir / "causal_evidence.json",
+        evidence_path,
         permutation_samples=permutation_samples,
         permutation_seed=20_260_818,
         bootstrap_samples=bootstrap_samples,
@@ -282,13 +284,24 @@ def run_controlled_equilibration_corpus(
             "manifest": str(config.output_manifest),
             "pairs": str(config.output_pairs),
             "embeddings": str(config.output_embeddings),
-            "causal_evidence": str(config.output_dir / "causal_evidence.json"),
+            "causal_evidence": str(evidence_path),
             "regional_causal_report": str(
                 config.output_dir / "regional_causal_report.json"
             ),
         },
     }
-    write_json(config.output_summary, report)
+    record_results(
+        config,
+        config_path,
+        command="run",
+        arguments={
+            "permutation_samples": permutation_samples,
+            "bootstrap_samples": bootstrap_samples,
+        },
+        evidence=evidence,
+        evidence_path=evidence_path,
+        summary=report,
+    )
     return report
 
 
@@ -327,6 +340,7 @@ def analyze_controlled_equilibration(
             bootstrap_samples=bootstrap_samples,
         )
         evidence["regional_representations"] = regional_report["representations"]
+    summary: dict[str, Any] | None = None
     if config.output_summary.exists():
         summary = read_json_object(config.output_summary)
         summary["cross_seed_classification"] = evidence["classification"]
@@ -341,8 +355,41 @@ def analyze_controlled_equilibration(
             outputs["regional_causal_report"] = str(
                 config.output_dir / "regional_causal_report.json"
             )
-        write_json(config.output_summary, summary)
+    record_results(
+        config,
+        config_path,
+        command="analyze",
+        arguments={
+            "permutation_samples": permutation_samples,
+            "bootstrap_samples": bootstrap_samples,
+        },
+        evidence=evidence,
+        evidence_path=evidence_path,
+        summary=summary,
+    )
     return evidence
+
+
+def record_results(
+    config: ControlledEquilibrationCorpusConfig,
+    config_path: str | Path,
+    *,
+    command: str,
+    arguments: Mapping[str, Any],
+    evidence: dict[str, Any],
+    evidence_path: Path,
+    summary: dict[str, Any] | None,
+) -> None:
+    provenance = collect_provenance(
+        command=command,
+        arguments=arguments,
+        configs=(Path(config_path), config.simulation_config),
+    )
+    evidence["provenance"] = provenance
+    write_json(evidence_path, evidence)
+    if summary is not None:
+        summary["provenance"] = provenance
+        write_json(config.output_summary, summary)
 
 
 def create_equilibrated_checkpoints(
