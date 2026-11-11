@@ -16,7 +16,7 @@
 
 في الحقل الحالي لا تصل إشارة الدخل إلى منطقة الخرج. استجابة الخرج لكل مُحفِّز
 مطابقة لضابط الصمت، ويخمد الاضطراب بمعامل 50–100 في كل عمود. النتيجة التجريبية
-السابقة (`0.542` cross-seed balanced accuracy، الوسم `v0-baseline`) نتجت عن تغذية
+السابقة (<span dir="ltr">`0.542`</span> cross-seed balanced accuracy، الوسم <span dir="ltr">`v0-baseline`</span>) نتجت عن تغذية
 الصوت مباشرةً إلى المنطقة الترابطية؛ ومن دونها لا يُظهر أيٌّ من الحقل والحقل غير
 المقترن أي إشارة ([التقرير](experiments/reports/2026-11-06-9748330.md)).
 
@@ -34,61 +34,61 @@ just preview
 
 <div dir="rtl">
 
-كل وصفة تستدعي `uv run neuroacoustic <command>`؛ للقائمة الكاملة شغّل
-`uv run neuroacoustic --help`.
+كل وصفة تستدعي <span dir="ltr">`uv run neuroacoustic <command>`</span>؛ للقائمة الكاملة شغّل
+<span dir="ltr">`uv run neuroacoustic --help`</span>.
 
-تُكتب المخرجات المولَّدة في `experiments/` و`outputs/` ولا تُضاف إلى المستودع افتراضيًا.
+تُكتب المخرجات المولَّدة في <span dir="ltr">`experiments/`</span> و<span dir="ltr">`outputs/`</span> ولا تُضاف إلى المستودع افتراضيًا.
 
 ## الأوامر
 
-شغّل `just` لعرض الوصفات العامة الحالية.
+شغّل <span dir="ltr">`just`</span> لعرض الوصفات العامة الحالية.
 
 ### البيئة والجودة
 
 | الأمر | الغرض |
 |---|---|
-| `just sync` | تثبيت بيئة التشغيل والتطوير المقفلة. |
-| `just check` | تشغيل Ruff والتحقق من التنسيق وmypy وجميع الاختبارات. |
-| `just fmt` | تطبيق إصلاحات Ruff الآمنة وتنسيق ملفات Python. |
-| `just test [pytest args]` | تشغيل جميع الاختبارات أو تمرير مسار/خيارات إلى pytest. |
-| `just build` | بناء حزمة Python. |
-| `just hooks-install` | تثبيت خطّاف pre-commit للمستودع. |
-| `just hooks` | تشغيل جميع فحوص pre-commit فورًا. |
+| <span dir="ltr">`just sync`</span> | تثبيت بيئة التشغيل والتطوير المقفلة. |
+| <span dir="ltr">`just check`</span> | تشغيل Ruff والتحقق من التنسيق وmypy وجميع الاختبارات. |
+| <span dir="ltr">`just fmt`</span> | تطبيق إصلاحات Ruff الآمنة وتنسيق ملفات Python. |
+| <span dir="ltr">`just test [pytest args]`</span> | تشغيل جميع الاختبارات أو تمرير مسار/خيارات إلى pytest. |
+| <span dir="ltr">`just build`</span> | بناء حزمة Python. |
+| <span dir="ltr">`just hooks-install`</span> | تثبيت خطّاف pre-commit للمستودع. |
+| <span dir="ltr">`just hooks`</span> | تشغيل جميع فحوص pre-commit فورًا. |
 
 ### البحث
 
 | الأمر | الغرض |
 |---|---|
-| `just report` | كتابة التقرير الرئيسي للإيداع الحالي في `experiments/reports/`. |
-| `just causal-run` | تشغيل مجموعة المحفِّز/الضابط المزدوجة (30 فرعًا من نقاط حفظ متوازنة مشتركة) وإعادة بناء الأدلة. |
-| `just causal-analyze` | إعادة حساب إحصاءات الخرج والإحصاءات السببية الإقليمية دون محاكاة. |
-| `just causal-parts` | قياس الاستجابة مع تعطيل كل مكوّن من مكوّنات الحقل ومع فصل منطقة الخرج. |
-| `just causal-ablations` | تشغيل أربعة متغيرات توازن على بذور التطوير ومقارنة استجابات الخرج. |
-| `just causal-ablations-report` | إعادة بناء مقارنة المتغيرات من النتائج الجاهزة. |
+| <span dir="ltr">`just report`</span> | كتابة التقرير الرئيسي للإيداع الحالي في <span dir="ltr">`experiments/reports/`</span>. |
+| <span dir="ltr">`just causal-run`</span> | تشغيل مجموعة المحفِّز/الضابط المزدوجة (30 فرعًا من نقاط حفظ متوازنة مشتركة) وإعادة بناء الأدلة. |
+| <span dir="ltr">`just causal-analyze`</span> | إعادة حساب إحصاءات الخرج والإحصاءات السببية الإقليمية دون محاكاة. |
+| <span dir="ltr">`just causal-parts`</span> | قياس الاستجابة مع تعطيل كل مكوّن من مكوّنات الحقل ومع فصل منطقة الخرج. |
+| <span dir="ltr">`just causal-ablations`</span> | تشغيل أربعة متغيرات توازن على بذور التطوير ومقارنة استجابات الخرج. |
+| <span dir="ltr">`just causal-ablations-report`</span> | إعادة بناء مقارنة المتغيرات من النتائج الجاهزة. |
 
 ### الحقل والحالة والأداء
 
 | الأمر | الغرض |
 |---|---|
-| `just preview` | تشغيل محاكاة قصيرة وكتابة `outputs/field-preview.png`. |
-| `just checkpoint [steps] [output]` | حفظ حالة الحقل؛ افتراضيًا بعد 10,000 خطوة. |
-| `just resume <checkpoint> <steps> <output>` | متابعة محاكاة محفوظة إلى نقطة حفظ جديدة. |
-| `just benchmark` | قياس سرعة خطوات الحقل بالأحجام 64 و128 و200. |
+| <span dir="ltr">`just preview`</span> | تشغيل محاكاة قصيرة وكتابة <span dir="ltr">`outputs/field-preview.png`</span>. |
+| <span dir="ltr">`just checkpoint [steps] [output]`</span> | حفظ حالة الحقل؛ افتراضيًا بعد 10,000 خطوة. |
+| <span dir="ltr">`just resume <checkpoint> <steps> <output>`</span> | متابعة محاكاة محفوظة إلى نقطة حفظ جديدة. |
+| <span dir="ltr">`just benchmark`</span> | قياس سرعة خطوات الحقل بالأحجام 64 و128 و200. |
 
 ### Sound Protocol
 
 | الأمر | الغرض |
 |---|---|
-| `just protocol-record [config] [steps] [output]` | تسجيل تدفق JSONL صارم؛ افتراضيًا `field_only.yaml` و128 خطوة. |
-| `just protocol-replay [input] [output]` | إعادة تشغيل JSONL دون الحقل وإنتاج ملف WAV تشخيصي. |
+| <span dir="ltr">`just protocol-record [config] [steps] [output]`</span> | تسجيل تدفق JSONL صارم؛ افتراضيًا <span dir="ltr">`field_only.yaml`</span> و128 خطوة. |
+| <span dir="ltr">`just protocol-replay [input] [output]`</span> | إعادة تشغيل JSONL دون الحقل وإنتاج ملف WAV تشخيصي. |
 
 ### التفاعل الصوتي
 
 | الأمر | الغرض |
 |---|---|
-| `just audio-devices` | عرض أجهزة الإدخال والإخراج. |
-| `just live` | بدء تفاعل بالأدوار عبر الميكروفون وتسجيل الجلسة. |
-| `just conversation <input.wav> [output.wav]` | تمرير ملف WAV مسجَّل عبر الحقل وحفظ استجابته. |
+| <span dir="ltr">`just audio-devices`</span> | عرض أجهزة الإدخال والإخراج. |
+| <span dir="ltr">`just live`</span> | بدء تفاعل بالأدوار عبر الميكروفون وتسجيل الجلسة. |
+| <span dir="ltr">`just conversation <input.wav> [output.wav]`</span> | تمرير ملف WAV مسجَّل عبر الحقل وحفظ استجابته. |
 
 ## الترخيص
 
