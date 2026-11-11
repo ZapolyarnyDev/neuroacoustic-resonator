@@ -53,7 +53,7 @@ jobs:
         run: uv run pytest
 
       - name: Run smoke test
-        run: uv run python main.py
+        run: uv run neuroacoustic preview
 
       - name: Build package
         run: uv build

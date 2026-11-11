@@ -59,7 +59,7 @@ class DistinguishabilityCorpusConfig(BaseModel):
     input_frame_size: int = Field(default=256, ge=1)
     input_hop_size: int = Field(default=128, ge=1)
     drive_strength: float = Field(default=0.45, ge=0.0)
-    input_assoc_gain: float = Field(default=0.8, ge=0.0)
+    input_assoc_gain: float = Field(default=0.0, ge=0.0)
     input_output_gain: float = Field(default=0.0, ge=0.0)
     response_seconds: float = Field(default=0.35, gt=0.0)
     warmup_steps: int = Field(default=16, ge=0)

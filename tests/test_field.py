@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -659,3 +661,82 @@ def test_metrics_report_uniform_phase_synchrony() -> None:
     assert metrics.mean_local_synchrony == pytest.approx(1.0)
     assert metrics.max_local_synchrony == pytest.approx(1.0)
     assert metrics.mean_trace == pytest.approx(0.4)
+
+
+def test_first_order_field_has_no_velocity() -> None:
+    field = OscillatorField(FieldConfig(size=4, seed=1))
+
+    assert field.state.velocity is None
+    assert field.step().velocity is None
+
+
+def test_second_order_uncoupled_field_advances_like_first_order() -> None:
+    quiet: dict[str, Any] = {
+        "size": 4,
+        "seed": 2,
+        "coupling_strength": 0.0,
+        "frequency_plasticity_rate": 0.0,
+        "frequency_homeostasis_rate": 0.0,
+    }
+    first = OscillatorField(FieldConfig(**quiet))
+    second = OscillatorField(FieldConfig(**quiet, order=2))
+
+    for _ in range(5):
+        first.step()
+        second.step()
+
+    velocity = second.state.velocity
+    assert velocity is not None
+    np.testing.assert_allclose(second.state.phase, first.state.phase)
+    np.testing.assert_allclose(velocity, second.state.frequency)
+
+
+def test_second_order_velocity_relaxes_to_frequency_with_damping() -> None:
+    config = FieldConfig(
+        size=4,
+        seed=3,
+        coupling_strength=0.0,
+        trace_rate=0.0,
+        frequency_plasticity_rate=0.0,
+        frequency_homeostasis_rate=0.0,
+        order=2,
+        damping=0.5,
+    )
+    state = OscillatorField(config).state
+    kicked = FieldState(
+        phase=state.phase,
+        frequency=state.frequency,
+        metabolite=state.metabolite,
+        coupling=state.coupling,
+        trace=state.trace,
+        velocity=state.frequency + 1.0,
+    )
+    field = OscillatorField.from_state(config, kicked)
+
+    for _ in range(10):
+        field.step()
+
+    velocity = field.state.velocity
+    assert velocity is not None
+    gap = velocity - field.state.frequency
+    np.testing.assert_allclose(gap, (1.0 - config.dt * config.damping) ** 10)
+
+
+def test_second_order_from_state_without_velocity_starts_at_frequency() -> None:
+    first = OscillatorField(FieldConfig(size=4, seed=4))
+    config = FieldConfig(size=4, seed=4, order=2)
+
+    field = OscillatorField.from_state(config, first.state)
+
+    velocity = field.state.velocity
+    assert velocity is not None
+    np.testing.assert_allclose(velocity, first.state.frequency)
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [{"order": 3}, {"damping": 0.0}, {"forward_bias": 1.0}, {"phase_lag": np.inf}],
+)
+def test_field_config_rejects_invalid_coupling_options(updates) -> None:
+    with pytest.raises(ValueError):
+        FieldConfig(size=4, **updates)

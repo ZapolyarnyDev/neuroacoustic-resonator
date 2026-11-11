@@ -15,7 +15,7 @@ uv sync --locked --dev
 Запустить проект:
 
 ```sh
-uv run python main.py
+uv run neuroacoustic preview
 ```
 
 Проверить код:

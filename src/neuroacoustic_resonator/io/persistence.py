@@ -40,14 +40,16 @@ def save_field_state(
 ) -> CheckpointPaths:
     paths = checkpoint_paths(path)
     paths.arrays_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        paths.arrays_path,
-        phase=state.phase,
-        frequency=state.frequency,
-        metabolite=state.metabolite,
-        coupling=state.coupling,
-        trace=state.trace,
-    )
+    arrays: dict[str, Any] = {
+        "phase": state.phase,
+        "frequency": state.frequency,
+        "metabolite": state.metabolite,
+        "coupling": state.coupling,
+        "trace": state.trace,
+    }
+    if state.velocity is not None:
+        arrays["velocity"] = state.velocity
+    np.savez_compressed(paths.arrays_path, **arrays)
     with paths.metadata_path.open("w", encoding="utf-8") as stream:
         yaml.safe_dump(metadata or {}, stream, sort_keys=True)
     return paths
@@ -67,6 +69,11 @@ def load_field_state(path: str | Path) -> FieldState:
             metabolite=np.asarray(data["metabolite"], dtype=np.float64),
             coupling=np.asarray(data["coupling"], dtype=np.float64),
             trace=np.asarray(data["trace"], dtype=np.float64),
+            velocity=(
+                np.asarray(data["velocity"], dtype=np.float64)
+                if "velocity" in data
+                else None
+            ),
         )
     _validate_state_shapes(state)
     return state
@@ -152,7 +159,10 @@ def field_state_fingerprint(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     digest = hashlib.sha256()
-    for name in ("phase", "frequency", "metabolite", "coupling", "trace"):
+    names = ["phase", "frequency", "metabolite", "coupling", "trace"]
+    if state.velocity is not None:
+        names.append("velocity")
+    for name in names:
         values = np.ascontiguousarray(getattr(state, name), dtype=np.float64)
         digest.update(name.encode("utf-8"))
         digest.update(json.dumps(values.shape).encode("ascii"))
@@ -177,6 +187,7 @@ def _validate_state_shapes(state: FieldState) -> None:
         ("metabolite", state.metabolite),
         ("coupling", state.coupling),
         ("trace", state.trace),
+        ("velocity", state.frequency if state.velocity is None else state.velocity),
     ):
         if value.shape != shape:
             msg = f"{name} shape must match phase shape"

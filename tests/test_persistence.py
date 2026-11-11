@@ -96,3 +96,26 @@ def test_load_simulation_checkpoint_rejects_missing_metadata(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="unsupported checkpoint version"):
         load_simulation_checkpoint(tmp_path / "state")
+
+
+def test_first_order_checkpoint_stores_no_velocity(tmp_path) -> None:
+    path = tmp_path / "first.npz"
+    save_simulation_checkpoint(path, Simulation(FieldConfig(size=4, seed=1)))
+
+    with np.load(path) as data:
+        assert "velocity" not in data
+    assert load_field_state(path).velocity is None
+
+
+def test_second_order_checkpoint_roundtrips_velocity(tmp_path) -> None:
+    path = tmp_path / "second.npz"
+    simulation = Simulation(FieldConfig(size=4, seed=1, order=2, damping=0.05))
+    simulation.run(3)
+    save_simulation_checkpoint(path, simulation)
+
+    loaded = load_simulation_checkpoint(path)
+
+    assert loaded.field.config.order == 2
+    np.testing.assert_array_equal(
+        loaded.field.state.velocity, simulation.field.state.velocity
+    )

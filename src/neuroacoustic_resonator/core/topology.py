@@ -59,12 +59,33 @@ class GridTopology:
         self._require_shape(values)
         return self.neighbor_sum(values) - self.neighbor_count() * values
 
-    def phase_coupling(self, phase: FloatArray) -> FloatArray:
+    def phase_coupling(
+        self,
+        phase: FloatArray,
+        *,
+        phase_lag: float = 0.0,
+        second_harmonic: float = 0.0,
+        forward_bias: float = 0.0,
+    ) -> FloatArray:
         self._require_shape(phase)
         total = np.zeros(self.shape, dtype=np.float64)
-        for neighbor, valid in self._neighbors(phase):
-            total += np.sin(neighbor - phase) * valid
-        return total / self.neighbor_count()
+        if phase_lag == 0.0 and second_harmonic == 0.0 and forward_bias == 0.0:
+            for neighbor, valid in self._neighbors(phase):
+                total += np.sin(neighbor - phase) * valid
+            return total / self.neighbor_count()
+
+        weights = (1.0, 1.0, 1.0 + forward_bias, 1.0 - forward_bias)
+        norm = np.zeros(self.shape, dtype=np.float64)
+        for weight, (neighbor, valid) in zip(
+            weights, self._neighbors(phase), strict=True
+        ):
+            difference = neighbor - phase
+            term = np.sin(difference - phase_lag)
+            if second_harmonic != 0.0:
+                term = term + second_harmonic * np.sin(2.0 * difference)
+            total += weight * term * valid
+            norm += weight * valid
+        return total / norm
 
     def local_phase_order(self, phase: FloatArray) -> FloatArray:
         self._require_shape(phase)

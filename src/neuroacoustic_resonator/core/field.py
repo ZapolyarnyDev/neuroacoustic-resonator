@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -11,6 +13,8 @@ FloatArray = NDArray[np.float64]
 
 TAU = 2.0 * np.pi
 
+FieldOrder = Literal[1, 2]
+
 
 @dataclass(frozen=True)
 class FieldConfig:
@@ -19,6 +23,11 @@ class FieldConfig:
     base_frequency: float = 1.0
     frequency_spread: float = 0.05
     coupling_strength: float = 0.16
+    order: FieldOrder = 1
+    damping: float = 0.2
+    phase_lag: float = 0.0
+    second_harmonic: float = 0.0
+    forward_bias: float = 0.0
     metabolite_recovery: float = 0.03
     metabolite_cost: float = 0.02
     metabolite_diffusion: float = 0.0
@@ -54,6 +63,18 @@ class FieldConfig:
             raise ValueError(msg)
         if self.coupling_strength < 0.0:
             msg = "coupling_strength must be non-negative"
+            raise ValueError(msg)
+        if self.order not in {1, 2}:
+            msg = "order must be 1 or 2"
+            raise ValueError(msg)
+        if self.damping <= 0.0:
+            msg = "damping must be positive"
+            raise ValueError(msg)
+        if not isfinite(self.phase_lag) or not isfinite(self.second_harmonic):
+            msg = "phase_lag and second_harmonic must be finite"
+            raise ValueError(msg)
+        if not 0.0 <= self.forward_bias < 1.0:
+            msg = "forward_bias must be in [0, 1)"
             raise ValueError(msg)
         if self.metabolite_recovery < 0.0:
             msg = "metabolite_recovery must be non-negative"
@@ -130,6 +151,7 @@ class FieldState:
     metabolite: FloatArray
     coupling: FloatArray
     trace: FloatArray
+    velocity: FloatArray | None = None
 
 
 @dataclass(frozen=True)
@@ -165,6 +187,7 @@ class OscillatorField:
         self._coupling = np.full(shape, config.coupling_strength, dtype=np.float64)
         self._trace = np.zeros(shape, dtype=np.float64)
         self._memory_drive_gain = np.ones(shape, dtype=np.float64)
+        self._velocity = self._frequency.copy() if config.order == 2 else None
 
     @classmethod
     def from_state(cls, config: FieldConfig, state: FieldState) -> OscillatorField:
@@ -175,6 +198,7 @@ class OscillatorField:
             ("metabolite", state.metabolite),
             ("coupling", state.coupling),
             ("trace", state.trace),
+            ("velocity", state.frequency if state.velocity is None else state.velocity),
         ):
             if value.shape != expected_shape:
                 msg = f"{name} shape must be {expected_shape}"
@@ -195,6 +219,11 @@ class OscillatorField:
         field._coupling = state.coupling.astype(np.float64, copy=True)
         field._trace = np.clip(state.trace, 0.0, None).astype(np.float64, copy=True)
         field._memory_drive_gain = np.ones(expected_shape, dtype=np.float64)
+        if config.order == 2:
+            source = state.frequency if state.velocity is None else state.velocity
+            field._velocity = source.astype(np.float64, copy=True)
+        else:
+            field._velocity = None
         return field
 
     @property
@@ -205,6 +234,7 @@ class OscillatorField:
             metabolite=self._metabolite.copy(),
             coupling=self._coupling.copy(),
             trace=self._trace.copy(),
+            velocity=None if self._velocity is None else self._velocity.copy(),
         )
 
     def apply_phase_impulse(self, mask: NDArray[np.bool_], amount: float) -> None:
@@ -308,7 +338,15 @@ class OscillatorField:
         metabolite_laplacian = self._metabolite_laplacian()
         metabolite_depletion = 1.0 - self._metabolite
 
-        self._phase = np.mod(self._phase + self.config.dt * phase_drive, TAU)
+        if self._velocity is None:
+            self._phase = np.mod(self._phase + self.config.dt * phase_drive, TAU)
+        else:
+            self._velocity = self._velocity + self.config.dt * (
+                self.config.damping * (self._frequency - self._velocity)
+                + coupling_drive
+                + memory_drive
+            )
+            self._phase = np.mod(self._phase + self.config.dt * self._velocity, TAU)
         self._metabolite = np.clip(
             self._metabolite
             + self.config.dt
@@ -371,7 +409,12 @@ class OscillatorField:
         return (
             self._metabolite
             * self._coupling
-            * self.topology.phase_coupling(self._phase)
+            * self.topology.phase_coupling(
+                self._phase,
+                phase_lag=self.config.phase_lag,
+                second_harmonic=self.config.second_harmonic,
+                forward_bias=self.config.forward_bias,
+            )
         )
 
     def _metabolic_activity(self, coupling_drive: FloatArray) -> FloatArray:

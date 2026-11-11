@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-neuroacoustic-protocol = "neuroacoustic_resonator.cli.protocol:main"
+neuroacoustic = "neuroacoustic_resonator.cli.main:main"
 
 [build-system]
 requires = ["hatchling"]

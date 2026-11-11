@@ -62,3 +62,75 @@ def test_topology_rejects_mismatched_shape() -> None:
 
     with pytest.raises(ValueError, match="shape"):
         topology.neighbor_sum(np.zeros((4, 3), dtype=np.float64))
+
+
+def _reference_coupling(
+    phase: np.ndarray, phase_lag: float, second_harmonic: float, forward_bias: float
+) -> np.ndarray:
+    rows, cols = phase.shape
+    result = np.zeros_like(phase)
+    for y in range(rows):
+        for x in range(cols):
+            total = 0.0
+            norm = 0.0
+            neighbors = [
+                ((y - 1) % rows, x, 1.0),
+                ((y + 1) % rows, x, 1.0),
+                (y, x - 1, 1.0 + forward_bias),
+                (y, x + 1, 1.0 - forward_bias),
+            ]
+            for ny, nx, weight in neighbors:
+                if not 0 <= nx < cols:
+                    continue
+                difference = phase[ny, nx] - phase[y, x]
+                total += weight * (
+                    np.sin(difference - phase_lag)
+                    + second_harmonic * np.sin(2.0 * difference)
+                )
+                norm += weight
+            result[y, x] = total / norm
+    return result
+
+
+def test_phase_coupling_options_default_to_plain_kuramoto() -> None:
+    topology = GridTopology((5, 6), boundary_x="open", boundary_y="periodic")
+    phase = np.random.default_rng(3).uniform(0.0, 2.0 * np.pi, (5, 6))
+
+    plain = topology.phase_coupling(phase)
+
+    np.testing.assert_allclose(plain, _reference_coupling(phase, 0.0, 0.0, 0.0))
+    np.testing.assert_allclose(
+        topology.phase_coupling(phase, phase_lag=1e-300), plain, atol=1e-12
+    )
+
+
+@pytest.mark.parametrize(
+    ("phase_lag", "second_harmonic", "forward_bias"),
+    [(0.3, 0.0, 0.0), (0.0, 0.5, 0.0), (0.0, 0.0, 0.5), (0.15, 0.5, 0.4)],
+)
+def test_phase_coupling_matches_reference_with_options(
+    phase_lag: float, second_harmonic: float, forward_bias: float
+) -> None:
+    topology = GridTopology((5, 6), boundary_x="open", boundary_y="periodic")
+    phase = np.random.default_rng(4).uniform(0.0, 2.0 * np.pi, (5, 6))
+
+    actual = topology.phase_coupling(
+        phase,
+        phase_lag=phase_lag,
+        second_harmonic=second_harmonic,
+        forward_bias=forward_bias,
+    )
+
+    np.testing.assert_allclose(
+        actual,
+        _reference_coupling(phase, phase_lag, second_harmonic, forward_bias),
+        atol=1e-12,
+    )
+
+
+def test_phase_lag_pulls_uniform_phases_by_minus_sine() -> None:
+    topology = GridTopology((4, 4))
+
+    coupling = topology.phase_coupling(np.full((4, 4), 1.2), phase_lag=0.3)
+
+    np.testing.assert_allclose(coupling, -np.sin(0.3))

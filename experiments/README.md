@@ -3,7 +3,7 @@
 Каталог содержит локальные protocol streams, checkpoints, WAV, таблицы, графики и
 статистические отчёты. Большие воспроизводимые артефакты не коммитятся.
 
-## Текущий эксперимент
+## Парный корпус stimulus/control
 
 Запустить paired stimulus/control corpus из общих equilibrated checkpoints:
 
@@ -30,5 +30,7 @@ just causal-analyze
 - `experiments/controlled_equilibration/baseline/causal_diagnostics.png` — variance
   decomposition и distance distributions.
 
-Старые Stage 1 matrix, calibration и probe scripts сохранены только для
-воспроизводимости уже полученных результатов и не являются текущим workflow.
+`experiments/reports/` — ключевой отчёт на коммит (`just report`), коммитится.
+
+Модули прежних экспериментов (Stage 1, calibration, probes) остаются в пакете без
+команд запуска — для воспроизводимости уже полученных результатов.
