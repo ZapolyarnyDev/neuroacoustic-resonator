@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -26,6 +26,11 @@ class FieldConfigModel(BaseModel):
     base_frequency: float = 1.0
     frequency_spread: float = Field(default=0.05, ge=0.0)
     coupling_strength: float = Field(default=0.16, ge=0.0)
+    order: Literal[1, 2] = 1
+    damping: float = Field(default=0.2, gt=0.0)
+    phase_lag: float = 0.0
+    second_harmonic: float = 0.0
+    forward_bias: float = Field(default=0.0, ge=0.0, lt=1.0)
     metabolite_recovery: float = Field(default=0.03, ge=0.0)
     metabolite_cost: float = Field(default=0.02, ge=0.0)
     metabolite_diffusion: float = Field(default=0.0, ge=0.0)
