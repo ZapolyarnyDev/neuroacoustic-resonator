@@ -44,7 +44,7 @@ class VoiceMemoryProbeConfig:
     frame_size: int = 1024
     hop_size: int = 512
     drive_strength: float = 0.45
-    input_assoc_gain: float = 0.8
+    input_assoc_gain: float = 0.0
     input_output_gain: float = 0.0
     warmup_steps: int = 100
     pause_steps: int = 128
@@ -608,7 +608,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--frame-size", type=int, default=1024)
     parser.add_argument("--hop-size", type=int, default=512)
     parser.add_argument("--drive-strength", type=float, default=0.45)
-    parser.add_argument("--input-assoc-gain", type=float, default=0.8)
+    parser.add_argument("--input-assoc-gain", type=float, default=0.0)
     parser.add_argument("--input-output-gain", type=float, default=0.0)
     parser.add_argument("--warmup-steps", type=int, default=100)
     parser.add_argument("--pause-steps", type=int, default=128)

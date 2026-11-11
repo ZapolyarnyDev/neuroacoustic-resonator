@@ -90,8 +90,8 @@ audio-devices:
 
 [group('audio')]
 live:
-    uv run neuroacoustic live --config configs/field_only.yaml --input-assoc-gain 0.8 --input-output-gain 0.0 --print-rms --record-dir experiments/audio/live
+    uv run neuroacoustic live --config configs/field_only.yaml --input-output-gain 0.0 --print-rms --record-dir experiments/audio/live
 
 [group('audio')]
 conversation input output="experiments/audio/voice-conversation.wav":
-    uv run neuroacoustic conversation --config configs/field_only.yaml --inputs "{{input}}" --output "{{output}}" --summary "{{output}}.summary.json" --input-assoc-gain 0.8 --input-output-gain 0.0
+    uv run neuroacoustic conversation --config configs/field_only.yaml --inputs "{{input}}" --output "{{output}}" --summary "{{output}}.summary.json" --input-output-gain 0.0

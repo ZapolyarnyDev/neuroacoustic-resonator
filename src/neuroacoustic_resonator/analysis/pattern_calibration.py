@@ -111,7 +111,7 @@ class PatternCalibrationConfig:
     input_frame_size: int = 256
     input_hop_size: int = 128
     drive_strength: float = 0.45
-    input_assoc_gain: float = 0.8
+    input_assoc_gain: float = 0.0
     input_output_gain: float = 0.0
     response_seconds: float = 0.35
     warmup_steps: int = 16
@@ -592,7 +592,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-frame-size", type=int, default=256)
     parser.add_argument("--input-hop-size", type=int, default=128)
     parser.add_argument("--drive-strength", type=float, default=0.45)
-    parser.add_argument("--input-assoc-gain", type=float, default=0.8)
+    parser.add_argument("--input-assoc-gain", type=float, default=0.0)
     parser.add_argument("--input-output-gain", type=float, default=0.0)
     parser.add_argument("--response-seconds", type=float, default=0.35)
     parser.add_argument("--warmup-steps", type=int, default=16)
